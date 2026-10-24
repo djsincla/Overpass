@@ -42,6 +42,11 @@ struct Settings: Codable, Equatable {
     /// Special mode survives power cycles; leaving it on would stop WiFi working next time.
     var leaveSpecialModeOnDisconnect = true
 
+    /// Night vision: the whole app in red on black, to keep dark adaptation at the eyepiece.
+    var redMode = false
+    /// iPhone/iPad: switch the home-screen icon to the red one as well.
+    var redAppIcon = false
+
     var stepInterval: Double = 2
     /// From star alignment; Smooth tracking needs it.
     var alignment: AlignmentModel?
@@ -120,10 +125,18 @@ final class AppModel {
     /// SkyObject ids ("sat:25544", "body:moon", "star:Vega"). Predictions and highlights follow these.
     var selected: Set<String> { didSet { save(Array(selected), "selectedObjects"); if selected != oldValue { schedulePrediction() } } }
 
-    /// The pass drawn on the dome; nil means the next one.
-    var highlightedPassID: String?
-    /// The object ringed on the dome and offered for tracking.
+    /// The pass drawn on the dome (satellite and rise time); nil means the next one.
+    private var highlightedPassKey: (noradID: String, start: Date)?
+    /// The object ringed on the dome. Highlighting never moves the mount.
     var highlightedObjectID: String?
+
+    /// What the mount will track: set deliberately, and locked while tracking runs, so clicking
+    /// around the sky can never redirect the mount.
+    private(set) var targetObjectID: String?
+    /// For a satellite, the pass being tracked: its satellite and rise time. Pass ids include the
+    /// rise time to the second, which can shift slightly when predictions rerun, so match loosely.
+    private(set) var targetPassKey: (noradID: String, start: Date)?
+    var targetPassID: String? { targetPass?.id }
 
     private(set) var sources: [TLESource] = []
     private(set) var sourceStatus: [String: TLESourceStatus] = [:]
@@ -190,12 +203,14 @@ final class AppModel {
 
     /// The highlighted pass if it hasn't finished, otherwise the next one.
     func highlightedPass(at date: Date) -> SatellitePass? {
-        if let id = highlightedPassID, let pass = passes.first(where: { $0.id == id }), pass.end.date > date { return pass }
+        if let key = highlightedPassKey,
+           let pass = passes.first(where: { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }),
+           pass.end.date > date { return pass }
         return passes.filter { $0.end.date > date }.min { $0.start.date < $1.start.date }
     }
 
     func highlight(pass: SatellitePass) {
-        highlightedPassID = pass.id
+        highlightedPassKey = (pass.noradID, pass.start.date)
         highlightedObjectID = "sat:\(pass.noradID)"
     }
 
@@ -203,8 +218,41 @@ final class AppModel {
     func highlight(objectID: String) {
         highlightedObjectID = objectID
         if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > .now }) {
-            highlightedPassID = pass.id
+            highlightedPassKey = (pass.noradID, pass.start.date)
         }
+    }
+
+    var targetObject: SkyObject? { targetObjectID.flatMap(object) }
+
+    var targetPass: SatellitePass? {
+        guard let key = targetPassKey else { return nil }
+        return passes.first { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }
+    }
+
+    /// Locks in the highlighted object (and its pass) as the tracking target. Refused while tracking.
+    func setTargetFromHighlight() {
+        guard !mount.isTracking, let object = highlightedObject else { return }
+        targetObjectID = object.id
+        if case .satellite(let s) = object {
+            let highlighted = highlightedPass(at: .now)
+            let pass = highlighted?.noradID == s.noradID ? highlighted
+                : passes.first { $0.noradID == s.noradID && $0.end.date > .now }
+            targetPassKey = pass.map { ($0.noradID, $0.start.date) }
+        } else {
+            targetPassKey = nil
+        }
+    }
+
+    func setTarget(pass: SatellitePass) {
+        guard !mount.isTracking else { return }
+        targetObjectID = "sat:\(pass.noradID)"
+        targetPassKey = (pass.noradID, pass.start.date)
+    }
+
+    func clearTarget() {
+        guard !mount.isTracking else { return }
+        targetObjectID = nil
+        targetPassKey = nil
     }
 
     /// Selected objects currently above the horizon.

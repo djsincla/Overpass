@@ -13,6 +13,8 @@ struct SkyDome: View {
     /// Selected objects that are up; drawn prominently and tappable.
     var liveObjects: [LiveObject] = []
     var highlightedObjectID: String?
+    /// The locked tracking target, ringed in green.
+    var targetObjectID: String?
     /// Where the scope is pointing.
     var scopePosition: Horizontal?
     var onTapObject: ((String) -> Void)?
@@ -67,7 +69,7 @@ struct SkyDome: View {
                            style: StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
         }
         for (label, az) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("W", 270.0)] {
-            context.draw(Text(label).font(.caption.bold()).foregroundStyle(.secondary), at: g.point(azimuth: az, altitude: -9))
+            context.draw(Text(label).font(.caption.bold()).foregroundStyle(.secondary), at: g.point(azimuth: az, altitude: -5))
         }
     }
 
@@ -103,6 +105,8 @@ struct SkyDome: View {
             }
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
                          with: .color(color))
+            context.draw(Text(body.name).font(.caption2).foregroundStyle(color.opacity(0.8)),
+                         at: CGPoint(x: p.x, y: p.y + size / 2 + 7))
         }
     }
 
@@ -161,6 +165,10 @@ struct SkyDome: View {
                 context.stroke(Path(ellipseIn: CGRect(x: p.x - 11, y: p.y - 11, width: 22, height: 22)),
                                with: .color(.yellow), lineWidth: 2)
             }
+            if object.id == targetObjectID {
+                context.stroke(Path(ellipseIn: CGRect(x: p.x - 16, y: p.y - 16, width: 32, height: 32)),
+                               with: .color(.green), style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+            }
             context.draw(Text(object.name).font(highlighted ? .caption.bold() : .caption2).foregroundStyle(color),
                          at: CGPoint(x: p.x, y: p.y + 14))
         }
@@ -201,7 +209,8 @@ struct DomeGeometry {
 
     init(size: CGSize) {
         center = CGPoint(x: size.width / 2, y: size.height / 2)
-        radius = min(size.width, size.height) / 2 - 18
+        // Room outside the horizon for the N/E/S/W labels.
+        radius = min(size.width, size.height) / 2 - 30
     }
 
     func point(azimuth: Double, altitude: Double) -> CGPoint {

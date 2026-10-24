@@ -12,13 +12,17 @@ struct ObjectsView: View {
     @State private var addingURL = false
     @State private var importing = false
     @State private var confirmingSun = false
-    @State private var expanded: Set<String> = []
+    /// Sections the user has opened or closed, relative to their default.
+    @State private var flipped: Set<String> = []
+    /// Unticked while "Selected only" is on: kept visible so a mis-tap can be undone.
+    @State private var recentlyUnselected: Set<String> = []
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     Toggle("Selected only", isOn: $selectedOnly)
+                        .onChange(of: selectedOnly) { _, _ in recentlyUnselected = [] }
                     Picker("TLE age", selection: $maxAgeDays) {
                         Text("Any").tag(0.0)
                         Text("Under 1 day").tag(1.0)
@@ -29,6 +33,14 @@ struct ObjectsView: View {
                     Text("\(model.selected.count) selected. Passes are predicted for selected satellites; selected objects are marked on the sky.")
                 }
 
+                Section {
+                    ForEach(model.groups) { group in SourceRow(group: group) }
+                } header: {
+                    Text("TLE sources")
+                } footer: {
+                    Text("Turn a source on to list its satellites below. Turning one off keeps it here, so you can turn it back on.")
+                }
+
                 Section("Solar system") {
                     ForEach(SolarSystemBody.allCases, id: \.self) { body in
                         let object = SkyObject.body(body)
@@ -36,27 +48,25 @@ struct ObjectsView: View {
                     }
                 }
 
-                Section(isExpanded: binding("stars")) {
-                    ForEach(BrightStars.all, id: \.name) { star in
-                        let object = SkyObject.star(star)
-                        if visible(object) {
-                            selectRow(object, detail: String(format: "mag %.1f", star.magnitude))
+                Section {
+                    if isOpen("stars", byDefault: false) {
+                        ForEach(BrightStars.all, id: \.name) { star in
+                            let object = SkyObject.star(star)
+                            if visible(object) {
+                                selectRow(object, detail: String(format: "mag %.1f", star.magnitude))
+                            }
                         }
                     }
                 } header: {
-                    Text("Bright stars")
+                    DisclosureHeader(open: isOpen("stars", byDefault: false), toggle: { flip("stars") }) {
+                        Text("Bright stars")
+                    }
                 }
 
                 ForEach(model.groups.filter { $0.source.enabled }) { group in
                     sourceSection(group)
                 }
 
-                Section("More sources") {
-                    ForEach(model.groups.filter { !$0.source.enabled }) { group in
-                        Toggle(group.source.name, isOn: Binding(get: { false },
-                                                                set: { on in Task { await model.setEnabled(group.id, on) } }))
-                    }
-                }
             }
             .navigationTitle("Objects")
             .searchable(text: $search, prompt: "Name or catalogue number")
@@ -97,21 +107,28 @@ struct ObjectsView: View {
     private func sourceSection(_ group: SourceGroup) -> some View {
         let shown = group.satellites.filter { visible(.satellite($0)) }
         let limit = search.isEmpty ? 300 : 2000
-        return Section(isExpanded: binding(group.id)) {
-            ForEach(shown.prefix(limit), id: \.noradID) { sat in
-                selectRow(.satellite(sat), detail: "#\(sat.noradID)", age: sat.elementAge())
-            }
-            if shown.count > limit {
-                Text("\(shown.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
+        // Big sources (Starlink, all active) start closed so they don't swamp the list.
+        let open = isOpen(group.id, byDefault: group.satellites.count <= 300)
+        return Section {
+            if open {
+                ForEach(shown.prefix(limit), id: \.noradID) { sat in
+                    selectRow(.satellite(sat), detail: "#\(sat.noradID)", age: sat.elementAge())
+                }
+                if shown.count > limit {
+                    Text("\(shown.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
+                }
             }
         } header: {
-            SourceHeader(group: group, shown: shown.count)
+            DisclosureHeader(open: open, toggle: { flip(group.id) }) {
+                SourceHeader(group: group, shown: shown.count)
+            }
         }
     }
 
     private func selectRow(_ object: SkyObject, detail: String? = nil, age: TimeInterval? = nil) -> some View {
         let on = model.isSelected(object.id)
         return Button {
+            if on { recentlyUnselected.insert(object.id) }
             if object.isSun && !on { confirmingSun = true } else { model.toggle(object.id) }
         } label: {
             HStack {
@@ -133,7 +150,7 @@ struct ObjectsView: View {
     // MARK: Filtering
 
     private func visible(_ object: SkyObject) -> Bool {
-        if selectedOnly && !model.isSelected(object.id) { return false }
+        if selectedOnly && !model.isSelected(object.id) && !recentlyUnselected.contains(object.id) { return false }
         if !search.isEmpty {
             let matchesName = object.name.localizedCaseInsensitiveContains(search)
             let matchesID: Bool = if case .satellite(let s) = object { s.noradID == search } else { false }
@@ -143,10 +160,78 @@ struct ObjectsView: View {
         return true
     }
 
-    /// Sections start collapsed except the first source, so a 10,000-satellite group doesn't swamp the list.
-    private func binding(_ id: String) -> Binding<Bool> {
-        Binding(get: { expanded.contains(id) || !search.isEmpty || selectedOnly || (id != "stars" && model.groups.first?.id == id) },
-                set: { if $0 { expanded.insert(id) } else { expanded.remove(id) } })
+    /// Searching or showing only the selection opens everything, so matches are never hidden.
+    private func isOpen(_ id: String, byDefault: Bool) -> Bool {
+        if !search.isEmpty || selectedOnly { return true }
+        return byDefault != flipped.contains(id)
+    }
+
+    private func flip(_ id: String) {
+        if flipped.contains(id) { flipped.remove(id) } else { flipped.insert(id) }
+    }
+}
+
+/// A section header with its own open/close chevron, so it works the same on every platform.
+struct DisclosureHeader<Label: View>: View {
+    let open: Bool
+    let toggle: () -> Void
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack {
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .font(.caption.bold())
+                    .frame(width: 14)
+                label
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(open ? "Expanded" : "Collapsed")
+        .accessibilityHint(open ? "Collapses the section" : "Expands the section")
+    }
+}
+
+/// One source: an on/off switch that is always visible, its status, and refresh.
+struct SourceRow: View {
+    @Environment(AppModel.self) private var model
+    let group: SourceGroup
+
+    var body: some View {
+        HStack {
+            Toggle(isOn: Binding(get: { group.source.enabled },
+                                 set: { on in Task { await model.setEnabled(group.id, on) } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.source.name)
+                    Group {
+                        if let error = group.status?.lastError {
+                            Text(error).foregroundStyle(.red)
+                        } else if !group.source.enabled {
+                            Text("Off")
+                        } else if let when = group.status?.lastRefreshed {
+                            let age = group.medianAge.map { String(format: " · median TLE %.1f d", $0 / 86_400) } ?? ""
+                            Text("\(group.satellites.count) satellites · updated \(when, style: .relative) ago\(age)")
+                        } else {
+                            Text("Downloading…")
+                        }
+                    }
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+            if group.source.enabled {
+                Button { Task { await model.refresh(group.id) } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Refresh \(group.source.name)")
+            }
+        }
+        .contextMenu {
+            Button("Refresh now") { Task { await model.refresh(group.id) } }
+            if !group.id.hasPrefix("celestrak-") {
+                Button("Remove", role: .destructive) { Task { await model.removeSource(group.id) } }
+            }
+        }
     }
 }
 
@@ -176,15 +261,6 @@ struct SourceHeader: View {
                 Image(systemName: "arrow.clockwise")
             }
             .accessibilityLabel("Refresh \(group.source.name)")
-            Menu {
-                Button("Turn off") { Task { await model.setEnabled(group.id, false) } }
-                if !group.id.hasPrefix("celestrak-") {
-                    Button("Remove", role: .destructive) { Task { await model.removeSource(group.id) } }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-            }
-            .accessibilityLabel("\(group.source.name) options")
         }
     }
 }

@@ -27,6 +27,7 @@ struct ObserveView: View {
                                         Text("Objects").tag(Panel.objects)
                                     }
                                     .pickerStyle(.segmented)
+                                    .labelsHidden()
                                     .padding(8)
                                     list(listBinding.wrappedValue)
                                     Divider()
@@ -41,6 +42,7 @@ struct ObserveView: View {
                                     ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
                                 }
                                 .pickerStyle(.segmented)
+                                .labelsHidden()
                                 .padding(8)
                                 if panel == .mount {
                                     ScrollView { MountPanel().padding() }
@@ -56,6 +58,13 @@ struct ObserveView: View {
             }
             .navigationTitle("Overpass")
             .toolbar {
+                @Bindable var model = model
+                ToolbarItem(placement: .primaryAction) {
+                    Toggle(isOn: $model.settings.redMode) {
+                        Label("Red mode", systemImage: "eye")
+                    }
+                    .help("Night vision: red on black")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showingFilters = true } label: {
                         Label("Pass filters", systemImage: "line.3.horizontal.decrease.circle")
@@ -66,9 +75,6 @@ struct ObserveView: View {
                 }
             }
             .sheet(isPresented: $showingFilters) { FilterSheet() }
-            .navigationDestination(for: String.self) { id in
-                if let pass = model.passes.first(where: { $0.id == id }) { PassDetailView(pass: pass) }
-            }
         }
     }
 
@@ -85,6 +91,7 @@ struct ObserveView: View {
                     cableStopAzimuth: model.settings.cableStopAzimuth,
                     liveObjects: model.liveObjects(at: context.date),
                     highlightedObjectID: model.highlightedObject?.id,
+                    targetObjectID: model.targetObjectID,
                     scopePosition: model.mount.skyPosition,
                     onTapObject: { model.highlight(objectID: $0) })
         }
@@ -101,6 +108,7 @@ struct ObserveView: View {
 
 struct PassesList: View {
     @Environment(AppModel.self) private var model
+    @State private var detail: SatellitePass?
 
     var body: some View {
         if model.predictionTargets.isEmpty {
@@ -112,13 +120,39 @@ struct PassesList: View {
         } else {
             List(model.passes) { pass in
                 HStack {
+                    // Clicking a pass only refocuses the dome on it. It never moves the mount.
                     Button { model.highlight(pass: pass) } label: { PassRow(pass: pass) }
                         .buttonStyle(.plain)
-                    NavigationLink(value: pass.id) { EmptyView() }.frame(width: 20)
+                    if model.targetPassID == pass.id {
+                        Image(systemName: "scope").foregroundStyle(.green).accessibilityLabel("Tracking target")
+                    }
+                    Button { detail = pass } label: { Image(systemName: "info.circle") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Details for \(pass.name)")
                 }
                 .listRowBackground(model.highlightedPass(at: .now)?.id == pass.id ? Color.accentColor.opacity(0.15) : nil)
+                .contextMenu {
+                    Button("Set as tracking target") { model.setTarget(pass: pass) }
+                        .disabled(model.mount.isTracking)
+                    Button("Details") { detail = pass }
+                }
             }
             .listStyle(.plain)
+            .sheet(item: $detail) { pass in
+                NavigationStack {
+                    PassDetailView(pass: pass)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } }
+                            ToolbarItem(placement: .primaryAction) {
+                                Button("Set as tracking target") { model.setTarget(pass: pass); detail = nil }
+                                    .disabled(model.mount.isTracking)
+                            }
+                        }
+                }
+                #if os(macOS)
+                .frame(minWidth: 560, minHeight: 640)
+                #endif
+            }
         }
     }
 }
@@ -139,6 +173,10 @@ struct SelectedObjectsList: View {
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(model.highlightedObject?.id == object.id ? Color.accentColor.opacity(0.15) : nil)
+                    .contextMenu {
+                        Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
+                            .disabled(model.mount.isTracking)
+                    }
                 }
                 .listStyle(.plain)
             }

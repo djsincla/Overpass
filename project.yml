@@ -60,6 +60,8 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphone*]": AppIconRed
         PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
         PRODUCT_NAME: Overpass
         GENERATE_INFOPLIST_FILE: NO

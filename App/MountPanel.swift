@@ -82,7 +82,7 @@ struct MountPanel: View {
     private var trackingSection: some View {
         @Bindable var model = model
         let mount = model.mount
-        let target = model.highlightedObject
+        let highlighted = model.highlightedObject
         return VStack(alignment: .leading, spacing: 8) {
             Text("Track").font(.headline)
             if mount.availableModes.count > 1 {
@@ -97,17 +97,34 @@ struct MountPanel: View {
                     Text("Step every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
                 }
             }
+            // The target is locked separately from the highlight, so browsing never redirects the mount.
             HStack {
-                Text(target?.name ?? "Highlight something on the sky or in the lists").lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Target").font(.caption).foregroundStyle(.secondary)
+                    Text(model.targetObject?.name ?? "None set").lineLimit(1)
+                    if let pass = model.targetPass {
+                        Text("Pass at \(pass.start.date, style: .time), peaks \(Int(pass.maxAltitude))°")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button(highlighted.map { "Set to \($0.name)" } ?? "Set target") { model.setTargetFromHighlight() }
+                    .disabled(mount.isTracking || highlighted == nil || highlighted?.id == model.targetObjectID)
+                    .help("Use the highlighted object as the tracking target")
+            }
+            if mount.isTracking {
+                Text("Stop tracking to change the target.").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
                 Spacer()
                 if mount.isTracking {
                     Button("Stop tracking") { Task { await mount.stopAll() } }
                 } else {
-                    Button("Track") {
-                        if target?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }
+                    Button("Start tracking") {
+                        if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(target == nil || !canTrack(target))
+                    .disabled(!canTrack(model.targetObject))
                 }
             }
             if let name = mount.trackingName, let m = mount.trackingMode {
@@ -138,7 +155,7 @@ struct MountPanel: View {
                 }
                 Spacer()
                 Button("Align…") { showingAlignment = true }
-            } else if let target = model.highlightedObject, !target.isSatellite {
+            } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
                 Text("Centre \(target.name), then sync so the mount's own pointing improves.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -172,13 +189,11 @@ struct MountPanel: View {
         }
     }
 
+    /// Tracks the locked target only, never whatever happens to be highlighted.
     private func startTracking() async {
-        guard let target = model.highlightedObject else { return }
-        let pass: SatellitePass? = if case .satellite(let s) = target {
-            model.passes.first { $0.noradID == s.noradID && $0.end.date > .now }
-        } else { nil }
+        guard let target = model.targetObject else { return }
         let effective = model.mount.kind == .usb ? .smooth : mode
-        await model.mount.track(target, mode: effective, pass: pass)
+        await model.mount.track(target, mode: effective, pass: model.targetPass)
     }
 
     private func describe(_ identity: MountIdentity) -> String {
