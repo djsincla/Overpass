@@ -34,6 +34,8 @@ final class MountSession {
     private(set) var axes: AxisPosition?
     private(set) var status = ""
     private(set) var trackingName: String?
+    /// What's being tracked, for the camera guider.
+    private(set) var trackingObject: SkyObject?
     private(set) var trackingMode: TrackingMode?
     var isTracking: Bool { trackingTask != nil }
 
@@ -259,6 +261,7 @@ final class MountSession {
         trackingTask?.cancel()
         trackingTask = nil
         trackingName = nil
+        trackingObject = nil
         trackingMode = nil
     }
 
@@ -267,6 +270,7 @@ final class MountSession {
     func track(_ object: SkyObject, mode: TrackingMode, pass: SatellitePass?) async {
         await stopAll()
         trackingName = object.name
+        trackingObject = object
         trackingMode = mode
         status = "Starting…"
         trackingTask = Task {
@@ -285,6 +289,7 @@ final class MountSession {
             if !Task.isCancelled {
                 trackingTask = nil
                 trackingName = nil
+                trackingObject = nil
                 trackingMode = nil
             }
         }
@@ -501,6 +506,22 @@ final class MountSession {
     private func axesNear(_ frame: (azimuth: Double, altitude: Double), _ model: AlignmentModel, _ reference: Double) -> AxisPosition {
         let p = model.axes(mountAzimuth: frame.azimuth, mountAltitude: frame.altitude)
         return AxisPosition(primary: reference + wrap180(p.primary - reference), secondary: p.secondary)
+    }
+
+    // MARK: Camera calibration (Special mode)
+
+    /// Runs both axes at these speeds (degrees per second) until told otherwise.
+    func moveAxes(primary: Double, secondary: Double) async throws {
+        guard let special else { throw MountSessionError.needsUSB }
+        try await special.setSpeeds(primary: primary, secondary: secondary)
+    }
+
+    func stopMotion() async throws {
+        try await special?.stop()
+    }
+
+    func currentAxes() async throws -> AxisPosition? {
+        try await readPosition()
     }
 
     // MARK: Alignment

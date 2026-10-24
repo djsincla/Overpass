@@ -22,6 +22,10 @@
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Overpass uses a camera on your telescope to keep the target centred while tracking.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Overpass connects to your mount, or to a relay plugged into it, on your local network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

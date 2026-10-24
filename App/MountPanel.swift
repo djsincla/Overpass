@@ -21,6 +21,7 @@ struct MountPanel: View {
                 trackingSection
                 if mount.kind != .wifi || mode != .passive { fineTuning }
                 alignmentSection
+                if mount.kind == .usb { GuidingPanel() }
             }
             if !mount.status.isEmpty {
                 Text(mount.status).font(.callout).foregroundStyle(.secondary)

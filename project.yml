@@ -45,6 +45,8 @@ targets:
         com.apple.security.personal-information.location: true
         # The mount's USB serial port.
         com.apple.security.device.serial: true
+        # Camera guiding (including an iPhone via Continuity Camera).
+        com.apple.security.device.camera: true
     info:
       path: App/Info.plist
       properties:
@@ -53,6 +55,10 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           Overpass uses your location to work out where satellites, the Sun, Moon
           and planets appear in your sky.
+        # Without this, macOS hides iPhones (Continuity Camera) from the camera list.
+        NSCameraUseContinuityCameraDeviceType: true
+        NSCameraUsageDescription: >-
+          Overpass uses a camera on your telescope to keep the target centred while tracking.
         NSLocalNetworkUsageDescription: >-
           Overpass connects to your mount, or to a relay plugged into it, on your local network.
         UILaunchScreen: {}

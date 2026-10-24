@@ -56,6 +56,10 @@ struct Settings: Codable, Equatable {
     var alignmentRMS: Double?
     var alignmentStars = 0
 
+    /// Camera guiding: which camera, and how its image moves with the mount.
+    var cameraDeviceID: String?
+    var cameraCalibration: CameraCalibration?
+
     var observer: Observer {
         Observer(latitude: latitude, longitude: longitude, height: heightMeters, refraction: refraction)
     }
@@ -154,6 +158,7 @@ final class AppModel {
     var message: String?
 
     let mount = MountSession()
+    let guider = Guider()
 
     private var catalog: TLECatalog?
     private var predictionTask: Task<Void, Never>?
@@ -173,6 +178,7 @@ final class AppModel {
             message = "Couldn't open the TLE cache: \(error.localizedDescription)"
         }
         mount.app = self
+        guider.app = self
     }
 
     func start() async {

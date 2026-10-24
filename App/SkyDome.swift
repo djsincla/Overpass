@@ -125,7 +125,8 @@ struct SkyDome: View {
             if a.sunlit {
                 context.stroke(segment, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, lineCap: .round))
             } else {
-                context.stroke(segment, with: .color(.gray), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                // Still clearly visible against the night sky: the pass doesn't stop, it's just unlit.
+                context.stroke(segment, with: .color(.white.opacity(0.75)), style: StrokeStyle(lineWidth: 2.5, dash: [6, 4]))
             }
         }
 
@@ -221,7 +222,7 @@ struct SkyDome: View {
         var dark = Path()
         dark.move(to: CGPoint(x: x, y: y + 16))
         dark.addLine(to: CGPoint(x: x + 22, y: y + 16))
-        context.stroke(dark, with: .color(.gray), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+        context.stroke(dark, with: .color(.white.opacity(0.75)), style: StrokeStyle(lineWidth: 2.5, dash: [6, 4]))
         context.draw(Text("Eclipsed").font(.caption2).foregroundStyle(.secondary), at: CGPoint(x: x + 30, y: y + 16), anchor: .leading)
     }
 
