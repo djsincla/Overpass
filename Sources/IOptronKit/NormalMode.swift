@@ -125,13 +125,18 @@ public actor NormalModeClient {
         self.transport = transport
     }
 
+    private let serial = SerialExecutor()
+
     @discardableResult
     func send(_ command: NormalCommand) async throws -> String {
-        try await transport.write(command.wire)
-        switch command.expectedReply {
-        case .none: return ""
-        case .fixed(let count): return try await transport.read(count: count)
-        case .terminated: return try await transport.read(until: "#")
+        let transport = transport
+        return try await serial.run {
+            try await transport.write(command.wire)
+            switch command.expectedReply {
+            case .none: return ""
+            case .fixed(let count): return try await transport.read(count: count)
+            case .terminated: return try await transport.read(until: "#")
+            }
         }
     }
 
