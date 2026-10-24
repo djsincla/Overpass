@@ -54,6 +54,12 @@ struct FilterSettings: Codable, Equatable {
     var minimumSunSeparation: Double = 0
     var search = ""
     var sort = Sort.startTime
+    var scope = Scope.selected
+
+    enum Scope: String, Codable, CaseIterable, Identifiable {
+        case selected = "Selected", all = "All"
+        var id: Self { self }
+    }
 
     enum Sort: String, Codable, CaseIterable, Identifiable {
         case startTime = "Start time", maxAltitude = "Highest", duration = "Longest"
@@ -72,6 +78,11 @@ struct FilterSettings: Codable, Equatable {
 final class AppModel {
     var settings: Settings { didSet { save(settings, "settings"); if settings != oldValue { schedulePrediction() } } }
     var filter: FilterSettings { didSet { save(filter, "filter"); if filter != oldValue { schedulePrediction() } } }
+
+    /// NORAD numbers of the satellites the user picked; predictions and highlights follow these.
+    var selected: Set<String> { didSet { save(Array(selected), "selected"); if selected != oldValue { schedulePrediction() } } }
+    /// The pass drawn on the sky dome; nil means the next one.
+    var highlightedPassID: String?
 
     private(set) var sources: [TLESource] = []
     private(set) var sourceStatus: [String: TLESourceStatus] = [:]
@@ -92,6 +103,7 @@ final class AppModel {
     init() {
         settings = Self.load("settings") ?? Settings()
         filter = Self.load("filter") ?? FilterSettings()
+        selected = Set(Self.load("selected") ?? [String]())
         do {
             let dir = Self.storage.appending(path: "TLE")
             catalog = try TLECatalog(directory: dir)
@@ -190,8 +202,34 @@ final class AppModel {
         }
     }
 
+    /// The satellites passes are predicted for.
+    var predictionTargets: [SatelliteTarget] {
+        filter.scope == .all ? satellites : satellites.filter { selected.contains($0.noradID) }
+    }
+
+    func toggleSelected(_ noradID: String) {
+        if selected.contains(noradID) { selected.remove(noradID) } else { selected.insert(noradID) }
+    }
+
+    /// The highlighted pass if it hasn't finished, otherwise the next one.
+    func highlightedPass(at date: Date) -> SatellitePass? {
+        if let id = highlightedPassID, let pass = passes.first(where: { $0.id == id }), pass.end.date > date { return pass }
+        return passes.filter { $0.end.date > date }.min { $0.start.date < $1.start.date }
+    }
+
+    /// Selected satellites currently above the horizon.
+    func liveObjects(at date: Date) -> [LiveObject] {
+        let observer = settings.observer
+        let time = AstroTime(date)
+        return satellites.filter { selected.contains($0.noradID) }.compactMap { sat in
+            guard let h = try? observer.look(at: sat, time), h.altitude > 0 else { return nil }
+            return LiveObject(id: sat.noradID, name: sat.name, position: h, sunlit: (try? sat.isSunlit(at: time)) ?? false)
+        }
+    }
+
     private func predict() async {
-        guard settings.hasLocation, !satellites.isEmpty else {
+        let targets = predictionTargets
+        guard settings.hasLocation, !targets.isEmpty else {
             passes = []
             return
         }
@@ -215,7 +253,7 @@ final class AppModel {
 
         let now = Date.now
         // Include passes already in progress.
-        let result = await predictor.passes(of: satellites, from: now - 15 * 60, to: now + filter.hoursAhead * 3600,
+        let result = await predictor.passes(of: targets, from: now - 15 * 60, to: now + filter.hoursAhead * 3600,
                                             filter: f, sort: filter.sort.passSort)
         guard !Task.isCancelled else { return }
         passes = result.filter { $0.end.date > now }
@@ -253,4 +291,11 @@ final class AppModel {
     private static func load<T: Decodable>(_ key: String) -> T? {
         UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(T.self, from: $0) }
     }
+}
+
+struct LiveObject: Identifiable {
+    let id: String
+    let name: String
+    let position: Horizontal
+    let sunlit: Bool
 }

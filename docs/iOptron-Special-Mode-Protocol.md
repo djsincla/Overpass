@@ -59,3 +59,16 @@ Examples:
 - The `1` response has **no** trailing `#`, so read exactly one byte.
 - With P0+P1+M0+M1 at about 30 ms each, the HAE (no P2/M2) gets about an 8 Hz control loop; the HAZ (with P2/M2) gets about 16 Hz.
 - What the axis zero points mean (azimuth 0 = north? altitude 0 = horizon?) is **not** stated. Check on hardware, or sync explicitly with S0/S1 after the mount is aligned.
+
+# Normal mode (RS-232 Command Language V3.10, 2021-01-04): relevant parts
+
+Source: https://www.ioptron.com/v/ASCOM/RS-232_Command_Language2014V310.pdf. The document lists CEM/GEM mounts only; HAZ/HAE behaviour still needs confirming. Normal mode is available over WiFi and USB.
+
+- Position: `:GAC#` → `sTTTTTTTTTTTTTTTTT#` (altitude, sign + 8 digits; then azimuth, 9 digits; 0.01″). `:GEP#` gives RA/Dec.
+- Alt-az goto: `:SasTTTTTTTT#` (altitude), `:SzTTTTTTTTT#` (azimuth), then `:MSS#` → `1` accepted / `0` below the altitude limit or past mechanical limits. **Tracking stops after an `:MSS#` slew.**
+- RA/Dec goto: `:SRATTTTTTTTT#`, `:SdsTTTTTTTT#`, `:MS1#`. **Sidereal tracking starts automatically after `:MS1#`.**
+- Tracking rate: `:RT0#` sidereal, `:RT1#` lunar, `:RT2#` solar, `:RT3#` King, `:RT4#` custom (`:RRnnnnn#`, 0.1000–1.9000× sidereal, **RA axis only**). `:ST0#`/`:ST1#` turn tracking off/on.
+- Variable speed: `:SRn#` sets **one** arrow-button speed for both axes (1=1×, 2=2×, 3=8×, 4=16×, 5=64×, 6=128×, 7=256×, 8=512×, 9=max sidereal). Move with `:mn#`/`:ms#` (Dec/alt) and `:me#`/`:mw#` (RA/az) until `:qD#`/`:qR#`/`:Q#`.
+- Sync: `:CM#` to the last `:Sas`/`:Sz` (alt-az) or `:SRA`/`:Sd` coordinates.
+- Time/site: `:SUT…#` (ms since J2000), `:SGsMMM#`, `:SDS0#`/`:SDS1#`, `:SLOsTTTTTTTT#`, `:SLAsTTTTTTTT#`.
+- **No commands read, add to or select from the hand controller's object database.**
