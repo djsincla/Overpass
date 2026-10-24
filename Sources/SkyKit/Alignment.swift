@@ -1,7 +1,7 @@
 import Foundation
 
 /// Raw mount axis readings, in degrees (from `:P0#` / `:P1#`).
-public struct AxisPosition: Equatable, Sendable {
+public struct AxisPosition: Equatable, Sendable, Codable {
     public var primary: Double
     public var secondary: Double
 
@@ -31,7 +31,7 @@ public struct AlignmentPoint: Sendable {
 /// The mount frame is the sky frame rotated by a yaw (azimuth zero offset) and two small tilts
 /// (from not being level). The altitude axis has its own zero offset, and the azimuth axis may
 /// count either way round. One star fixes the two offsets; two or more also fix the tilt.
-public struct AlignmentModel: Sendable {
+public struct AlignmentModel: Sendable, Codable, Equatable {
     /// Azimuth zero offset, degrees.
     public var yaw: Double = 0
     /// Tilt of the azimuth axis about north and east, degrees.

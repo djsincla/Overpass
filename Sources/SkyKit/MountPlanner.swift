@@ -1,7 +1,7 @@
 import Foundation
 
 /// Physical limits of the mount and its cabling.
-public struct MountLimits: Sendable {
+public struct MountLimits: Sendable, Codable, Equatable {
     /// Sky azimuth the mount must never rotate through, so cables can't wind up.
     /// The cables should be neutral when the scope points the opposite way.
     public var cableStopAzimuth: Double = 0
