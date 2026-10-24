@@ -62,3 +62,22 @@ import Testing
         #expect(transport.written == [":mn#", ":qD#"])
     }
 }
+
+@Suite struct NormalStatusTests {
+    @Test func parsesSlewingStatus() async throws {
+        // Longitude −75°, latitude 40° (+90° offset), GPS 1, system 2 (slewing), rate 0, speed 5, source 1, north.
+        // GPS and system digits differ, so reading the wrong position fails.
+        let reply = "-27000000" + "46800000" + "120511" + "#"
+        let transport = ScriptedTransport(replies: [reply, reply])
+        let client = NormalModeClient(transport: transport)
+        #expect(try await client.systemStatus() == 2)
+        #expect(try await client.isSlewing())
+        #expect(transport.written == [":GLS#", ":GLS#"])
+    }
+
+    @Test func maximumSlewSpeedIsClamped() {
+        #expect(NormalCommand.setMaximumSlewSpeed(9).wire == ":MSR9#")
+        #expect(NormalCommand.setMaximumSlewSpeed(12).wire == ":MSR9#")
+        #expect(NormalCommand.setMaximumSlewSpeed(3).wire == ":MSR7#")
+    }
+}

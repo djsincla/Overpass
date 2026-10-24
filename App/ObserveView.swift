@@ -6,6 +6,10 @@ struct ObserveView: View {
     @Environment(AppModel.self) private var model
     @State private var panel = Panel.passes
     @State private var showingFilters = false
+    // Where the dividers were left, remembered between launches.
+    @AppStorage("observe.domeFraction") private var domeFraction = 0.5
+    @AppStorage("observe.listFraction") private var listFraction = 0.45
+    @AppStorage("observe.phoneDomeFraction") private var phoneDomeFraction = 0.42
 
     enum Panel: String, CaseIterable, Identifiable {
         case passes = "Passes", objects = "Objects", mount = "Mount"
@@ -18,36 +22,42 @@ struct ObserveView: View {
                 if model.settings.hasLocation {
                     GeometryReader { proxy in
                         if proxy.size.width > 760 {
-                            HStack(alignment: .top, spacing: 0) {
-                                dome.padding().frame(width: min(proxy.size.width * 0.5, proxy.size.height))
-                                Divider()
+                            // Mac and iPad: dome | (list over mount panel), both dividers draggable.
+                            ResizableSplit(axis: .horizontal, fraction: $domeFraction, range: 0.25...0.75) {
+                                dome.padding()
+                            } second: {
+                                ResizableSplit(axis: .vertical, fraction: $listFraction, range: 0.15...0.85) {
+                                    VStack(spacing: 0) {
+                                        Picker("List", selection: listBinding) {
+                                            Text("Passes").tag(Panel.passes)
+                                            Text("Objects").tag(Panel.objects)
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .labelsHidden()
+                                        .padding(8)
+                                        list(listBinding.wrappedValue)
+                                    }
+                                } second: {
+                                    ScrollView { MountPanel().padding(12) }
+                                }
+                            }
+                        } else {
+                            // iPhone: dome over the switchable panel, divider draggable.
+                            ResizableSplit(axis: .vertical, fraction: $phoneDomeFraction, range: 0.2...0.7) {
+                                dome.padding(.horizontal)
+                            } second: {
                                 VStack(spacing: 0) {
-                                    Picker("List", selection: listBinding) {
-                                        Text("Passes").tag(Panel.passes)
-                                        Text("Objects").tag(Panel.objects)
+                                    Picker("Panel", selection: $panel) {
+                                        ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
                                     }
                                     .pickerStyle(.segmented)
                                     .labelsHidden()
                                     .padding(8)
-                                    list(listBinding.wrappedValue)
-                                    Divider()
-                                    ScrollView { MountPanel().padding() }
-                                        .frame(maxHeight: proxy.size.height * 0.55)
-                                }
-                            }
-                        } else {
-                            VStack(spacing: 0) {
-                                dome.padding(.horizontal).frame(maxHeight: proxy.size.height * 0.45)
-                                Picker("Panel", selection: $panel) {
-                                    ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
-                                }
-                                .pickerStyle(.segmented)
-                                .labelsHidden()
-                                .padding(8)
-                                if panel == .mount {
-                                    ScrollView { MountPanel().padding() }
-                                } else {
-                                    list(panel)
+                                    if panel == .mount {
+                                        ScrollView { MountPanel().padding(12) }
+                                    } else {
+                                        list(panel)
+                                    }
                                 }
                             }
                         }

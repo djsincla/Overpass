@@ -29,6 +29,10 @@ public enum NormalCommand: Equatable, Sendable {
     case setDaylightSaving(Bool)
     case setLongitude(centiarcsec: Int)
     case setLatitude(centiarcsec: Int)
+    /// Longitude, latitude and status digits, including whether the mount is slewing.
+    case getStatus
+    /// Maximum goto speed: 7 = 256×, 8 = 512×, 9 = the mount's maximum. Saved in the mount.
+    case setMaximumSlewSpeed(Int)
 
     public enum TrackingRate: Int, Sendable { case sidereal = 0, lunar, solar, king, custom }
 
@@ -86,13 +90,15 @@ public enum NormalCommand: Equatable, Sendable {
         case .setDaylightSaving(let on): on ? ":SDS1#" : ":SDS0#"
         case .setLongitude(let v): ":SLO\(Command.signed(v, digits: 8, range: -64_800_000...64_800_000))#"
         case .setLatitude(let v): ":SLA\(Command.signed(v, digits: 8, range: -32_400_000...32_400_000))#"
+        case .getStatus: ":GLS#"
+        case .setMaximumSlewSpeed(let n): ":MSR\(min(max(n, 7), 9))#"
         }
     }
 
     public var expectedReply: ReplyFormat {
         switch self {
         case .mountInfo: .fixed(4)
-        case .getAltAz: .terminated
+        case .getAltAz, .getStatus: .terminated
         case .move: .none
         default: .fixed(1)
         }
@@ -192,6 +198,22 @@ public actor NormalModeClient {
     }
 
     public func setTracking(_ on: Bool) async throws { try await ack(.tracking(on)) }
+
+    /// The `:GLS#` system status digit: 0 stopped, 1 tracking, 2 slewing, 3 guiding,
+    /// 4 meridian flip, 5 tracking (PEC), 6 parked, 7 stopped at home.
+    public func systemStatus() async throws -> Int {
+        let reply = try await send(.getStatus)
+        // Sign, 8 longitude digits, 8 latitude digits, then GPS, system, rate, speed, time source, hemisphere.
+        let body = Array(reply.dropLast())
+        guard reply.hasSuffix("#"), body.count == 23, let digit = Int(String(body[18])) else {
+            throw ReplyError.malformed(reply)
+        }
+        return digit
+    }
+
+    public func isSlewing() async throws -> Bool { try await systemStatus() == 2 }
+
+    public func setMaximumSlewSpeed(_ speed: Int) async throws { try await ack(.setMaximumSlewSpeed(speed)) }
 
     public func setMoveRate(_ rate: NormalCommand.MoveRate) async throws { try await ack(.moveRate(rate)) }
 

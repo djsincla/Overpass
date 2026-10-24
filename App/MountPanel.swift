@@ -2,7 +2,7 @@ import IOptronKit
 import SkyKit
 import SwiftUI
 
-/// Connection, manual moves, tracking and fine tuning.
+/// Connection, manual moves, tracking and fine tuning, kept compact so it fits without scrolling.
 struct MountPanel: View {
     @Environment(AppModel.self) private var model
     @State private var mode = TrackingMode.step
@@ -10,26 +10,20 @@ struct MountPanel: View {
     @State private var showingAlignment = false
 
     var body: some View {
-        @Bindable var mount = model.mount
-        @Bindable var model = model
-        VStack(alignment: .leading, spacing: 16) {
-            connection
-
-            // Scope controls sit right under the connection and are always shown. Moving needs a
-            // mount; the fine-tune offsets can be set beforehand (they apply once tracking runs).
-            if mount.state == .connected { position }
-            JogPad()
+        let mount = model.mount
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            ControlPad()
                 .disabled(mount.state != .connected)
                 .opacity(mount.state == .connected ? 1 : 0.5)
-            fineTuning
-
             if mount.state == .connected {
-                trackingSection
-                alignmentSection
+                Divider()
+                tracking
+                alignment
                 if mount.kind == .usb { GuidingPanel() }
             }
             if !mount.status.isEmpty {
-                Text(mount.status).font(.callout).foregroundStyle(.secondary)
+                Text(mount.status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
         }
         .sheet(isPresented: $showingAlignment) { AlignmentSheet() }
@@ -42,24 +36,28 @@ struct MountPanel: View {
         .onChange(of: mount.kind) { _, _ in mode = mount.availableModes.first ?? .step }
     }
 
-    // MARK: Sections
+    // MARK: Header: connection, position, STOP
 
-    private var connection: some View {
+    private var header: some View {
         let mount = model.mount
-        return HStack {
-            VStack(alignment: .leading) {
-                Text(model.settings.connection.rawValue).font(.headline)
-                switch mount.state {
-                case .disconnected: Text("Not connected").foregroundStyle(.secondary)
-                case .connecting: Text("Connecting…").foregroundStyle(.secondary)
-                case .connected: Text(mount.identity.map(describe) ?? "Connected").foregroundStyle(.green)
-                case .failed(let why): Text(why).foregroundStyle(.red)
+        return HStack(spacing: 10) {
+            Circle().fill(stateColor).frame(width: 9, height: 9).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(stateText).font(.callout).lineLimit(1)
+                if let h = mount.skyPosition {
+                    Text("Az \(h.azimuth, format: .number.precision(.fractionLength(2)))°  Alt \(h.altitude, format: .number.precision(.fractionLength(2)))°")
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
             }
-            .font(.callout)
-            Spacer()
+            Spacer(minLength: 4)
             if mount.state == .connected {
-                Button("Disconnect") { Task { await mount.disconnect() } }
+                Button(role: .destructive) { Task { await mount.stopAll() } } label: {
+                    Label("STOP", systemImage: "stop.fill").font(.callout.bold())
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .keyboardShortcut(.space, modifiers: [])
+                Button("Disconnect") { Task { await mount.disconnect() } }.controlSize(.small)
             } else {
                 Button("Connect") { Task { await mount.connect() } }
                     .buttonStyle(.borderedProminent)
@@ -68,74 +66,82 @@ struct MountPanel: View {
         }
     }
 
-    private var position: some View {
-        HStack {
-            if let h = model.mount.skyPosition {
-                Label("Az \(h.azimuth, format: .number.precision(.fractionLength(2)))°  Alt \(h.altitude, format: .number.precision(.fractionLength(2)))°",
-                      systemImage: "scope")
-                    .font(.callout.monospacedDigit())
-            }
-            Spacer()
-            Button(role: .destructive) { Task { await model.mount.stopAll() } } label: {
-                Label("STOP", systemImage: "stop.fill").font(.headline).frame(minWidth: 90)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .keyboardShortcut(.space, modifiers: [])
+    private var stateText: String {
+        switch model.mount.state {
+        case .disconnected: "\(model.settings.connection.rawValue) · not connected"
+        case .connecting: "Connecting…"
+        case .connected: model.mount.identity.map(describe) ?? "Connected"
+        case .failed(let why): why
         }
     }
 
-    private var trackingSection: some View {
+    private var stateColor: Color {
+        switch model.mount.state {
+        case .connected: .green
+        case .connecting: .yellow
+        case .failed: .red
+        case .disconnected: .gray
+        }
+    }
+
+    // MARK: Tracking
+
+    private var tracking: some View {
         @Bindable var model = model
         let mount = model.mount
         let highlighted = model.highlightedObject
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Track").font(.headline)
-            if mount.availableModes.count > 1 {
-                Picker("Mode", selection: $mode) {
-                    ForEach(mount.availableModes) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-            }
-            Text(modeExplanation).font(.caption).foregroundStyle(.secondary)
-            if mode == .step && mount.kind == .wifi {
-                Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
-                    Text("Step every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
-                }
-            }
-            // The target is locked separately from the highlight, so browsing never redirects the mount.
+        return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Target").font(.caption).foregroundStyle(.secondary)
-                    Text(model.targetObject?.name ?? "None set").lineLimit(1)
-                    if let pass = model.targetPass {
-                        Text("Pass at \(pass.start.date, style: .time), peaks \(Int(pass.maxAltitude))°")
-                            .font(.caption).foregroundStyle(.secondary)
+                if mount.availableModes.count > 1 {
+                    Picker("Mode", selection: $mode) {
+                        ForEach(mount.availableModes) { Text($0.rawValue).tag($0) }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help(modeExplanation)
+                    .disabled(mount.isTracking)
+                } else {
+                    Text("Smooth").font(.callout.bold()).help(modeExplanation)
+                }
+                if mode == .step && mount.kind == .wifi {
+                    Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
+                        Text("every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
+                            .font(.callout.monospacedDigit())
+                    }
+                    .fixedSize()
                 }
                 Spacer()
+            }
+
+            // The target is locked separately from the highlight, so browsing never redirects the mount.
+            HStack(spacing: 6) {
+                Image(systemName: "scope").foregroundStyle(model.targetObject == nil ? Color.secondary : .green)
+                    .accessibilityHidden(true)
+                Text(targetText).font(.callout).lineLimit(1)
+                Spacer(minLength: 4)
                 Button(highlighted.map { "Set to \($0.name)" } ?? "Set target") { model.setTargetFromHighlight() }
+                    .controlSize(.small)
+                    .lineLimit(1)
                     .disabled(mount.isTracking || highlighted == nil || highlighted?.id == model.targetObjectID)
-                    .help("Use the highlighted object as the tracking target")
+                    .help(mount.isTracking ? "Stop tracking to change the target" : "Use the highlighted object as the tracking target")
             }
-            if mount.isTracking {
-                Text("Stop tracking to change the target.").font(.caption).foregroundStyle(.secondary)
-            }
-            if let pass = model.targetPass, !mount.isTracking {
-                if let point = mount.startPoint(of: pass) {
-                    Button {
-                        Task { await mount.moveToStart(of: pass) }
-                    } label: {
-                        Label("Move to start · az \(Int(point.position.azimuth))° \(compass(point.position.azimuth)), alt \(Int(point.position.altitude))°",
-                              systemImage: "arrow.uturn.forward")
-                    }
-                    .disabled(mount.isPreparing || (mount.kind == .usb && model.settings.alignment == nil))
-                    .help("Point where the pass first reaches the start elevation, and wait there")
-                } else {
-                    Text("This pass is already past its start point.").font(.caption).foregroundStyle(.secondary)
-                }
-            }
+
             HStack {
+                if let pass = model.targetPass, !mount.isTracking {
+                    if let point = mount.startPoint(of: pass) {
+                        Button {
+                            Task { await mount.moveToStart(of: pass) }
+                        } label: {
+                            Label("To start \(Int(point.position.azimuth))° \(compass(point.position.azimuth)) · \(Int(point.position.altitude))°",
+                                  systemImage: "arrow.uturn.forward")
+                        }
+                        .disabled(mount.isPreparing || (mount.kind == .usb && model.settings.alignment == nil))
+                        .help("Slew at full speed to where the pass first reaches the start elevation, and wait there")
+                    } else {
+                        Text("Past its start point").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
                 if mount.isTracking {
                     Button("Stop tracking") { Task { await mount.stopAll() } }
@@ -147,72 +153,50 @@ struct MountPanel: View {
                     .disabled(!canTrack(model.targetObject))
                 }
             }
-            if let name = mount.trackingName, let m = mount.trackingMode {
-                Label("\(m.rawValue): \(name)", systemImage: "dot.radiowaves.left.and.right").foregroundStyle(.green)
-            }
         }
     }
 
-    private var fineTuning: some View {
-        @Bindable var mount = model.mount
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Fine tune").font(.headline)
-            OffsetRow(title: "Time", value: $mount.timeOffset, steps: [0.1, 1], unit: "s", format: "%+.1f")
-            OffsetRow(title: "Azimuth", value: arcmin($mount.azimuthOffset), steps: [1, 5], unit: "′", format: "%+.0f")
-            OffsetRow(title: "Altitude", value: arcmin($mount.altitudeOffset), steps: [1, 5], unit: "′", format: "%+.0f")
-            HStack {
-                Text(fineTuneNote).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Reset") {
-                    mount.timeOffset = 0
-                    mount.azimuthOffset = 0
-                    mount.altitudeOffset = 0
-                }
-                .controlSize(.small)
-                .disabled(mount.timeOffset == 0 && mount.azimuthOffset == 0 && mount.altitudeOffset == 0)
-            }
+    private var targetText: String {
+        guard let target = model.targetObject else { return "No target set" }
+        if let mode = model.mount.trackingMode { return "\(mode.rawValue): \(target.name)" }
+        if let pass = model.targetPass {
+            return "\(target.name) · \(pass.start.date.formatted(date: .omitted, time: .shortened)), peaks \(Int(pass.maxAltitude))°"
         }
+        return target.name
     }
 
-    private var alignmentSection: some View {
+    @ViewBuilder
+    private var alignment: some View {
         let mount = model.mount
-        return HStack {
-            if mount.kind == .usb {
-                VStack(alignment: .leading) {
-                    Text("Alignment").font(.headline)
-                    Text(alignmentSummary).font(.caption).foregroundStyle(.secondary)
-                }
+        if mount.kind == .usb {
+            HStack {
+                Text("Alignment: \(alignmentSummary)").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Align…") { showingAlignment = true }
-            } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
-                Text("Centre \(target.name), then sync so the mount's own pointing improves.")
+                Button("Align…") { showingAlignment = true }.controlSize(.small)
+            }
+        } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
+            HStack {
+                Text("Centre \(target.name), then sync to improve the mount's pointing.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Sync") { Task { await mount.sync(on: target) } }
+                Button("Sync") { Task { await mount.sync(on: target) } }.controlSize(.small)
             }
         }
     }
 
     // MARK: Helpers
 
-    private var fineTuneNote: String {
-        if model.mount.kind == .wifi && mode == .passive {
-            return "Passive tracking is done by the mount, so these don't apply; use the arrows instead."
-        }
-        return "Time moves the aim along the track, which fixes most TLE error. Offsets apply live while tracking."
-    }
-
     private var alignmentSummary: String {
-        guard model.settings.alignment != nil else { return "Not aligned. Smooth tracking needs two or more stars." }
-        let rms = model.settings.alignmentRMS.map { String(format: " · error %.1f′", $0 * 60) } ?? ""
+        guard model.settings.alignment != nil else { return "none (Smooth needs 2+ stars)" }
+        let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
         return "\(model.settings.alignmentStars) stars\(rms)"
     }
 
     private var modeExplanation: String {
         switch (model.mount.kind, mode) {
-        case (.wifi, .passive): "One goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
-        case (.wifi, _): "Repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
-        default: "Varies both axis speeds continuously. Best for imaging satellites."
+        case (.wifi, .passive): "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
+        case (.wifi, _): "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
+        default: "Smooth: varies both axis speeds continuously. Best for imaging satellites."
         }
     }
 
@@ -243,85 +227,138 @@ struct MountPanel: View {
         }
         return "\(name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
     }
-
-    private func arcmin(_ degrees: Binding<Double>) -> Binding<Double> {
-        Binding(get: { degrees.wrappedValue * 60 }, set: { degrees.wrappedValue = $0 / 60 })
-    }
 }
 
-struct OffsetRow: View {
-    let title: String
-    @Binding var value: Double
-    let steps: [Double]
-    let unit: String
-    let format: String
-
-    var body: some View {
-        HStack {
-            Text(title).frame(width: 70, alignment: .leading)
-            ForEach(steps.reversed(), id: \.self) { step in
-                Button("−\(label(step))") { value -= step }.buttonStyle(.bordered)
-            }
-            Text(String(format: format, value) + unit)
-                .font(.callout.monospacedDigit()).frame(minWidth: 56)
-                .onTapGesture(count: 2) { value = 0 }
-                .accessibilityHint("Double-tap to reset")
-            ForEach(steps, id: \.self) { step in
-                Button("+\(label(step))") { value += step }.buttonStyle(.bordered)
-            }
-        }
-        .controlSize(.small)
-    }
-
-    private func label(_ step: Double) -> String {
-        step < 1 ? String(format: "%.1f", step) : String(format: "%.0f", step)
-    }
-}
-
-/// Press and hold to move; release to stop.
-struct JogPad: View {
+/// Coarse arrows (hold to move) in the middle, fine arrows (tap) wrapped around them,
+/// and speed, fine step and the time offset beside.
+struct ControlPad: View {
     @Environment(AppModel.self) private var model
+    @State private var fineStep: Double = 1
 
     var body: some View {
         @Bindable var mount = model.mount
-        HStack(alignment: .center, spacing: 24) {
-            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+        let wifi = mount.kind == .wifi
+        HStack(alignment: .center, spacing: 14) {
+            Grid(horizontalSpacing: 3, verticalSpacing: 3) {
                 GridRow {
-                    Color.clear.frame(width: 1, height: 1)
-                    JogButton(direction: .up, symbol: "arrow.up", label: model.mount.kind == .wifi ? "N" : "Up")
-                    Color.clear.frame(width: 1, height: 1)
+                    gap; gap
+                    FineButton(direction: .up, step: fineStep)
+                    gap; gap
                 }
                 GridRow {
-                    JogButton(direction: .left, symbol: "arrow.left", label: model.mount.kind == .wifi ? "W" : "Az−")
-                    Image(systemName: "scope").foregroundStyle(.secondary)
-                    JogButton(direction: .right, symbol: "arrow.right", label: model.mount.kind == .wifi ? "E" : "Az+")
+                    gap; gap
+                    JogButton(direction: .up, symbol: "arrow.up", label: wifi ? "N" : "Up")
+                    gap; gap
                 }
                 GridRow {
-                    Color.clear.frame(width: 1, height: 1)
-                    JogButton(direction: .down, symbol: "arrow.down", label: model.mount.kind == .wifi ? "S" : "Down")
-                    Color.clear.frame(width: 1, height: 1)
+                    FineButton(direction: .left, step: fineStep)
+                    JogButton(direction: .left, symbol: "arrow.left", label: wifi ? "W" : "Az−")
+                    Image(systemName: "scope").font(.caption).foregroundStyle(.secondary).frame(width: 30, height: 30)
+                    JogButton(direction: .right, symbol: "arrow.right", label: wifi ? "E" : "Az+")
+                    FineButton(direction: .right, step: fineStep)
+                }
+                GridRow {
+                    gap; gap
+                    JogButton(direction: .down, symbol: "arrow.down", label: wifi ? "S" : "Down")
+                    gap; gap
+                }
+                GridRow {
+                    gap; gap
+                    FineButton(direction: .down, step: fineStep)
+                    gap; gap
                 }
             }
-            VStack(alignment: .leading) {
-                Text("Speed").font(.caption).foregroundStyle(.secondary)
-                if model.mount.kind == .wifi {
-                    Picker("Speed", selection: $mount.moveRate) {
-                        ForEach(NormalCommand.MoveRate.allCases, id: \.self) { rate in
-                            Text(rate.siderealMultiple.map { "\(Int($0))×" } ?? "Max").tag(rate)
+
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledContent("Speed") {
+                    if wifi {
+                        Picker("Speed", selection: $mount.moveRate) {
+                            ForEach(NormalCommand.MoveRate.allCases, id: \.self) { rate in
+                                Text(rate.siderealMultiple.map { "\(Int($0))×" } ?? "Max").tag(rate)
+                            }
                         }
+                        .labelsHidden().fixedSize()
+                    } else {
+                        Picker("Speed", selection: $mount.jogSpeed) {
+                            ForEach([0.01, 0.05, 0.2, 1, 3, 6], id: \.self) { Text("\($0, format: .number)°/s").tag($0) }
+                        }
+                        .labelsHidden().fixedSize()
                     }
-                    .labelsHidden()
-                } else {
-                    Picker("Speed", selection: $mount.jogSpeed) {
-                        ForEach([0.01, 0.05, 0.2, 1, 3, 6], id: \.self) { Text("\($0, format: .number)°/s").tag($0) }
+                }
+                LabeledContent("Fine") {
+                    Picker("Fine step", selection: $fineStep) {
+                        Text("1′").tag(1.0)
+                        Text("5′").tag(5.0)
                     }
-                    .labelsHidden()
+                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                }
+                LabeledContent("Time") {
+                    HStack(spacing: 2) {
+                        Button("−") { mount.timeOffset -= 0.1 }.help("Aim 0.1 s earlier along the track")
+                        Text(String(format: "%+.1f s", mount.timeOffset)).font(.caption.monospacedDigit()).frame(minWidth: 46)
+                        Button("+") { mount.timeOffset += 0.1 }.help("Aim 0.1 s later along the track")
+                    }
+                    .controlSize(.small)
+                }
+                HStack(spacing: 4) {
+                    Text(String(format: "Az %+.0f′ · Alt %+.0f′", mount.azimuthOffset * 60, mount.altitudeOffset * 60))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Button {
+                        mount.timeOffset = 0
+                        mount.azimuthOffset = 0
+                        mount.altitudeOffset = 0
+                    } label: { Image(systemName: "arrow.counterclockwise") }
+                    .buttonStyle(.borderless)
+                    .help("Reset the time and position offsets")
+                    .accessibilityLabel("Reset offsets")
+                    .disabled(mount.timeOffset == 0 && mount.azimuthOffset == 0 && mount.altitudeOffset == 0)
                 }
             }
+            .font(.callout)
+        }
+    }
+
+    private var gap: some View { Color.clear.frame(width: 1, height: 1) }
+}
+
+/// Small outer arrow: one tap, one fine step.
+struct FineButton: View {
+    @Environment(AppModel.self) private var model
+    let direction: JogDirection
+    let step: Double
+
+    var body: some View {
+        Button {
+            Task { await model.mount.nudge(direction, arcminutes: step) }
+        } label: {
+            Image(systemName: symbol).font(.caption.bold()).frame(width: 30, height: 22)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help("Fine: \(Int(step))′ \(name). Shifts the tracking offsets while Step or Smooth tracking; otherwise a short slow move.")
+        .accessibilityLabel("Fine \(name), \(Int(step)) arc-minutes")
+    }
+
+    private var symbol: String {
+        switch direction {
+        case .up: "chevron.up"
+        case .down: "chevron.down"
+        case .left: "chevron.left"
+        case .right: "chevron.right"
+        }
+    }
+
+    private var name: String {
+        switch direction {
+        case .up: "up"
+        case .down: "down"
+        case .left: "left"
+        case .right: "right"
         }
     }
 }
 
+/// Large inner arrow: press and hold to move at the chosen speed; release to stop.
 struct JogButton: View {
     @Environment(AppModel.self) private var model
     let direction: JogDirection
@@ -330,12 +367,12 @@ struct JogButton: View {
     @State private var pressed = false
 
     var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: symbol).font(.title2)
-            Text(label).font(.caption2)
+        VStack(spacing: 0) {
+            Image(systemName: symbol).font(.body.bold())
+            Text(label).font(.system(size: 9))
         }
-        .frame(width: 56, height: 56)
-        .background(pressed ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+        .frame(width: 44, height: 40)
+        .background(pressed ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { _ in
                 guard !pressed else { return }
@@ -347,6 +384,7 @@ struct JogButton: View {
                 Task { await model.mount.jog(direction, pressed: false) }
             })
         .accessibilityLabel("Move \(label)")
+        .accessibilityHint("Hold to move, release to stop")
         .accessibilityAddTraits(.isButton)
     }
 }

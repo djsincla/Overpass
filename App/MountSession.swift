@@ -81,6 +81,7 @@ final class MountSession {
         let s = settings
         state = .connecting
         status = ""
+        maximumSpeedSet = false
         do {
             switch s.connection {
             case .wifi:
@@ -238,6 +239,53 @@ final class MountSession {
         }
     }
 
+    /// Fine tune. While Step or Smooth tracking, shifts the tracking offsets; otherwise makes a
+    /// short, slow move of about `arcminutes` (the mount's own tracking carries on in Passive).
+    func nudge(_ direction: JogDirection, arcminutes: Double) async {
+        let degrees = arcminutes / 60
+        if trackingMode == .step || trackingMode == .smooth {
+            switch direction {
+            case .up: altitudeOffset += degrees
+            case .down: altitudeOffset -= degrees
+            case .right: azimuthOffset += degrees
+            case .left: azimuthOffset -= degrees
+            }
+            return
+        }
+        guard trackingTask == nil || trackingMode == .passive else { return }
+        do {
+            if let normal {
+                // 16× sidereal ≈ 0.067°/s: slow enough to time a 1′ move to about a tenth of a second.
+                let rate = NormalCommand.MoveRate.x16
+                let d: NormalCommand.Direction = switch direction {
+                case .up: .north
+                case .down: .south
+                case .left: .west
+                case .right: .east
+                }
+                try await normal.setMoveRate(rate)
+                try await normal.startMove(d)
+                try await Task.sleep(for: .seconds(degrees / rate.degreesPerSecond!))
+                try await normal.stopMove(d)
+            } else if let special {
+                let speed = 0.05
+                let model = settings.alignment ?? AlignmentModel()
+                let rates: (Double, Double) = switch direction {
+                case .up: (0, speed)
+                case .down: (0, -speed)
+                case .right: (model.azimuthSense * speed, 0)
+                case .left: (-model.azimuthSense * speed, 0)
+                }
+                if let axes, wouldHitCableStop(axes, primaryRate: rates.0) { return }
+                try await special.setSpeeds(primary: rates.0, secondary: rates.1)
+                try await Task.sleep(for: .seconds(degrees / speed))
+                try await special.stop()
+            }
+        } catch {
+            status = describe(error)
+        }
+    }
+
     private func wouldHitCableStop(_ axes: AxisPosition, primaryRate: Double) -> Bool {
         let s = settings
         let model = s.alignment ?? AlignmentModel()
@@ -316,9 +364,10 @@ final class MountSession {
             do {
                 if let normal {
                     try await routeCheck(to: point.position)
-                    try await normal.slew(altitude: point.position.altitude, azimuth: point.position.azimuth)
+                    status = "Slewing to start point at full speed…"
+                    try await slewAndWait(normal, to: point.position)
                     // MSS leaves tracking off, so the mount holds there.
-                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))°"
+                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSinceNow))"
                 } else if let special {
                     try await driveToPlanStart(pass, special)
                 }
@@ -407,7 +456,8 @@ final class MountSession {
                 // Before the pass: wait where it first reaches the start elevation, once.
                 if let pass, let point = pass.startPoint(above: startAltitude), tick < point.date, !waitingAtRise {
                     try await routeCheck(to: point.position)
-                    try await normal.slew(altitude: point.position.altitude, azimuth: point.position.azimuth)
+                    status = "Slewing to start point at full speed…"
+                    try await slewAndWait(normal, to: point.position)
                     waitingAtRise = true
                 }
                 status = pass.flatMap { $0.startPoint(above: startAltitude) }
@@ -426,6 +476,26 @@ final class MountSession {
             let wait = interval - Date.now.timeIntervalSince(tick)
             if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
         }
+    }
+
+    /// Set once per connection: gotos at the mount's maximum speed.
+    private var maximumSpeedSet = false
+
+    /// A normal-mode goto at full speed. While the mount slews, only its status is checked (once a
+    /// second): position queries mid-slew made the motion stutter, so the readout updates on arrival.
+    private func slewAndWait(_ normal: NormalModeClient, to target: Horizontal) async throws {
+        if !maximumSpeedSet {
+            try await normal.setMaximumSlewSpeed(9)
+            maximumSpeedSet = true
+        }
+        try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
+        let deadline = Date.now + 180
+        while try await normal.isSlewing() {
+            guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let p = try await normal.altAz()
+        skyPosition = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
     }
 
     /// Normal mode slews take the mount's own route; refuse any that would swing through the cable stop.

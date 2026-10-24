@@ -40,7 +40,7 @@ struct AlignmentSheet: View {
                     }
                 }
                 Section {
-                    JogPad()
+                    ControlPad()
                     Button("Record — it's centred") {
                         if let id = chosen, let object = model.object(id) { Task { await mount.addAlignmentPoint(object) } }
                     }
