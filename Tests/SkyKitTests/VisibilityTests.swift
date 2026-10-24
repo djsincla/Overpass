@@ -75,3 +75,14 @@ import Testing
     #expect(above.first?.date == start.date && above.allSatisfy { $0.position.altitude >= 10 })
     #expect(pass.startPoint(above: 89.9) == nil || pass.maxAltitude >= 89.9)
 }
+
+@Test func passAlreadyUpFindsItsRealRise() throws {
+    let sat = TLEParser.parse(issTLE)[0]
+    let predictor = PassPredictor(observer: Observer(latitude: 40, longitude: -75))
+    let full = try #require(try predictor.passes(of: sat, from: sat.epoch, to: sat.epoch + 86_400).first { !$0.truncated })
+    // Start searching at the peak, as if the app opened mid-pass.
+    let mid = try #require(try predictor.passes(of: sat, from: full.culmination.date, to: full.culmination.date + 3600).first)
+    #expect(!mid.truncated)
+    #expect(abs(mid.start.date.timeIntervalSince(full.start.date)) < 1)
+    #expect(abs(mid.start.position.altitude) < 0.05)
+}

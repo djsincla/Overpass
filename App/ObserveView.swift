@@ -190,8 +190,17 @@ struct SelectedObjectsList: View {
             ContentUnavailableView("Nothing selected", systemImage: "checklist",
                                    description: Text("Choose the Moon, planets, stars or satellites in the Objects tab."))
         } else {
+            @Bindable var model = model
+            VStack(spacing: 0) {
+            Picker("Sort", selection: $model.filter.objectSort) {
+                ForEach(FilterSettings.ObjectSort.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                List(model.selectedObjects.filter { passesFilters($0, context.date) }) { object in
+                List(sorted(model.selectedObjects.filter { passesFilters($0, context.date) }, context.date)) { object in
                     Button { model.highlight(objectID: object.id) } label: {
                         ObjectPositionRow(object: object, date: context.date)
                     }
@@ -204,6 +213,21 @@ struct SelectedObjectsList: View {
                 }
                 .listStyle(.plain)
             }
+            }
+        }
+    }
+
+    private func sorted(_ objects: [SkyObject], _ date: Date) -> [SkyObject] {
+        switch model.filter.objectSort {
+        case .name:
+            return objects.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        case .riseTime:
+            let keyed = objects.map { ($0, model.riseTime($0, at: date)) }
+            return keyed.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.name < $1.0.name }.map(\.0)
+        case .brightness:
+            // Unknown brightness (most satellites) goes last.
+            let keyed = objects.map { ($0, model.magnitude($0, at: date) ?? .infinity) }
+            return keyed.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.name < $1.0.name }.map(\.0)
         }
     }
 
@@ -231,7 +255,10 @@ struct ObjectPositionRow: View {
     var body: some View {
         HStack {
             Image(systemName: symbol).frame(width: 22).foregroundStyle(.secondary)
-            Text(object.name)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(object.name)
+                Brightness(object: object, date: date)
+            }
             Spacer()
             ObjectStatus(object: object, date: date)
         }
@@ -305,5 +332,26 @@ struct ElevationNow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(Int(altitude.rounded())) degrees, \(trend == .rising ? "rising" : "setting")"
                             + (max.map { ", maximum \(Int($0.rounded())) degrees" } ?? ""))
+    }
+}
+
+/// Apparent magnitude: smaller is brighter. Satellites need a standard magnitude, which TLEs
+/// don't include, so for them this only says whether they're lit.
+struct Brightness: View {
+    @Environment(AppModel.self) private var model
+    let object: SkyObject
+    let date: Date
+
+    var body: some View {
+        Group {
+            if let m = model.magnitude(object, at: date) {
+                Text("mag \(m, format: .number.precision(.fractionLength(1)))")
+                    .accessibilityLabel("Magnitude \(m.formatted(.number.precision(.fractionLength(1))))")
+            } else if case .satellite(let s) = object {
+                Text((try? s.isSunlit(at: AstroTime(date))) == true ? "sunlit · mag unknown" : "eclipsed")
+            }
+        }
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
     }
 }

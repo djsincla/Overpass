@@ -93,6 +93,13 @@ struct FilterSettings: Codable, Equatable {
     var maximumSecondsOffTarget: Double = 0
     var minimumSunSeparation: Double = 0
     var sort = Sort.startTime
+    /// How the Observe screen's object list is ordered.
+    var objectSort = ObjectSort.riseTime
+
+    enum ObjectSort: String, Codable, CaseIterable, Identifiable {
+        case name = "Name", riseTime = "Rise time", brightness = "Brightness"
+        var id: Self { self }
+    }
 
     enum Sort: String, Codable, CaseIterable, Identifiable {
         case startTime = "Start time", maxAltitude = "Highest", duration = "Longest"
@@ -269,6 +276,22 @@ final class AppModel {
     /// The pass a satellite is on now, or its next one.
     func currentOrNextPass(_ noradID: String, at date: Date) -> SatellitePass? {
         passes.filter { $0.noradID == noradID && $0.end.date > date }.min { $0.start.date < $1.start.date }
+    }
+
+    /// When an object rises (or rose, if it's up now), for sorting: up now first, then soonest.
+    func riseTime(_ object: SkyObject, at date: Date) -> Date {
+        switch object {
+        case .satellite(let s):
+            return currentOrNextPass(s.noradID, at: date)?.start.date ?? .distantFuture
+        default:
+            guard let v = try? settings.observer.visibility(of: object.target, at: date) else { return .distantFuture }
+            if v.isUp { return v.rise ?? .distantPast }
+            return v.rise ?? .distantFuture
+        }
+    }
+
+    func magnitude(_ object: SkyObject, at date: Date) -> Double? {
+        object.apparentMagnitude(observer: settings.observer, at: AstroTime(date))
     }
 
     /// Selected objects currently above the horizon.

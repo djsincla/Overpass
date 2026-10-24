@@ -153,8 +153,9 @@ struct SkyDome: View {
             }
         }
 
-        // One tick a minute.
-        for sample in track.dropFirst() where Int(sample.date.timeIntervalSince(track[0].date)) % 60 == 0 {
+        // Ticks every minute on short passes, spaced out on long ones (high orbits take hours).
+        let tick = pass.duration < 1200 ? 60 : pass.duration < 7200 ? 300 : 900
+        for sample in track.dropFirst() where Int(sample.date.timeIntervalSince(track[0].date)) % tick == 0 {
             let p = g.point(sample.position)
             context.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(.white))
         }

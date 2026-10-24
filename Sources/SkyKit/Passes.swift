@@ -71,6 +71,9 @@ public struct PassPredictor: Sendable {
     public var darkSkySunAltitude: Double = -6
     public var sampleInterval: TimeInterval = 1
     public var deltaT: TimeInterval = AstroTime.defaultDeltaT
+    /// How far back to look for the rise of a pass that's already up when the search starts.
+    /// Geostationary objects never set, so this bounds the search.
+    public var maximumLookBack: TimeInterval = 12 * 3600
 
     public init(observer: Observer) {
         self.observer = observer
@@ -94,6 +97,21 @@ public struct PassPredictor: Sendable {
         var previous = try margin(target, t)
         var rise: Date? = previous > 0 ? from : nil
         var truncated = previous > 0
+        // Already up: look back for the real rise, so long passes (high orbits last hours)
+        // aren't cut off where the search window happens to start.
+        if previous > 0 {
+            var back = from
+            while back > from - maximumLookBack {
+                let earlier = back - step
+                if try margin(target, earlier) <= 0 {
+                    rise = try crossing(target, earlier, back)
+                    truncated = false
+                    break
+                }
+                back = earlier
+            }
+            if truncated { rise = back }
+        }
 
         while t < to {
             let next = min(t + step, to)

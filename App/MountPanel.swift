@@ -15,11 +15,16 @@ struct MountPanel: View {
         VStack(alignment: .leading, spacing: 16) {
             connection
 
+            // Scope controls sit right under the connection and are always shown. Moving needs a
+            // mount; the fine-tune offsets can be set beforehand (they apply once tracking runs).
+            if mount.state == .connected { position }
+            JogPad()
+                .disabled(mount.state != .connected)
+                .opacity(mount.state == .connected ? 1 : 0.5)
+            fineTuning
+
             if mount.state == .connected {
-                position
-                JogPad()
                 trackingSection
-                if mount.kind != .wifi || mode != .passive { fineTuning }
                 alignmentSection
                 if mount.kind == .usb { GuidingPanel() }
             }
@@ -155,8 +160,17 @@ struct MountPanel: View {
             OffsetRow(title: "Time", value: $mount.timeOffset, steps: [0.1, 1], unit: "s", format: "%+.1f")
             OffsetRow(title: "Azimuth", value: arcmin($mount.azimuthOffset), steps: [1, 5], unit: "′", format: "%+.0f")
             OffsetRow(title: "Altitude", value: arcmin($mount.altitudeOffset), steps: [1, 5], unit: "′", format: "%+.0f")
-            Text("Time moves the aim along the track, which corrects most TLE error. Offsets apply live while tracking.")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text(fineTuneNote).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset") {
+                    mount.timeOffset = 0
+                    mount.azimuthOffset = 0
+                    mount.altitudeOffset = 0
+                }
+                .controlSize(.small)
+                .disabled(mount.timeOffset == 0 && mount.azimuthOffset == 0 && mount.altitudeOffset == 0)
+            }
         }
     }
 
@@ -180,6 +194,13 @@ struct MountPanel: View {
     }
 
     // MARK: Helpers
+
+    private var fineTuneNote: String {
+        if model.mount.kind == .wifi && mode == .passive {
+            return "Passive tracking is done by the mount, so these don't apply; use the arrows instead."
+        }
+        return "Time moves the aim along the track, which fixes most TLE error. Offsets apply live while tracking."
+    }
 
     private var alignmentSummary: String {
         guard model.settings.alignment != nil else { return "Not aligned. Smooth tracking needs two or more stars." }
