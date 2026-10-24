@@ -10,6 +10,9 @@ struct PassRow: View {
                 Text(pass.name).font(.headline)
                 Text("\(pass.start.date, format: .dateTime.weekday().hour().minute()) · \(Duration.seconds(pass.duration).formatted(.time(pattern: .minuteSecond)))")
                     .font(.subheadline).foregroundStyle(.secondary)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    RiseCountdown(start: pass.start.date, end: pass.end.date, now: context.date)
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -32,6 +35,37 @@ struct PassRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// "Rises in 12 min", "Up now · sets in 3 min", ticking each second in the last minutes.
+struct RiseCountdown: View {
+    let start: Date
+    let end: Date
+    let now: Date
+
+    var body: some View {
+        Group {
+            if now < start {
+                Text("Rises in \(countdown(start.timeIntervalSince(now)))")
+                    .foregroundStyle(start.timeIntervalSince(now) < 300 ? .orange : .secondary)
+            } else if now < end {
+                Text("Up now · sets in \(countdown(end.timeIntervalSince(now)))").foregroundStyle(.green)
+            }
+        }
+        .font(.caption.monospacedDigit())
+    }
+}
+
+/// Seconds while it's under a minute, minutes and seconds under ten, then coarser.
+func countdown(_ seconds: TimeInterval) -> String {
+    let s = Int(seconds.rounded(.up))
+    switch s {
+    case ..<60: return "\(s) s"
+    case ..<600: return "\(s / 60) min \(String(format: "%02d", s % 60)) s"
+    case ..<3600: return "\(s / 60) min"
+    case ..<86_400: return "\(s / 3600) h \(String(format: "%02d", (s % 3600) / 60)) min"
+    default: return "\(s / 86_400) d \((s % 86_400) / 3600) h"
     }
 }
 

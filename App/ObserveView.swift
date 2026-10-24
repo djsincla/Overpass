@@ -190,7 +190,7 @@ struct SelectedObjectsList: View {
             ContentUnavailableView("Nothing selected", systemImage: "checklist",
                                    description: Text("Choose the Moon, planets, stars or satellites in the Objects tab."))
         } else {
-            TimelineView(.periodic(from: .now, by: 5)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 List(model.selectedObjects.filter { passesFilters($0, context.date) }) { object in
                     Button { model.highlight(objectID: object.id) } label: {
                         ObjectPositionRow(object: object, date: context.date)
@@ -267,7 +267,7 @@ struct ObjectStatus: View {
                             ElevationNow(altitude: now.altitude, trend: now.trend, max: pass.maxAltitude)
                         }
                     } else {
-                        Text("rises \(pass.start.date.formatted(date: .omitted, time: .shortened)) · max \(Int(pass.maxAltitude.rounded()))°")
+                        Text("rises in \(countdown(pass.start.date.timeIntervalSince(date))) · max \(Int(pass.maxAltitude.rounded()))°")
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -278,7 +278,7 @@ struct ObjectStatus: View {
                     if v.isUp {
                         ElevationNow(altitude: v.altitude, trend: v.trend, max: v.maxAltitude)
                     } else if let rise = v.rise {
-                        Text("rises \(rise.formatted(date: .omitted, time: .shortened))" + (v.maxAltitude.map { " · max \(Int($0.rounded()))°" } ?? ""))
+                        Text("rises in \(countdown(rise.timeIntervalSince(date)))" + (v.maxAltitude.map { " · max \(Int($0.rounded()))°" } ?? ""))
                             .foregroundStyle(.secondary)
                     } else {
                         Text("doesn't rise").foregroundStyle(.secondary)
