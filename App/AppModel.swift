@@ -47,6 +47,9 @@ struct Settings: Codable, Equatable {
     /// iPhone/iPad: switch the home-screen icon to the red one as well.
     var redAppIcon = false
 
+    /// Tracking starts (and "Move to start" waits) where a pass first reaches this elevation.
+    var trackingStartAltitude: Double = 10
+
     var stepInterval: Double = 2
     /// From star alignment; Smooth tracking needs it.
     var alignment: AlignmentModel?

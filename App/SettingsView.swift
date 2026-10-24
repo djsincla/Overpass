@@ -64,6 +64,7 @@ struct SettingsView: View {
                     if model.settings.maximumAltitudeAxis > 90 {
                         LabeledSlider("Altitude axis up to", value: $model.settings.maximumAltitudeAxis, in: 95...180, step: 5, unit: "°")
                     }
+                    LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
                     LabeledSlider("Azimuth speed", value: $model.settings.maximumAzimuthRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("Altitude speed", value: $model.settings.maximumAltitudeRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("On target within", value: Binding(get: { model.settings.pointingTolerance * 60 },

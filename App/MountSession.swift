@@ -58,6 +58,9 @@ final class MountSession {
     private var unwrapper: AxisUnwrapper?
     private var pollTask: Task<Void, Never>?
     private var trackingTask: Task<Void, Never>?
+    private var prepareTask: Task<Void, Never>?
+    /// True while moving to a pass's start point.
+    var isPreparing: Bool { prepareTask != nil }
 
     private var settings: Settings { app?.settings ?? Settings() }
 
@@ -145,7 +148,7 @@ final class MountSession {
         pollTask = Task {
             var failures = 0
             while !Task.isCancelled {
-                if trackingTask == nil {
+                if trackingTask == nil && prepareTask == nil {
                     do {
                         _ = try await readPosition()
                         failures = 0
@@ -251,6 +254,8 @@ final class MountSession {
     }
 
     private func cancelTracking() async {
+        prepareTask?.cancel()
+        prepareTask = nil
         trackingTask?.cancel()
         trackingTask = nil
         trackingName = nil
@@ -282,6 +287,70 @@ final class MountSession {
                 trackingName = nil
                 trackingMode = nil
             }
+        }
+    }
+
+    /// The elevation tracking starts from: the higher of the prediction horizon and the start setting.
+    private var startAltitude: Double { max(settings.minimumAltitude, settings.trackingStartAltitude) }
+
+    /// Where `pass` first reaches the start elevation, if it hasn't already gone past it.
+    func startPoint(of pass: SatellitePass) -> PassSample? {
+        guard let point = pass.startPoint(above: startAltitude), point.date > .now else { return nil }
+        return point
+    }
+
+    /// Moves the mount to where the pass will first reach the start elevation, and holds there.
+    func moveToStart(of pass: SatellitePass) async {
+        await stopAll()
+        guard let point = startPoint(of: pass) else {
+            status = "That pass is already past its start point."
+            return
+        }
+        status = "Moving to start point"
+        prepareTask = Task {
+            do {
+                if let normal {
+                    try await routeCheck(to: point.position)
+                    try await normal.slew(altitude: point.position.altitude, azimuth: point.position.azimuth)
+                    // MSS leaves tracking off, so the mount holds there.
+                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))°"
+                } else if let special {
+                    try await driveToPlanStart(pass, special)
+                }
+            } catch is CancellationError {
+            } catch {
+                status = describe(error)
+                try? await normal?.stop()
+                try? await special?.stop()
+            }
+            if !Task.isCancelled { prepareTask = nil }
+        }
+    }
+
+    /// Special mode: the start of the planned pass, so the mount is already on the right side and
+    /// azimuth turn (which matters when the plan flips over the top).
+    private func driveToPlanStart(_ pass: SatellitePass, _ special: MountClient) async throws {
+        guard let model = settings.alignment else { throw MountSessionError.notAligned }
+        let s = settings
+        guard let plan = MountPlanner(limits: s.limits, model: model).plan(pass.track(above: startAltitude)) else {
+            throw MountSessionError.untrackablePass
+        }
+        var controller = RateController(limits: s.limits)
+        controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
+        let deadline = Date.now + 300
+        while !Task.isCancelled {
+            guard let current = try await readPosition() else { return }
+            let goal = plan.start
+            if abs(goal.primary - current.primary) < 0.02 && abs(goal.secondary - current.secondary) < 0.02 {
+                try await special.stop()
+                status = "Ready at the start point · rises in \(countdown(plan.samples[0].date.timeIntervalSinceNow))"
+                return
+            }
+            guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+            let command = controller.rates(desired: goal, primaryRate: 0, secondaryRate: 0, current: current)
+            if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
+            try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
+            try await Task.sleep(for: .milliseconds(100))
         }
     }
 
@@ -329,15 +398,16 @@ final class MountSession {
             aim.azimuth = normalizedDegrees(aim.azimuth + azimuthOffset)
             aim.altitude += altitudeOffset
 
-            if aim.altitude < s.minimumAltitude {
-                // Before the pass: wait where it will rise, once.
-                if let pass, tick < pass.start.date, !waitingAtRise {
-                    try await routeCheck(to: pass.start.position)
-                    try await normal.slew(altitude: max(pass.start.position.altitude, s.minimumAltitude),
-                                          azimuth: pass.start.position.azimuth)
+            if aim.altitude < startAltitude {
+                // Before the pass: wait where it first reaches the start elevation, once.
+                if let pass, let point = pass.startPoint(above: startAltitude), tick < point.date, !waitingAtRise {
+                    try await routeCheck(to: point.position)
+                    try await normal.slew(altitude: point.position.altitude, azimuth: point.position.azimuth)
                     waitingAtRise = true
                 }
-                status = pass.map { "Waiting at rise point · rises in \(Int($0.start.date.timeIntervalSinceNow)) s" } ?? "Below the horizon"
+                status = pass.flatMap { $0.startPoint(above: startAltitude) }
+                    .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSinceNow))" }
+                    ?? "Below \(Int(startAltitude))°"
             } else {
                 try await routeCheck(to: aim)
                 do {
@@ -371,7 +441,7 @@ final class MountSession {
         var controller = RateController(limits: s.limits)
         let plan: MountPlan?
         if let pass {
-            guard let p = MountPlanner(limits: s.limits, model: model).plan(pass.track) else {
+            guard let p = MountPlanner(limits: s.limits, model: model).plan(pass.track(above: startAltitude)) else {
                 throw MountSessionError.untrackablePass
             }
             plan = p
@@ -403,7 +473,7 @@ final class MountSession {
                     desired = plan.start
                     rates = (0, 0)
                     controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
-                    status = "Moving to rise point · rises in \(Int(plan.samples[0].date.timeIntervalSinceNow)) s"
+                    status = "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSinceNow))"
                 }
             } else {
                 // Not a pass: follow the object directly, staying on the current azimuth turn.
@@ -500,7 +570,7 @@ final class MountSession {
 
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
-    case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon
+    case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
 
     var message: String {
         switch self {
@@ -514,6 +584,7 @@ enum MountSessionError: Error {
         case .routeCrossesCableStop: "Stopped: that move would swing through the cable stop."
         case .pastCableStop: "Stopped at the cable stop."
         case .belowHorizon: "It's below your horizon."
+        case .couldNotReachStart: "Stopped: the mount didn't reach the start point within 5 minutes."
         }
     }
 }

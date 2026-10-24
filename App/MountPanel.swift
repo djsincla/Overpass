@@ -115,6 +115,20 @@ struct MountPanel: View {
             if mount.isTracking {
                 Text("Stop tracking to change the target.").font(.caption).foregroundStyle(.secondary)
             }
+            if let pass = model.targetPass, !mount.isTracking {
+                if let point = mount.startPoint(of: pass) {
+                    Button {
+                        Task { await mount.moveToStart(of: pass) }
+                    } label: {
+                        Label("Move to start · az \(Int(point.position.azimuth))° \(compass(point.position.azimuth)), alt \(Int(point.position.altitude))°",
+                              systemImage: "arrow.uturn.forward")
+                    }
+                    .disabled(mount.isPreparing || (mount.kind == .usb && model.settings.alignment == nil))
+                    .help("Point where the pass first reaches the start elevation, and wait there")
+                } else {
+                    Text("This pass is already past its start point.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
             HStack {
                 Spacer()
                 if mount.isTracking {

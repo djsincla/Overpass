@@ -59,3 +59,19 @@ import Testing
     #expect(passes.contains { $0.isEclipsed })
     #expect(kept.count < passes.count && !kept.isEmpty)
 }
+
+@Test func startPointAtMinimumElevation() throws {
+    let sat = TLEParser.parse(issTLE)[0]
+    let passes = try PassPredictor(observer: Observer(latitude: 40, longitude: -75))
+        .passes(of: sat, from: sat.epoch, to: sat.epoch + 2 * 86_400)
+    let pass = try #require(passes.first { $0.maxAltitude > 30 && !$0.truncated })
+    let start = try #require(pass.startPoint(above: 10))
+    // Sampled each second, so the first sample above 10° is within a second's climb of it.
+    #expect(start.position.altitude >= 10 && start.position.altitude < 10.5)
+    #expect(start.date > pass.start.date && start.date < pass.culmination.date)
+    // Its azimuth differs from the horizon rise point: the reason to aim there.
+    #expect(abs(wrap180(start.position.azimuth - pass.start.position.azimuth)) > 1)
+    let above = pass.track(above: 10)
+    #expect(above.first?.date == start.date && above.allSatisfy { $0.position.altitude >= 10 })
+    #expect(pass.startPoint(above: 89.9) == nil || pass.maxAltitude >= 89.9)
+}

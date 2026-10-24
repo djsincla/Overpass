@@ -107,3 +107,16 @@ extension SatellitePass {
         return (sample.position.altitude, sample.position.azimuth, date < culmination.date ? .rising : .setting)
     }
 }
+
+extension SatellitePass {
+    /// The part of the pass at or above `altitude`: what the mount actually tracks when low
+    /// trees or the mount's own limits rule out the horizon.
+    public func track(above altitude: Double) -> [PassSample] {
+        track.filter { $0.position.altitude >= altitude }
+    }
+
+    /// Where the satellite first reaches `altitude`: where to wait for it.
+    public func startPoint(above altitude: Double) -> PassSample? {
+        track.first { $0.position.altitude >= altitude }
+    }
+}
