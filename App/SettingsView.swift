@@ -11,13 +11,14 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    Toggle("Always dark", isOn: $model.settings.alwaysDark)
                     Toggle("Red mode", isOn: $model.settings.redMode)
                     #if os(iOS)
                     Toggle("Red app icon", isOn: $model.settings.redAppIcon)
                         .onChange(of: model.settings.redAppIcon) { _, red in AppIcon.setRed(red) }
                     #endif
                 } header: {
-                    Text("Night vision")
+                    Text("Appearance")
                 } footer: {
                     Text("Red mode draws everything in red on black so your eyes stay dark-adapted. Also turn your screen brightness down.")
                 }

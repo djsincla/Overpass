@@ -10,7 +10,6 @@ struct GuidingPanel: View {
         @Bindable var guider = model.guider
         let camera = guider.camera
         VStack(alignment: .leading, spacing: 8) {
-            Text("Camera guiding").font(.headline)
             HStack {
                 Picker("Camera", selection: $model.settings.cameraDeviceID) {
                     Text("Choose…").tag(String?.none)

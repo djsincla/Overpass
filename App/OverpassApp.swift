@@ -24,6 +24,8 @@ struct ContentView: View {
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
+        .tint(Theme.accent)
+        .preferredColorScheme(model.settings.alwaysDark ? .dark : nil)
         .modifier(NightVision(enabled: model.settings.redMode))
         .task { await model.start() }
     }

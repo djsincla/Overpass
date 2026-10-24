@@ -44,6 +44,8 @@ struct Settings: Codable, Equatable {
 
     /// Night vision: the whole app in red on black, to keep dark adaptation at the eyepiece.
     var redMode = false
+    /// Dark appearance regardless of the system setting: a bright screen ruins night vision.
+    var alwaysDark = true
     /// iPhone/iPad: switch the home-screen icon to the red one as well.
     var redAppIcon = false
 
@@ -141,6 +143,18 @@ final class AppModel {
     /// SkyObject ids ("sat:25544", "body:moon", "star:Vega"). Predictions and highlights follow these.
     var selected: Set<String> { didSet { save(Array(selected), "selectedObjects"); if selected != oldValue { schedulePrediction() } } }
 
+    /// The time bar: how far the dome and the lists are moved from now (±2 days). Never
+    /// affects the mount, which always works in real time.
+    var timeShift: TimeInterval = 0 {
+        didSet { if timeShift != 0 && !predictedWide { schedulePrediction() } }
+    }
+    nonisolated static let maximumTimeShift: TimeInterval = 2 * 86_400
+    /// Whether the last prediction covered the whole time bar range.
+    private var predictedWide = false
+
+    /// The time the Observe screen shows.
+    func viewDate(_ now: Date = .now) -> Date { now + timeShift }
+
     /// The pass drawn on the dome (satellite and rise time); nil means the next one.
     private var highlightedPassKey: (noradID: String, start: Date)?
     /// The object ringed on the dome. Highlighting never moves the mount.
@@ -216,7 +230,7 @@ final class AppModel {
     }
 
     var highlightedObject: SkyObject? {
-        highlightedObjectID.flatMap(object) ?? highlightedPass(at: .now).flatMap { object("sat:\($0.noradID)") }
+        highlightedObjectID.flatMap(object) ?? highlightedPass(at: viewDate()).flatMap { object("sat:\($0.noradID)") }
     }
 
     /// The highlighted pass if it hasn't finished, otherwise the next one.
@@ -235,7 +249,7 @@ final class AppModel {
     /// Highlights an object, and for a satellite its next pass.
     func highlight(objectID: String) {
         highlightedObjectID = objectID
-        if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > .now }) {
+        if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > viewDate() }) {
             highlightedPassKey = (pass.noradID, pass.start.date)
         }
     }
@@ -252,7 +266,8 @@ final class AppModel {
         guard !mount.isTracking, let object = highlightedObject else { return }
         targetObjectID = object.id
         if case .satellite(let s) = object {
-            let highlighted = highlightedPass(at: .now)
+            // Only a pass that hasn't finished in real time can be tracked.
+            let highlighted = highlightedPass(at: viewDate()).flatMap { $0.end.date > .now ? $0 : nil }
             let pass = highlighted?.noradID == s.noradID ? highlighted
                 : passes.first { $0.noradID == s.noradID && $0.end.date > .now }
             targetPassKey = pass.map { ($0.noradID, $0.start.date) }
@@ -262,7 +277,7 @@ final class AppModel {
     }
 
     func setTarget(pass: SatellitePass) {
-        guard !mount.isTracking else { return }
+        guard !mount.isTracking, pass.end.date > .now else { return }
         targetObjectID = "sat:\(pass.noradID)"
         targetPassKey = (pass.noradID, pass.start.date)
     }
@@ -430,11 +445,16 @@ final class AppModel {
         }
 
         let now = Date.now
-        // Include passes already in progress.
-        let result = await predictor.passes(of: targets, from: now - 15 * 60, to: now + filter.hoursAhead * 3600,
+        // Include passes already in progress. Once the time bar moves, cover its whole range so
+        // dragging it never waits on a prediction.
+        let wide = timeShift != 0
+        let reach = wide ? Self.maximumTimeShift : 0
+        let result = await predictor.passes(of: targets, from: now - reach - 15 * 60,
+                                            to: now + reach + filter.hoursAhead * 3600,
                                             filter: f, sort: filter.sort.passSort)
         guard !Task.isCancelled else { return }
-        passes = result.filter { $0.end.date > now }
+        passes = wide ? result : result.filter { $0.end.date > now }
+        predictedWide = wide
     }
 
     func plan(for pass: SatellitePass) -> MountPlan? {

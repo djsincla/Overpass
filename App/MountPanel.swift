@@ -13,17 +13,27 @@ struct MountPanel: View {
         let mount = model.mount
         VStack(alignment: .leading, spacing: 10) {
             header
-            ControlPad()
-                .disabled(mount.state != .connected)
-                .opacity(mount.state == .connected ? 1 : 0.5)
+            Card(title: "Move", systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
+                ControlPad()
+                    .disabled(mount.state != .connected)
+                    .opacity(mount.state == .connected ? 1 : 0.45)
+            }
             if mount.state == .connected {
-                Divider()
-                tracking
-                alignment
-                if mount.kind == .usb { GuidingPanel() }
+                Card(title: "Tracking", systemImage: "scope") {
+                    tracking
+                    if showsAlignment {
+                        Divider().padding(.vertical, 2)
+                        alignment
+                    }
+                }
+                if mount.kind == .usb {
+                    Card(title: "Camera guiding", systemImage: "camera.viewfinder") { GuidingPanel() }
+                }
             }
             if !mount.status.isEmpty {
-                Text(mount.status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Label(mount.status, systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    .padding(.horizontal, 4)
             }
         }
         .sheet(isPresented: $showingAlignment) { AlignmentSheet() }
@@ -40,28 +50,37 @@ struct MountPanel: View {
 
     private var header: some View {
         let mount = model.mount
-        return HStack(spacing: 10) {
-            Circle().fill(stateColor).frame(width: 9, height: 9).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(stateText).font(.callout).lineLimit(1)
-                if let h = mount.skyPosition {
-                    Text("Az \(h.azimuth, format: .number.precision(.fractionLength(2)))°  Alt \(h.altitude, format: .number.precision(.fractionLength(2)))°")
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        let connected = mount.state == .connected
+        return Card {
+            HStack(spacing: 8) {
+                StatusDot(color: stateColor)
+                Text(stateText).font(.callout.weight(.medium)).lineLimit(1)
+                Spacer(minLength: 4)
+                if connected {
+                    Button { Task { await mount.disconnect() } } label: { Image(systemName: "power") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help("Disconnect")
+                        .accessibilityLabel("Disconnect")
+                } else {
+                    Button("Connect") { Task { await mount.connect() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(mount.state == .connecting)
                 }
             }
-            Spacer(minLength: 4)
-            if mount.state == .connected {
-                Button(role: .destructive) { Task { await mount.stopAll() } } label: {
-                    Label("STOP", systemImage: "stop.fill").font(.callout.bold())
+            if connected {
+                HStack(alignment: .center, spacing: 18) {
+                    let h = mount.skyPosition
+                    Readout(label: "AZ", value: h.map { String(format: "%06.2f°", $0.azimuth) } ?? "———")
+                    Readout(label: "ALT", value: h.map { String(format: "%+06.2f°", $0.altitude) } ?? "———")
+                    Spacer(minLength: 4)
+                    Button { Task { await mount.stopAll() } } label: {
+                        Label("STOP", systemImage: "stop.fill")
+                    }
+                    .buttonStyle(StopButtonStyle())
+                    .keyboardShortcut(.space, modifiers: [])
+                    .help("Stop all motion and tracking (space)")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .keyboardShortcut(.space, modifiers: [])
-                Button("Disconnect") { Task { await mount.disconnect() } }.controlSize(.small)
-            } else {
-                Button("Connect") { Task { await mount.connect() } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(mount.state == .connecting)
             }
         }
     }
@@ -90,7 +109,8 @@ struct MountPanel: View {
         @Bindable var model = model
         let mount = model.mount
         let highlighted = model.highlightedObject
-        return VStack(alignment: .leading, spacing: 6) {
+        let target = model.targetObject
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if mount.availableModes.count > 1 {
                     Picker("Mode", selection: $mode) {
@@ -102,7 +122,7 @@ struct MountPanel: View {
                     .help(modeExplanation)
                     .disabled(mount.isTracking)
                 } else {
-                    Text("Smooth").font(.callout.bold()).help(modeExplanation)
+                    Chip(text: "Smooth", systemImage: "waveform.path", tint: Theme.accent).help(modeExplanation)
                 }
                 if mode == .step && mount.kind == .wifi {
                     Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
@@ -115,10 +135,19 @@ struct MountPanel: View {
             }
 
             // The target is locked separately from the highlight, so browsing never redirects the mount.
-            HStack(spacing: 6) {
-                Image(systemName: "scope").foregroundStyle(model.targetObject == nil ? Color.secondary : .green)
-                    .accessibilityHidden(true)
-                Text(targetText).font(.callout).lineLimit(1)
+            HStack(spacing: 8) {
+                if let target {
+                    ObjectBadge(object: target)
+                } else {
+                    Image(systemName: "scope").foregroundStyle(.secondary).frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.06), in: Circle()).accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(target?.name ?? "No target set").font(.callout.weight(.medium)).lineLimit(1)
+                    if let detail = targetDetail {
+                        Text(detail).font(.caption.monospacedDigit()).foregroundStyle(mount.isTracking ? Theme.target : .secondary).lineLimit(1)
+                    }
+                }
                 Spacer(minLength: 4)
                 Button(highlighted.map { "Set to \($0.name)" } ?? "Set target") { model.setTargetFromHighlight() }
                     .controlSize(.small)
@@ -144,25 +173,39 @@ struct MountPanel: View {
                 }
                 Spacer()
                 if mount.isTracking {
-                    Button("Stop tracking") { Task { await mount.stopAll() } }
-                } else {
-                    Button("Start tracking") {
-                        if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }
+                    Button { Task { await mount.stopAll() } } label: {
+                        Label("Stop tracking", systemImage: "stop.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(Theme.scope)
+                } else {
+                    Button {
+                        if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }
+                    } label: {
+                        Label("Start tracking", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.go)
                     .disabled(!canTrack(model.targetObject))
                 }
             }
         }
     }
 
-    private var targetText: String {
-        guard let target = model.targetObject else { return "No target set" }
-        if let mode = model.mount.trackingMode { return "\(mode.rawValue): \(target.name)" }
+    /// "Step · tracking" while running; otherwise when the pass starts and how high it gets.
+    private var targetDetail: String? {
+        guard model.targetObject != nil else { return nil }
+        if let mode = model.mount.trackingMode { return "\(mode.rawValue) tracking" }
         if let pass = model.targetPass {
-            return "\(target.name) · \(pass.start.date.formatted(date: .omitted, time: .shortened)), peaks \(Int(pass.maxAltitude))°"
+            return "\(pass.start.date.formatted(date: .omitted, time: .shortened)) · peaks \(Int(pass.maxAltitude))°"
         }
-        return target.name
+        return nil
+    }
+
+    private var showsAlignment: Bool {
+        if model.mount.kind == .usb { return true }
+        guard let target = model.targetObject else { return false }
+        return !target.isSatellite && !model.mount.isTracking
     }
 
     @ViewBuilder
@@ -170,7 +213,7 @@ struct MountPanel: View {
         let mount = model.mount
         if mount.kind == .usb {
             HStack {
-                Text("Alignment: \(alignmentSummary)").font(.caption).foregroundStyle(.secondary)
+                Label("Alignment: \(alignmentSummary)", systemImage: "star.circle").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Align…") { showingAlignment = true }.controlSize(.small)
             }
@@ -238,8 +281,8 @@ struct ControlPad: View {
     var body: some View {
         @Bindable var mount = model.mount
         let wifi = mount.kind == .wifi
-        HStack(alignment: .center, spacing: 14) {
-            Grid(horizontalSpacing: 3, verticalSpacing: 3) {
+        HStack(alignment: .center, spacing: 16) {
+            Grid(horizontalSpacing: 4, verticalSpacing: 4) {
                 GridRow {
                     gap; gap
                     FineButton(direction: .up, step: fineStep)
@@ -247,19 +290,24 @@ struct ControlPad: View {
                 }
                 GridRow {
                     gap; gap
-                    JogButton(direction: .up, symbol: "arrow.up", label: wifi ? "N" : "Up")
+                    JogButton(direction: .up, symbol: "arrowtriangle.up.fill", label: wifi ? "N" : "Up")
                     gap; gap
                 }
                 GridRow {
                     FineButton(direction: .left, step: fineStep)
-                    JogButton(direction: .left, symbol: "arrow.left", label: wifi ? "W" : "Az−")
-                    Image(systemName: "scope").font(.caption).foregroundStyle(.secondary).frame(width: 30, height: 30)
-                    JogButton(direction: .right, symbol: "arrow.right", label: wifi ? "E" : "Az+")
+                    JogButton(direction: .left, symbol: "arrowtriangle.left.fill", label: wifi ? "W" : "Az−")
+                    Image(systemName: "scope")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.scope)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.scope.opacity(0.12), in: Circle())
+                        .accessibilityHidden(true)
+                    JogButton(direction: .right, symbol: "arrowtriangle.right.fill", label: wifi ? "E" : "Az+")
                     FineButton(direction: .right, step: fineStep)
                 }
                 GridRow {
                     gap; gap
-                    JogButton(direction: .down, symbol: "arrow.down", label: wifi ? "S" : "Down")
+                    JogButton(direction: .down, symbol: "arrowtriangle.down.fill", label: wifi ? "S" : "Down")
                     gap; gap
                 }
                 GridRow {
@@ -269,8 +317,9 @@ struct ControlPad: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                LabeledContent("Speed") {
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
+                GridRow {
+                    rowLabel("Speed")
                     if wifi {
                         Picker("Speed", selection: $mount.moveRate) {
                             ForEach(NormalCommand.MoveRate.allCases, id: \.self) { rate in
@@ -285,37 +334,51 @@ struct ControlPad: View {
                         .labelsHidden().fixedSize()
                     }
                 }
-                LabeledContent("Fine") {
+                GridRow {
+                    rowLabel("Fine")
                     Picker("Fine step", selection: $fineStep) {
                         Text("1′").tag(1.0)
                         Text("5′").tag(5.0)
                     }
                     .pickerStyle(.segmented).labelsHidden().fixedSize()
                 }
-                LabeledContent("Time") {
+                GridRow {
+                    rowLabel("Time")
                     HStack(spacing: 2) {
-                        Button("−") { mount.timeOffset -= 0.1 }.help("Aim 0.1 s earlier along the track")
-                        Text(String(format: "%+.1f s", mount.timeOffset)).font(.caption.monospacedDigit()).frame(minWidth: 46)
-                        Button("+") { mount.timeOffset += 0.1 }.help("Aim 0.1 s later along the track")
+                        Button { mount.timeOffset -= 0.1 } label: { Image(systemName: "minus") }
+                            .help("Aim 0.1 s earlier along the track").accessibilityLabel("Earlier")
+                        Text(String(format: "%+.1f s", mount.timeOffset))
+                            .font(.callout.monospacedDigit()).frame(minWidth: 50)
+                        Button { mount.timeOffset += 0.1 } label: { Image(systemName: "plus") }
+                            .help("Aim 0.1 s later along the track").accessibilityLabel("Later")
                     }
                     .controlSize(.small)
                 }
-                HStack(spacing: 4) {
-                    Text(String(format: "Az %+.0f′ · Alt %+.0f′", mount.azimuthOffset * 60, mount.altitudeOffset * 60))
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Button {
-                        mount.timeOffset = 0
-                        mount.azimuthOffset = 0
-                        mount.altitudeOffset = 0
-                    } label: { Image(systemName: "arrow.counterclockwise") }
-                    .buttonStyle(.borderless)
-                    .help("Reset the time and position offsets")
-                    .accessibilityLabel("Reset offsets")
-                    .disabled(mount.timeOffset == 0 && mount.azimuthOffset == 0 && mount.altitudeOffset == 0)
+                GridRow {
+                    rowLabel("Offset")
+                    HStack(spacing: 4) {
+                        Text(String(format: "Az %+.0f′  Alt %+.0f′", mount.azimuthOffset * 60, mount.altitudeOffset * 60))
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(mount.azimuthOffset == 0 && mount.altitudeOffset == 0 ? .secondary : .primary)
+                        Button {
+                            mount.timeOffset = 0
+                            mount.azimuthOffset = 0
+                            mount.altitudeOffset = 0
+                        } label: { Image(systemName: "arrow.counterclockwise") }
+                        .buttonStyle(.borderless)
+                        .help("Reset the time and position offsets")
+                        .accessibilityLabel("Reset offsets")
+                        .disabled(mount.timeOffset == 0 && mount.azimuthOffset == 0 && mount.altitudeOffset == 0)
+                    }
                 }
             }
             .font(.callout)
         }
+    }
+
+    private func rowLabel(_ text: String) -> some View {
+        Text(text.uppercased()).font(.caption2.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+            .gridColumnAlignment(.trailing)
     }
 
     private var gap: some View { Color.clear.frame(width: 1, height: 1) }
@@ -331,10 +394,9 @@ struct FineButton: View {
         Button {
             Task { await model.mount.nudge(direction, arcminutes: step) }
         } label: {
-            Image(systemName: symbol).font(.caption.bold()).frame(width: 30, height: 22)
+            Image(systemName: symbol).font(.system(size: 11, weight: .bold))
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .buttonStyle(PadButtonStyle(width: 30, height: 22, cornerRadius: 7))
         .help("Fine: \(Int(step))′ \(name). Shifts the tracking offsets while Step or Smooth tracking; otherwise a short slow move.")
         .accessibilityLabel("Fine \(name), \(Int(step)) arc-minutes")
     }
@@ -367,12 +429,11 @@ struct JogButton: View {
     @State private var pressed = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Image(systemName: symbol).font(.body.bold())
-            Text(label).font(.system(size: 9))
+        VStack(spacing: 1) {
+            Image(systemName: symbol).font(.system(size: 13, weight: .bold))
+            Text(label).font(.system(size: 9, weight: .semibold))
         }
-        .frame(width: 44, height: 40)
-        .background(pressed ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        .modifier(PadFace(pressed: pressed, width: 46, height: 42, cornerRadius: 10))
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { _ in
                 guard !pressed else { return }
@@ -386,5 +447,61 @@ struct JogButton: View {
         .accessibilityLabel("Move \(label)")
         .accessibilityHint("Hold to move, release to stop")
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// The look shared by the pad's keys: raised when idle, lit in the accent colour while pressed.
+struct PadFace: ViewModifier {
+    let pressed: Bool
+    let width: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .foregroundStyle(pressed ? Color.white : Color.primary.opacity(isEnabled ? 0.85 : 0.4))
+            .frame(width: width, height: height)
+            .background {
+                if pressed {
+                    shape.fill(Theme.accent.gradient)
+                } else {
+                    shape.fill(LinearGradient(colors: [Color.primary.opacity(0.10), Color.primary.opacity(0.05)],
+                                              startPoint: .top, endPoint: .bottom))
+                }
+            }
+            .overlay(shape.strokeBorder(pressed ? Theme.accent : Color.primary.opacity(0.12)))
+            .shadow(color: pressed ? Theme.accent.opacity(0.6) : .clear, radius: 6)
+            .scaleEffect(pressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.08), value: pressed)
+            .contentShape(shape)
+    }
+}
+
+struct PadButtonStyle: ButtonStyle {
+    let width: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.modifier(PadFace(pressed: configuration.isPressed, width: width, height: height, cornerRadius: cornerRadius))
+    }
+}
+
+/// The big red emergency stop.
+struct StopButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.callout.weight(.heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(LinearGradient(colors: [Theme.scope, Theme.scope.opacity(0.75)],
+                                                      startPoint: .top, endPoint: .bottom)))
+            .overlay(Capsule().strokeBorder(.white.opacity(0.25)))
+            .shadow(color: Theme.scope.opacity(configuration.isPressed ? 0.3 : 0.55), radius: configuration.isPressed ? 3 : 8)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }

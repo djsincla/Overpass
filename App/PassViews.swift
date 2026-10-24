@@ -2,37 +2,45 @@ import SkyKit
 import SwiftUI
 
 struct PassRow: View {
+    @Environment(AppModel.self) private var model
     let pass: SatellitePass
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pass.name).font(.headline)
-                Text("\(pass.start.date, format: .dateTime.weekday().hour().minute()) · \(Duration.seconds(pass.duration).formatted(.time(pattern: .minuteSecond)))")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    RiseCountdown(start: pass.start.date, end: pass.end.date, now: context.date)
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let now = model.viewDate(context.date)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(pass.name).font(.headline).lineLimit(1)
+                    Text("\(pass.start.date, format: .dateTime.weekday().hour().minute()) · \(Duration.seconds(pass.duration).formatted(.time(pattern: .minuteSecond))) · \(compass(pass.start.position.azimuth)) → \(compass(pass.end.position.azimuth))")
+                        .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                    HStack(spacing: 5) {
+                        RiseCountdown(start: pass.start.date, end: pass.end.date, now: now)
+                        if pass.isVisible { Chip(text: "Visible", systemImage: "eye.fill", tint: Theme.focus) }
+                        if pass.isEclipsed { Chip(text: "Eclipsed", systemImage: "moon.fill", tint: Theme.eclipsed) }
+                    }
                 }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Group {
-                    if let now = pass.status(at: context.date) {
-                        ElevationNow(altitude: now.altitude, trend: now.trend, max: pass.maxAltitude)
-                            .font(.callout.monospacedDigit().bold())
+                Spacer(minLength: 6)
+                PassProfile(pass: pass, now: now)
+                    .frame(width: 64, height: 30)
+                VStack(alignment: .trailing, spacing: 0) {
+                    if let status = pass.status(at: now) {
+                        HStack(spacing: 2) {
+                            Text("\(Int(status.altitude.rounded()))°")
+                            Image(systemName: status.trend == .rising ? "arrow.up" : "arrow.down")
+                                .font(.caption.bold())
+                                .foregroundStyle(status.trend == .rising ? Theme.rising : Theme.setting)
+                        }
+                        .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                        Text("max \(Int(pass.maxAltitude.rounded()))°").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                     } else {
-                        Text("max \(Int(pass.maxAltitude.rounded()))°").font(.title3.monospacedDigit().bold())
-                    }
+                        Text("\(Int(pass.maxAltitude.rounded()))°")
+                            .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                        Text("peak").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
-                HStack(spacing: 4) {
-                    if pass.isVisible { Image(systemName: "eye.fill").foregroundStyle(.yellow).accessibilityLabel("Visible") }
-                    if pass.isEclipsed { Image(systemName: "moon.fill").foregroundStyle(.secondary).accessibilityLabel("Eclipsed") }
-                    Text(compass(pass.start.position.azimuth) + "→" + compass(pass.end.position.azimuth))
-                }
-                .font(.caption).foregroundStyle(.secondary)
+                .frame(minWidth: 50, alignment: .trailing)
             }
+            .padding(.vertical, 3)
         }
         .accessibilityElement(children: .combine)
     }
@@ -48,12 +56,16 @@ struct RiseCountdown: View {
         Group {
             if now < start {
                 Text("Rises in \(countdown(start.timeIntervalSince(now)))")
-                    .foregroundStyle(start.timeIntervalSince(now) < 300 ? .orange : .secondary)
+                    .foregroundStyle(start.timeIntervalSince(now) < 300 ? Theme.setting : .secondary)
             } else if now < end {
-                Text("Up now · sets in \(countdown(end.timeIntervalSince(now)))").foregroundStyle(.green)
+                HStack(spacing: 4) {
+                    StatusDot(color: Theme.rising).scaleEffect(0.8)
+                    Text("Up now · sets in \(countdown(end.timeIntervalSince(now)))")
+                }
+                .foregroundStyle(Theme.rising)
             }
         }
-        .font(.caption.monospacedDigit())
+        .font(.caption.weight(.medium).monospacedDigit())
     }
 }
 
@@ -157,7 +169,7 @@ struct PassDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    SkyDome(observer: model.settings.observer, date: context.date, pass: pass, plan: plan,
+                    SkyDome(observer: model.settings.observer, date: model.viewDate(context.date), pass: pass, plan: plan,
                             tolerance: model.settings.pointingTolerance, cableStopAzimuth: model.settings.cableStopAzimuth)
                 }
                 .frame(maxWidth: 520)

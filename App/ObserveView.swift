@@ -95,14 +95,16 @@ struct ObserveView: View {
 
     private var dome: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let pass = model.highlightedPass(at: context.date)
-            SkyDome(observer: model.settings.observer, date: context.date, pass: pass,
+            let date = model.viewDate(context.date)
+            let pass = model.highlightedPass(at: date)
+            SkyDome(observer: model.settings.observer, date: date, pass: pass,
                     plan: pass.flatMap(model.plan(for:)), tolerance: model.settings.pointingTolerance,
                     cableStopAzimuth: model.settings.cableStopAzimuth,
-                    liveObjects: model.liveObjects(at: context.date),
+                    liveObjects: model.liveObjects(at: date),
                     highlightedObjectID: model.highlightedObject?.id,
                     targetObjectID: model.targetObjectID,
-                    scopePosition: model.mount.skyPosition,
+                    // The scope points in real time, so it only belongs on the live sky.
+                    scopePosition: model.timeShift == 0 ? model.mount.skyPosition : nil,
                     onTapObject: { model.highlight(objectID: $0) })
         }
     }
@@ -110,6 +112,9 @@ struct ObserveView: View {
     @ViewBuilder
     private func list(_ panel: Panel) -> some View {
         VStack(spacing: 0) {
+            TimeBar()
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
             QuickFilters()
             switch panel {
             case .objects: SelectedObjectsList()
@@ -131,26 +136,31 @@ struct PassesList: View {
             ContentUnavailableView("No passes", systemImage: "moon.stars",
                                    description: Text("None of your \(model.predictionTargets.count) selected satellites pass in the next \(Int(model.filter.hoursAhead)) hours with these filters."))
         } else {
-            List(model.passes) { pass in
+            // Passes still to come at the time the bar is set to; refreshed as time moves on.
+            TimelineView(.periodic(from: .now, by: 5)) { context in
+            let date = model.viewDate(context.date)
+            List(model.passes.filter { $0.end.date > date }) { pass in
                 HStack {
                     // Clicking a pass only refocuses the dome on it. It never moves the mount.
                     Button { model.highlight(pass: pass) } label: { PassRow(pass: pass) }
                         .buttonStyle(.plain)
                     if model.targetPassID == pass.id {
-                        Image(systemName: "scope").foregroundStyle(.green).accessibilityLabel("Tracking target")
+                        Image(systemName: "scope").foregroundStyle(Theme.target).accessibilityLabel("Tracking target")
                     }
-                    Button { detail = pass } label: { Image(systemName: "info.circle") }
+                    Button { detail = pass } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Details for \(pass.name)")
                 }
-                .listRowBackground(model.highlightedPass(at: .now)?.id == pass.id ? Color.accentColor.opacity(0.15) : nil)
+                .listRowBackground(RowHighlight(focused: model.highlightedPass(at: date)?.id == pass.id,
+                                                target: model.targetPassID == pass.id))
                 .contextMenu {
                     Button("Set as tracking target") { model.setTarget(pass: pass) }
-                        .disabled(model.mount.isTracking)
+                        .disabled(model.mount.isTracking || pass.end.date < .now)
                     Button("Details") { detail = pass }
                 }
             }
             .listStyle(.plain)
+            }
             .sheet(item: $detail) { pass in
                 NavigationStack {
                     PassDetailView(pass: pass)
@@ -158,7 +168,7 @@ struct PassesList: View {
                             ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } }
                             ToolbarItem(placement: .primaryAction) {
                                 Button("Set as tracking target") { model.setTarget(pass: pass); detail = nil }
-                                    .disabled(model.mount.isTracking)
+                                    .disabled(model.mount.isTracking || pass.end.date < .now)
                             }
                         }
                 }
@@ -210,12 +220,14 @@ struct SelectedObjectsList: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                List(sorted(model.selectedObjects.filter { passesFilters($0, context.date) }, context.date)) { object in
+                let date = model.viewDate(context.date)
+                List(sorted(model.selectedObjects.filter { passesFilters($0, date) }, date)) { object in
                     Button { model.highlight(objectID: object.id) } label: {
-                        ObjectPositionRow(object: object, date: context.date)
+                        ObjectPositionRow(object: object, date: date)
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(model.highlightedObject?.id == object.id ? Color.accentColor.opacity(0.15) : nil)
+                    .listRowBackground(RowHighlight(focused: model.highlightedObject?.id == object.id,
+                                                    target: model.targetObjectID == object.id))
                     .contextMenu {
                         Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
                             .disabled(model.mount.isTracking)
@@ -263,24 +275,49 @@ struct ObjectPositionRow: View {
     let date: Date
 
     var body: some View {
-        HStack {
-            Image(systemName: symbol).frame(width: 22).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            ObjectBadge(object: object)
             VStack(alignment: .leading, spacing: 1) {
-                Text(object.name)
+                Text(object.name).font(.body.weight(.medium)).lineLimit(1)
                 Brightness(object: object, date: date)
             }
             Spacer()
             ObjectStatus(object: object, date: date)
         }
+        .padding(.vertical, 2)
     }
+}
 
-    var symbol: String {
-        switch object {
-        case .satellite: "antenna.radiowaves.left.and.right"
-        case .body(.sun): "sun.max"
-        case .body(.moon): "moon"
-        case .body: "circle.fill"
-        case .star: "star"
+/// The object's kind as a tinted icon in a circle.
+struct ObjectBadge: View {
+    let object: SkyObject
+
+    var body: some View {
+        let color = Theme.color(of: object)
+        Image(systemName: Theme.symbol(of: object))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 28, height: 28)
+            .background(color.opacity(0.15), in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// The focused row in amber (matching the ring on the dome), the tracking target in green.
+struct RowHighlight: View {
+    let focused: Bool
+    let target: Bool
+
+    var body: some View {
+        let color: Color? = focused ? Theme.focus : target ? Theme.target : nil
+        if let color {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(color.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(color.opacity(0.45)))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+        } else {
+            Color.clear
         }
     }
 }
@@ -299,7 +336,7 @@ struct ObjectStatus: View {
                     if let now = pass.status(at: date) {
                         HStack(spacing: 6) {
                             if (try? s.isSunlit(at: AstroTime(date))) == false {
-                                Image(systemName: "moon.fill").foregroundStyle(.secondary).accessibilityLabel("Eclipsed")
+                                Image(systemName: "moon.fill").foregroundStyle(Theme.eclipsed).accessibilityLabel("Eclipsed")
                             }
                             ElevationNow(altitude: now.altitude, trend: now.trend, max: pass.maxAltitude)
                         }
@@ -336,7 +373,7 @@ struct ElevationNow: View {
         HStack(spacing: 4) {
             Text("\(Int(altitude.rounded()))°")
             Image(systemName: trend == .rising ? "arrow.up" : "arrow.down")
-                .foregroundStyle(trend == .rising ? .green : .orange)
+                .foregroundStyle(trend == .rising ? Theme.rising : Theme.setting)
             if let max { Text("· max \(Int(max.rounded()))°").foregroundStyle(.secondary) }
         }
         .accessibilityElement(children: .ignore)
