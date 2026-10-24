@@ -17,12 +17,10 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            SkyTab()
-                .tabItem { Label("Sky", systemImage: "circle.dashed") }
-            PassListView()
-                .tabItem { Label("Passes", systemImage: "list.bullet") }
-            SatellitesView()
-                .tabItem { Label("Satellites", systemImage: "antenna.radiowaves.left.and.right") }
+            ObserveView()
+                .tabItem { Label("Observe", systemImage: "scope") }
+            ObjectsView()
+                .tabItem { Label("Objects", systemImage: "checklist") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }

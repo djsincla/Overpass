@@ -10,28 +10,48 @@ struct SkyDome: View {
     var plan: MountPlan?
     var tolerance: Double = 0.1
     var cableStopAzimuth: Double?
-    var showStars = true
+    /// Selected objects that are up; drawn prominently and tappable.
+    var liveObjects: [LiveObject] = []
+    var highlightedObjectID: String?
+    /// Where the scope is pointing.
+    var scopePosition: Horizontal?
+    var onTapObject: ((String) -> Void)?
 
     var body: some View {
-        Canvas { context, size in
-            let radius = min(size.width, size.height) / 2 - 18
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let geometry = DomeGeometry(center: center, radius: radius)
-
-            drawBackground(&context, geometry)
-            if let az = cableStopAzimuth { drawCableStop(&context, geometry, az) }
-            if showStars { drawStars(&context, geometry) }
-            drawSolarSystem(&context, geometry)
-            if let pass { drawPass(&context, geometry, pass) }
+        GeometryReader { proxy in
+            let geometry = DomeGeometry(size: proxy.size)
+            Canvas { context, _ in
+                drawBackground(&context, geometry)
+                if let az = cableStopAzimuth { drawCableStop(&context, geometry, az) }
+                drawStars(&context, geometry)
+                drawSolarSystem(&context, geometry)
+                if let pass { drawPass(&context, geometry, pass) }
+                drawLiveObjects(&context, geometry)
+                if let scopePosition { drawScope(&context, geometry, scopePosition) }
+            }
+            .contentShape(Rectangle())
+            .gesture(SpatialTapGesture().onEnded { tap in
+                guard let onTapObject else { return }
+                let nearest = liveObjects.min {
+                    distance(geometry.point($0.position), tap.location) < distance(geometry.point($1.position), tap.location)
+                }
+                if let nearest, distance(geometry.point(nearest.position), tap.location) < 30 { onTapObject(nearest.id) }
+            })
         }
         .aspectRatio(1, contentMode: .fit)
+        .accessibilityElement()
         .accessibilityLabel(accessibilitySummary)
     }
 
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+
     var accessibilitySummary: String {
-        guard let pass else { return "Sky chart" }
-        return "Sky chart showing \(pass.name), rising at azimuth \(Int(pass.start.position.azimuth)) degrees, "
-            + "peaking at \(Int(pass.maxAltitude)) degrees altitude, setting at azimuth \(Int(pass.end.position.azimuth)) degrees"
+        var parts = ["Sky chart"]
+        if let pass {
+            parts.append("\(pass.name) rising at azimuth \(Int(pass.start.position.azimuth)) degrees, peaking at \(Int(pass.maxAltitude)) degrees")
+        }
+        if !liveObjects.isEmpty { parts.append("Up now: " + liveObjects.map(\.name).joined(separator: ", ")) }
+        return parts.joined(separator: ". ")
     }
 
     // MARK: Layers
@@ -47,8 +67,7 @@ struct SkyDome: View {
                            style: StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
         }
         for (label, az) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("W", 270.0)] {
-            let p = g.point(azimuth: az, altitude: -9)
-            context.draw(Text(label).font(.caption.bold()).foregroundStyle(.secondary), at: p)
+            context.draw(Text(label).font(.caption.bold()).foregroundStyle(.secondary), at: g.point(azimuth: az, altitude: -9))
         }
     }
 
@@ -67,11 +86,7 @@ struct SkyDome: View {
             let size = max(1.5, 4 - star.magnitude)
             let p = g.point(h)
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
-                         with: .color(.white.opacity(0.85)))
-            if star.magnitude < 1 {
-                context.draw(Text(star.name).font(.system(size: 9)).foregroundStyle(.white.opacity(0.5)),
-                             at: CGPoint(x: p.x, y: p.y + 8))
-            }
+                         with: .color(.white.opacity(0.7)))
         }
     }
 
@@ -88,7 +103,6 @@ struct SkyDome: View {
             }
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
                          with: .color(color))
-            context.draw(Text(body.name).font(.caption2).foregroundStyle(color), at: CGPoint(x: p.x, y: p.y + size / 2 + 7))
         }
     }
 
@@ -113,9 +127,8 @@ struct SkyDome: View {
             }
         }
 
-        // One tick a minute, labelled with the time.
-        let minute = track.filter { Int($0.date.timeIntervalSince(track[0].date)) % 60 == 0 }
-        for sample in minute.dropFirst() {
+        // One tick a minute.
+        for sample in track.dropFirst() where Int(sample.date.timeIntervalSince(track[0].date)) % 60 == 0 {
             let p = g.point(sample.position)
             context.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(.white))
         }
@@ -130,15 +143,43 @@ struct SkyDome: View {
         let peak = g.point(pass.culmination.position)
         context.draw(Text("\(Int(pass.maxAltitude.rounded()))°").font(.caption2.bold()).foregroundStyle(.white),
                      at: CGPoint(x: peak.x + 14, y: peak.y))
+    }
 
-        // Where it is right now, if the pass is under way.
-        if let now = track.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }),
-           abs(now.date.timeIntervalSince(date)) < 2 {
-            let p = g.point(now.position)
-            context.fill(Path(ellipseIn: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12)), with: .color(.white))
-            context.stroke(Path(ellipseIn: CGRect(x: p.x - 9, y: p.y - 9, width: 18, height: 18)),
-                           with: .color(.cyan), lineWidth: 2)
+    private func drawLiveObjects(_ context: inout GraphicsContext, _ g: DomeGeometry) {
+        for object in liveObjects {
+            let p = g.point(object.position)
+            let highlighted = object.id == highlightedObjectID
+            let color: Color = object.sunlit ? .yellow : .gray
+            var diamond = Path()
+            diamond.move(to: CGPoint(x: p.x, y: p.y - 5))
+            diamond.addLine(to: CGPoint(x: p.x + 5, y: p.y))
+            diamond.addLine(to: CGPoint(x: p.x, y: p.y + 5))
+            diamond.addLine(to: CGPoint(x: p.x - 5, y: p.y))
+            diamond.closeSubpath()
+            context.fill(diamond, with: .color(color))
+            if highlighted {
+                context.stroke(Path(ellipseIn: CGRect(x: p.x - 11, y: p.y - 11, width: 22, height: 22)),
+                               with: .color(.yellow), lineWidth: 2)
+            }
+            context.draw(Text(object.name).font(highlighted ? .caption.bold() : .caption2).foregroundStyle(color),
+                         at: CGPoint(x: p.x, y: p.y + 14))
         }
+    }
+
+    private func drawScope(_ context: inout GraphicsContext, _ g: DomeGeometry, _ h: Horizontal) {
+        let p = g.point(h)
+        var cross = Path()
+        cross.move(to: CGPoint(x: p.x - 12, y: p.y))
+        cross.addLine(to: CGPoint(x: p.x - 4, y: p.y))
+        cross.move(to: CGPoint(x: p.x + 4, y: p.y))
+        cross.addLine(to: CGPoint(x: p.x + 12, y: p.y))
+        cross.move(to: CGPoint(x: p.x, y: p.y - 12))
+        cross.addLine(to: CGPoint(x: p.x, y: p.y - 4))
+        cross.move(to: CGPoint(x: p.x, y: p.y + 4))
+        cross.addLine(to: CGPoint(x: p.x, y: p.y + 12))
+        context.stroke(cross, with: .color(.red), lineWidth: 2)
+        context.stroke(Path(ellipseIn: CGRect(x: p.x - 8, y: p.y - 8, width: 16, height: 16)),
+                       with: .color(.red), lineWidth: 1.5)
     }
 
     private func drawArrowhead(_ context: inout GraphicsContext, _ g: DomeGeometry, from: Horizontal, to: Horizontal) {
@@ -158,6 +199,11 @@ struct DomeGeometry {
     let center: CGPoint
     let radius: CGFloat
 
+    init(size: CGSize) {
+        center = CGPoint(x: size.width / 2, y: size.height / 2)
+        radius = min(size.width, size.height) / 2 - 18
+    }
+
     func point(azimuth: Double, altitude: Double) -> CGPoint {
         let r = radius * (90 - altitude) / 90
         let az = azimuth * .pi / 180
@@ -170,53 +216,6 @@ struct DomeGeometry {
     func rect(altitude: Double) -> CGRect {
         let r = radius * (90 - altitude) / 90
         return CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r)
-    }
-}
-
-/// The live sky with the next pass on it.
-struct SkyTab: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if model.settings.hasLocation {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let current = model.passes.first { $0.end.date > context.date }
-                        VStack(spacing: 12) {
-                            SkyDome(observer: model.settings.observer, date: context.date, pass: current,
-                                    plan: current.flatMap(model.plan(for:)), tolerance: model.settings.pointingTolerance,
-                                    cableStopAzimuth: model.settings.cableStopAzimuth)
-                                .padding(.horizontal)
-                            if let current { NextPassSummary(pass: current, now: context.date) }
-                            Spacer(minLength: 0)
-                        }
-                    }
-                } else {
-                    LocationNeededView()
-                }
-            }
-            .navigationTitle("Sky")
-        }
-    }
-}
-
-struct NextPassSummary: View {
-    let pass: SatellitePass
-    let now: Date
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(pass.name).font(.headline)
-            if pass.start.date > now {
-                Text("Rises \(pass.start.date, style: .relative) · peaks \(Int(pass.maxAltitude))° · \(pass.isVisible ? "visible" : "not visible")")
-            } else {
-                Text("Up now · sets \(pass.end.date, style: .relative)")
-            }
-        }
-        .font(.subheadline)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal)
     }
 }
 

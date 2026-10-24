@@ -53,6 +53,8 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           Overpass uses your location to work out where satellites, the Sun, Moon
           and planets appear in your sky.
+        NSLocalNetworkUsageDescription: >-
+          Overpass connects to your mount, or to a relay plugged into it, on your local network.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

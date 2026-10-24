@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Overpass connects to your mount, or to a relay plugged into it, on your local network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Overpass uses your location to work out where satellites, the Sun, Moon and planets appear in your sky.</string>
 	<key>UILaunchScreen</key>

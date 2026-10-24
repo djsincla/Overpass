@@ -1,47 +1,6 @@
 import SkyKit
 import SwiftUI
 
-struct PassListView: View {
-    @Environment(AppModel.self) private var model
-    @State private var showingFilters = false
-
-    var body: some View {
-        @Bindable var model = model
-        NavigationStack {
-            Group {
-                if !model.settings.hasLocation {
-                    LocationNeededView()
-                } else if model.passes.isEmpty && !model.isPredicting {
-                    ContentUnavailableView("No passes", systemImage: "moon.stars",
-                                           description: Text(model.satellites.isEmpty
-                                                             ? "No satellites loaded yet. Turn on a source under Satellites."
-                                                             : "Nothing matches your filters in the next \(Int(model.filter.hoursAhead)) hours."))
-                } else {
-                    List(model.passes) { pass in
-                        NavigationLink(value: pass.id) { PassRow(pass: pass) }
-                    }
-                    .navigationDestination(for: String.self) { id in
-                        if let pass = model.passes.first(where: { $0.id == id }) { PassDetailView(pass: pass) }
-                    }
-                }
-            }
-            .navigationTitle("Passes")
-            .searchable(text: $model.filter.search, prompt: "Name or catalogue number")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingFilters = true } label: {
-                        Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
-                    }
-                }
-                if model.isPredicting {
-                    ToolbarItem(placement: .status) { ProgressView().controlSize(.small) }
-                }
-            }
-            .sheet(isPresented: $showingFilters) { FilterSheet() }
-        }
-    }
-}
-
 struct PassRow: View {
     let pass: SatellitePass
 

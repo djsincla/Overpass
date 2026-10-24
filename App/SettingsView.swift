@@ -1,3 +1,4 @@
+import IOptronKit
 import SkyKit
 import SwiftUI
 
@@ -9,6 +10,8 @@ struct SettingsView: View {
         @Bindable var model = model
         NavigationStack {
             Form {
+                connectionSection
+
                 Section("Location") {
                     Button("Use my current location") { Task { await model.useCurrentLocation() } }
                     numberField("Latitude (° north)", $model.settings.latitude)
@@ -62,6 +65,50 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")
+        }
+    }
+
+    private var connectionSection: some View {
+        @Bindable var model = model
+        return Section {
+            Picker("Connect by", selection: $model.settings.connection) {
+                ForEach(ConnectionKind.allCases) { Text($0.rawValue).tag($0) }
+            }
+            switch model.settings.connection {
+            case .wifi:
+                TextField("Mount address", text: $model.settings.wifiHost).autocorrectionDisabled()
+                LabeledContent("Port") {
+                    TextField("Port", value: $model.settings.wifiPort, format: .number.grouping(.never))
+                        .multilineTextAlignment(.trailing)
+                }
+            case .usb:
+                #if os(macOS)
+                Picker("USB port", selection: $model.settings.serialPath) {
+                    Text("Choose…").tag("")
+                    ForEach(SerialTransport.availablePorts(), id: \.self) { Text($0).tag($0) }
+                }
+                #else
+                TextField("Relay address", text: $model.settings.relayHost).autocorrectionDisabled()
+                LabeledContent("Relay port") {
+                    TextField("Port", value: $model.settings.relayPort, format: .number.grouping(.never))
+                        .multilineTextAlignment(.trailing)
+                }
+                #endif
+                Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
+            }
+        } header: {
+            Text("Mount connection")
+        } footer: {
+            switch model.settings.connection {
+            case .wifi:
+                Text("Normal mode over the mount's WiFi: Passive and Step tracking. Join the mount's WiFi network first. 10.10.100.254:8899 is iOptron's usual address; check your manual.")
+            case .usb:
+                #if os(macOS)
+                Text("Special mode over the mount's USB port: Smooth tracking, after star alignment. Special mode stays on through power cycles, and WiFi won't work while it's on.")
+                #else
+                Text("Special mode only works over USB, so an iPhone or iPad reaches it through a relay plugged into the mount, such as a Raspberry Pi running ser2net at 115200 baud.")
+                #endif
+            }
         }
     }
 
