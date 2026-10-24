@@ -13,9 +13,19 @@ struct PassRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(pass.maxAltitude.rounded()))°").font(.title3.monospacedDigit().bold())
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Group {
+                    if let now = pass.status(at: context.date) {
+                        ElevationNow(altitude: now.altitude, trend: now.trend, max: pass.maxAltitude)
+                            .font(.callout.monospacedDigit().bold())
+                    } else {
+                        Text("max \(Int(pass.maxAltitude.rounded()))°").font(.title3.monospacedDigit().bold())
+                    }
+                    }
+                }
                 HStack(spacing: 4) {
-                    if pass.isVisible { Image(systemName: "eye.fill").foregroundStyle(.yellow) }
+                    if pass.isVisible { Image(systemName: "eye.fill").foregroundStyle(.yellow).accessibilityLabel("Visible") }
+                    if pass.isEclipsed { Image(systemName: "moon.fill").foregroundStyle(.secondary).accessibilityLabel("Eclipsed") }
                     Text(compass(pass.start.position.azimuth) + "→" + compass(pass.end.position.azimuth))
                 }
                 .font(.caption).foregroundStyle(.secondary)

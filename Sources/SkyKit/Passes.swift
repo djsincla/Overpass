@@ -56,6 +56,8 @@ public struct SatellitePass: Sendable, Identifiable {
     public var duration: TimeInterval { end.date.timeIntervalSince(start.date) }
     public var maxAltitude: Double { culmination.position.altitude }
     public var isVisible: Bool { visibleSamples != nil }
+    /// In the Earth's shadow for the whole pass.
+    public var isEclipsed: Bool { !track.contains { $0.sunlit } }
     /// The fastest either axis must move, for comparing with the mount's limits.
     public var peakAxisRate: Double { max(peakAzimuthRate, peakAltitudeRate) }
 }
@@ -167,6 +169,8 @@ public struct PassFilter: Sendable {
     public var minimumMaxAltitude: Double = 10
     public var minimumDuration: TimeInterval = 0
     public var visibility: Visibility = .any
+    /// Drop passes spent entirely in the Earth's shadow (never sunlit), whatever the sky.
+    public var excludeEclipsed = false
     /// Reject passes needing faster axis motion than the mount can do (deg/s).
     public var maximumAxisRate: Double?
     /// Keep the scope at least this far from the Sun (degrees).
@@ -187,6 +191,7 @@ public struct PassFilter: Sendable {
         if pass.maxAltitude < minimumMaxAltitude { return false }
         if pass.duration < minimumDuration { return false }
         if visibility == .visibleOnly, !pass.isVisible { return false }
+        if excludeEclipsed, pass.isEclipsed { return false }
         if let limit = maximumAxisRate, pass.peakAxisRate > limit { return false }
         if let limit = minimumSunSeparation, pass.minimumSunSeparation < limit { return false }
         if let sector = culminationAzimuth {

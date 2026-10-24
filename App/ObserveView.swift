@@ -99,9 +99,12 @@ struct ObserveView: View {
 
     @ViewBuilder
     private func list(_ panel: Panel) -> some View {
-        switch panel {
-        case .objects: SelectedObjectsList()
-        default: PassesList()
+        VStack(spacing: 0) {
+            QuickFilters()
+            switch panel {
+            case .objects: SelectedObjectsList()
+            default: PassesList()
+            }
         }
     }
 }
@@ -157,7 +160,28 @@ struct PassesList: View {
     }
 }
 
-/// Selected non-satellite objects (and satellites), with where they are now.
+/// The two filters people change most, right above the list.
+struct QuickFilters: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        HStack {
+            Picker("Min elevation", selection: $model.filter.minimumMaxAltitude) {
+                ForEach([0.0, 10, 20, 30, 45, 60], id: \.self) { Text("Peaks ≥ \(Int($0))°").tag($0) }
+            }
+            .fixedSize()
+            Toggle("Hide eclipsed", isOn: $model.filter.hideEclipsed)
+                .fixedSize()
+            Spacer()
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+}
+
+/// Selected objects (and satellites), with where they are now.
 struct SelectedObjectsList: View {
     @Environment(AppModel.self) private var model
 
@@ -167,7 +191,7 @@ struct SelectedObjectsList: View {
                                    description: Text("Choose the Moon, planets, stars or satellites in the Objects tab."))
         } else {
             TimelineView(.periodic(from: .now, by: 5)) { context in
-                List(model.selectedObjects) { object in
+                List(model.selectedObjects.filter { passesFilters($0, context.date) }) { object in
                     Button { model.highlight(objectID: object.id) } label: {
                         ObjectPositionRow(object: object, date: context.date)
                     }
@@ -182,6 +206,21 @@ struct SelectedObjectsList: View {
             }
         }
     }
+
+    /// Minimum elevation compares with how high the object gets (this pass or the next), so
+    /// something low now but climbing high stays listed. Eclipsed means in shadow right now.
+    private func passesFilters(_ object: SkyObject, _ date: Date) -> Bool {
+        let time = AstroTime(date)
+        switch object {
+        case .satellite(let s):
+            if model.filter.hideEclipsed, (try? s.isSunlit(at: time)) == false { return false }
+            guard let pass = model.currentOrNextPass(s.noradID, at: date) else { return model.filter.minimumMaxAltitude == 0 }
+            return pass.maxAltitude >= model.filter.minimumMaxAltitude
+        default:
+            let peak = (try? model.settings.observer.visibility(of: object.target, at: date))?.maxAltitude
+            return (peak ?? -90) >= model.filter.minimumMaxAltitude
+        }
+    }
 }
 
 struct ObjectPositionRow: View {
@@ -190,19 +229,11 @@ struct ObjectPositionRow: View {
     let date: Date
 
     var body: some View {
-        let h = try? model.settings.observer.look(at: object.target, AstroTime(date))
         HStack {
             Image(systemName: symbol).frame(width: 22).foregroundStyle(.secondary)
             Text(object.name)
             Spacer()
-            if let h {
-                if h.altitude > 0 {
-                    Text("\(Int(h.azimuth))° \(compass(h.azimuth)) · \(Int(h.altitude.rounded()))° up")
-                        .font(.callout.monospacedDigit())
-                } else {
-                    Text("Below the horizon").font(.callout).foregroundStyle(.secondary)
-                }
-            }
+            ObjectStatus(object: object, date: date)
         }
     }
 
@@ -214,5 +245,65 @@ struct ObjectPositionRow: View {
         case .body: "circle.fill"
         case .star: "star"
         }
+    }
+}
+
+/// "34° ↑ · max 62°" when up; "rises 21:14 · max 45°" when not.
+struct ObjectStatus: View {
+    @Environment(AppModel.self) private var model
+    let object: SkyObject
+    let date: Date
+
+    var body: some View {
+        Group {
+            switch object {
+            case .satellite(let s):
+                if let pass = model.currentOrNextPass(s.noradID, at: date) {
+                    if let now = pass.status(at: date) {
+                        HStack(spacing: 6) {
+                            if (try? s.isSunlit(at: AstroTime(date))) == false {
+                                Image(systemName: "moon.fill").foregroundStyle(.secondary).accessibilityLabel("Eclipsed")
+                            }
+                            ElevationNow(altitude: now.altitude, trend: now.trend, max: pass.maxAltitude)
+                        }
+                    } else {
+                        Text("rises \(pass.start.date.formatted(date: .omitted, time: .shortened)) · max \(Int(pass.maxAltitude.rounded()))°")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("no pass in \(Int(model.filter.hoursAhead)) h").foregroundStyle(.secondary)
+                }
+            default:
+                if let v = try? model.settings.observer.visibility(of: object.target, at: date) {
+                    if v.isUp {
+                        ElevationNow(altitude: v.altitude, trend: v.trend, max: v.maxAltitude)
+                    } else if let rise = v.rise {
+                        Text("rises \(rise.formatted(date: .omitted, time: .shortened))" + (v.maxAltitude.map { " · max \(Int($0.rounded()))°" } ?? ""))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("doesn't rise").foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .font(.callout.monospacedDigit())
+    }
+}
+
+struct ElevationNow: View {
+    let altitude: Double
+    let trend: ObjectVisibility.Trend
+    let max: Double?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("\(Int(altitude.rounded()))°")
+            Image(systemName: trend == .rising ? "arrow.up" : "arrow.down")
+                .foregroundStyle(trend == .rising ? .green : .orange)
+            if let max { Text("· max \(Int(max.rounded()))°").foregroundStyle(.secondary) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(Int(altitude.rounded())) degrees, \(trend == .rising ? "rising" : "setting")"
+                            + (max.map { ", maximum \(Int($0.rounded())) degrees" } ?? ""))
     }
 }

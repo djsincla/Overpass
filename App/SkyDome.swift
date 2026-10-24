@@ -27,7 +27,10 @@ struct SkyDome: View {
                 if let az = cableStopAzimuth { drawCableStop(&context, geometry, az) }
                 drawStars(&context, geometry)
                 drawSolarSystem(&context, geometry)
-                if let pass { drawPass(&context, geometry, pass) }
+                if let pass {
+                    drawPass(&context, geometry, pass)
+                    drawLegend(&context, proxy.size)
+                }
                 drawLiveObjects(&context, geometry)
                 if let scopePosition { drawScope(&context, geometry, scopePosition) }
             }
@@ -114,13 +117,31 @@ struct SkyDome: View {
         let track = pass.track
         guard track.count > 1 else { return }
 
-        // Bright where the satellite is sunlit, dim in the Earth's shadow.
+        // Solid where the satellite is sunlit; dashed grey in the Earth's shadow.
         for (a, b) in zip(track, track.dropFirst()) {
             var segment = Path()
             segment.move(to: g.point(a.position))
             segment.addLine(to: g.point(b.position))
-            context.stroke(segment, with: .color(a.sunlit ? .cyan : .cyan.opacity(0.35)),
-                           style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            if a.sunlit {
+                context.stroke(segment, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            } else {
+                context.stroke(segment, with: .color(.gray), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+            }
+        }
+
+        // Where it enters or leaves the shadow, with the time.
+        for (a, b) in zip(track, track.dropFirst()) where a.sunlit != b.sunlit {
+            let p = g.point(b.position)
+            let marker = Path(ellipseIn: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12))
+            context.fill(marker, with: .color(.black))
+            var half = Path()
+            half.addArc(center: p, radius: 6, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+            context.fill(half, with: .color(.cyan))
+            context.stroke(marker, with: .color(.white), lineWidth: 1.5)
+            let label = b.sunlit ? "lit" : "shadow"
+            context.draw(Text("\(label) \(b.date.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption2).foregroundStyle(.white.opacity(0.85)),
+                         at: CGPoint(x: p.x, y: p.y + 14))
         }
 
         // Where the mount will lose the target, cutting round the zenith.
@@ -188,6 +209,20 @@ struct SkyDome: View {
         context.stroke(cross, with: .color(.red), lineWidth: 2)
         context.stroke(Path(ellipseIn: CGRect(x: p.x - 8, y: p.y - 8, width: 16, height: 16)),
                        with: .color(.red), lineWidth: 1.5)
+    }
+
+    private func drawLegend(_ context: inout GraphicsContext, _ size: CGSize) {
+        let x: CGFloat = 8, y = size.height - 30
+        var lit = Path()
+        lit.move(to: CGPoint(x: x, y: y))
+        lit.addLine(to: CGPoint(x: x + 22, y: y))
+        context.stroke(lit, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        context.draw(Text("Sunlit").font(.caption2).foregroundStyle(.secondary), at: CGPoint(x: x + 30, y: y), anchor: .leading)
+        var dark = Path()
+        dark.move(to: CGPoint(x: x, y: y + 16))
+        dark.addLine(to: CGPoint(x: x + 22, y: y + 16))
+        context.stroke(dark, with: .color(.gray), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+        context.draw(Text("Eclipsed").font(.caption2).foregroundStyle(.secondary), at: CGPoint(x: x + 30, y: y + 16), anchor: .leading)
     }
 
     private func drawArrowhead(_ context: inout GraphicsContext, _ g: DomeGeometry, from: Horizontal, to: Horizontal) {

@@ -80,6 +80,8 @@ struct FilterSettings: Codable, Equatable {
     var minimumMaxAltitude: Double = 10
     var minimumDurationMinutes: Double = 0
     var visibleOnly = false
+    /// Hide passes spent entirely in the Earth's shadow, and satellites in shadow right now.
+    var hideEclipsed = false
     var trackableOnly = false
     var maximumSecondsOffTarget: Double = 0
     var minimumSunSeparation: Double = 0
@@ -255,6 +257,11 @@ final class AppModel {
         targetPassKey = nil
     }
 
+    /// The pass a satellite is on now, or its next one.
+    func currentOrNextPass(_ noradID: String, at date: Date) -> SatellitePass? {
+        passes.filter { $0.noradID == noradID && $0.end.date > date }.min { $0.start.date < $1.start.date }
+    }
+
     /// Selected objects currently above the horizon.
     func liveObjects(at date: Date) -> [LiveObject] {
         let observer = settings.observer
@@ -383,6 +390,7 @@ final class AppModel {
         f.minimumMaxAltitude = filter.minimumMaxAltitude
         f.minimumDuration = filter.minimumDurationMinutes * 60
         f.visibility = filter.visibleOnly ? .visibleOnly : .any
+        f.excludeEclipsed = filter.hideEclipsed
         f.minimumSunSeparation = filter.minimumSunSeparation > 0 ? filter.minimumSunSeparation : nil
         if filter.trackableOnly {
             f.mountPlanner = settings.planner
