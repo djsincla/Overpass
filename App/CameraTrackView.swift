@@ -124,7 +124,10 @@ struct CameraTrackScreen: View {
         if tracker.settingAim { return "Click where the telescope points" }
         if let t = tracker.tracker {
             switch t.state {
-            case .locked: return model.mount.tracksCamera ? model.mount.status : "Following in the image"
+            case .locked:
+                if model.mount.tracksCamera { return model.mount.status }
+                if let blocker = tracker.driveBlocker { return "Following in the image only. " + blocker }
+                return tracker.drivesMount ? "Following in the image" : "Following in the image only (Move the mount is off)"
             case .coasting: return "Out of sight, carrying on along its path…"
             case .lost: return "Lost it. Click it again to pick it up."
             }

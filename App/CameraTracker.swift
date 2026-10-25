@@ -13,7 +13,13 @@ final class CameraTracker {
     /// What's being followed in the image; nil when nothing is picked.
     private(set) var tracker: MovingObjectTracker?
     /// Move the mount to follow it, or only follow it in the image.
-    var drivesMount = true
+    var drivesMount = true {
+        didSet {
+            guard drivesMount != oldValue, !isCalibrating else { return }
+            Task { drivesMount ? await followIfReady() : await stopFollowing() }
+        }
+    }
+    private var isCalibrating = false
     /// The next click sets the aim point instead of picking an object.
     var settingAim = false
     private(set) var message = ""
@@ -83,10 +89,18 @@ final class CameraTracker {
         lastFrame = frame.timestamp
         lastMountAxes = mount?.axes(at: frame.timestamp)
         message = picked.blob.polarity > 0 ? "Locked on a bright object." : "Locked on a dark object."
-        if drivesMount, driveBlocker == nil, let mount, !mount.tracksCamera {
-            if mount.isTracking { await mount.stopAll() }
-            await mount.trackCamera(self)
-        }
+        await followIfReady()
+    }
+
+    /// Starts the mount following the picked object, if it can.
+    func followIfReady() async {
+        guard drivesMount, driveBlocker == nil, let mount, !mount.tracksCamera, tracker != nil, !isLost else { return }
+        if mount.isTracking { await mount.stopAll() }
+        await mount.trackCamera(self)
+    }
+
+    private func stopFollowing() async {
+        if let mount, mount.tracksCamera { await mount.stopAll() }
     }
 
     /// Lets go of the object and stops the mount if it was following it.
@@ -108,7 +122,7 @@ final class CameraTracker {
         latestFrame = frame
         defer { centreZoom(frame) }
         guard var tracker else { return }
-        let guiding = app?.guider.isCalibrating == true
+        let guiding = isCalibrating || app?.guider.isCalibrating == true
         let axes = mount?.axes(at: frame.timestamp)
         let altitude = mount?.skyPosition?.altitude ?? 45
 
@@ -167,14 +181,14 @@ final class CameraTracker {
             message = "Click something that isn't moving first (a star, a distant light or mast), then calibrate."
             return
         }
-        let drove = drivesMount
-        drivesMount = false
+        isCalibrating = true
+        defer { isCalibrating = false }
         if let mount, mount.tracksCamera { await mount.stopAll() }
         await app.guider.calibrate { [weak self] in
             guard let t = self?.tracker, t.state == .locked else { return nil }
             return (t.x, t.y)
         }
         message = app.guider.status
-        drivesMount = drove
+        // Calibrated on something fixed: nothing to follow until a moving object is picked.
     }
 }

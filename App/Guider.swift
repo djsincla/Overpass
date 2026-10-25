@@ -115,22 +115,32 @@ final class Guider {
         guard let axesBefore = try await mount.currentAxes() else { throw GuiderError.noMount }
 
         status = "Calibrating: moving \(primaryRate != 0 ? "azimuth" : "altitude")…"
+        // Slowly at first, for a telescope's narrow view; faster if the image barely moves, as
+        // with a wide-angle webcam, where 0.1°/s would take most of a minute to show.
+        var speed = 1.0
         try await mount.moveAxes(primary: primaryRate, secondary: secondaryRate)
         let began = Date.now
-        while Date.now.timeIntervalSince(began) < 10 {
+        while Date.now.timeIntervalSince(began) < 12 {
             try await Task.sleep(for: .milliseconds(150))
-            if let spot = position(), hypot(spot.x - start.x, spot.y - start.y) > 40 { break }
-            if position() == nil && Date.now.timeIntervalSince(began) > 2 { break }
+            let elapsed = Date.now.timeIntervalSince(began)
+            let moved = position().map { hypot($0.x - start.x, $0.y - start.y) }
+            if let moved, moved > 40 { break }
+            if moved == nil && elapsed > 2 { break }
+            if let moved, moved < 10, (speed == 1 && elapsed > 2) || (speed == 5 && elapsed > 5) {
+                speed *= speed == 1 ? 5 : 4
+                try await mount.moveAxes(primary: primaryRate * speed, secondary: secondaryRate * speed)
+            }
         }
-        let elapsed = Date.now.timeIntervalSince(began)
         try await mount.stopMotion()
         try await Task.sleep(for: .milliseconds(800))
         let end = try await averageSpot(position)
         guard let axesAfter = try await mount.currentAxes() else { throw GuiderError.noMount }
 
         // Back to where we started, so the second axis is measured from the centre too.
-        try await mount.moveAxes(primary: -primaryRate, secondary: -secondaryRate)
-        try await Task.sleep(for: .seconds(elapsed))
+        let away = primaryRate != 0 ? axesAfter.primary - axesBefore.primary : axesAfter.secondary - axesBefore.secondary
+        let rate = abs(primaryRate + secondaryRate) * speed
+        try await mount.moveAxes(primary: -primaryRate * speed, secondary: -secondaryRate * speed)
+        try await Task.sleep(for: .seconds(abs(away) / rate))
         try await mount.stopMotion()
         try await Task.sleep(for: .milliseconds(800))
 
