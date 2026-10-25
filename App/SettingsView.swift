@@ -80,11 +80,11 @@ struct SettingsView: View {
                     }
                     LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
                     Picker("Smooth tracking updates", selection: $model.settings.trackingPeriod) {
-                        ForEach([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2], id: \.self) { period in
+                        ForEach([0.05, 0.1, 0.2, 0.5, 1, 2], id: \.self) { period in
                             Text("Every \(period.formatted(.number.precision(.fractionLength(0...2)))) s").tag(period)
                         }
                     }
-                    .help("How often Smooth tracking reads the axes and sets the speeds (Special mode). Each update takes about 45 ms on the HAZ46, so 0.02 and 0.05 s run them as fast as the mount answers. Longer periods hold each speed for the whole interval and correct more gently.")
+                    .help("How often Smooth tracking reads the axes and sets the speeds (Special mode). Each update takes about 45 ms on the HAZ46, so 0.05 s runs them nearly as fast as the mount answers. Longer periods hold each speed for the whole interval and correct more gently.")
                     LabeledSlider("Azimuth speed", value: $model.settings.maximumAzimuthRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("Altitude speed", value: $model.settings.maximumAltitudeRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("On target within", value: Binding(get: { model.settings.pointingTolerance * 60 },
