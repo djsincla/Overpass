@@ -57,6 +57,10 @@ struct Settings: Codable, Equatable {
     var alignment: AlignmentModel?
     var alignmentRMS: Double?
     var alignmentStars = 0
+    /// The alignment was captured from the mount's own (Normal mode) alignment when connecting.
+    var alignmentFromMount = false
+    /// On USB connect, take the mount's existing alignment rather than needing a star alignment.
+    var captureMountAlignment = true
 
     /// Camera guiding: which camera, and how its image moves with the mount.
     var cameraDeviceID: String?

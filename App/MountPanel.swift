@@ -246,6 +246,7 @@ struct MountPanel: View {
 
     private var alignmentSummary: String {
         guard model.settings.alignment != nil else { return "none (Smooth needs 2+ stars)" }
+        if model.settings.alignmentFromMount { return "from the mount (captured when connecting)" }
         let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
         return "\(model.settings.alignmentStars) stars\(rms)"
     }

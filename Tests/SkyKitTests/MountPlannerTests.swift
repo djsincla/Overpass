@@ -112,3 +112,29 @@ let zenithPass: [PassSample] = {
         }
     }
 }
+
+@Suite struct MountAlignmentCaptureTests {
+    @Test func axesAlreadyInSkyCoordinates() throws {
+        let sky = Horizontal(azimuth: 123.4, altitude: 37.5)
+        let model = try #require(AlignmentModel.fromMount(sky: sky, axes: AxisPosition(primary: 123.4, secondary: 37.5)))
+        #expect(model.azimuthSense == 1)
+        #expect(abs(wrap180(model.yaw)) < 1e-6 && abs(model.altitudeOffset) < 1e-6)
+    }
+
+    @Test func offsetAxesMapBackToTheSky() throws {
+        // Axis zero 3° off north and 0.5° off the horizon; another direction still maps correctly.
+        let sky = Horizontal(azimuth: 200, altitude: 40)
+        let axes = AxisPosition(primary: wrap180(200 + 3), secondary: 40.5)
+        let model = try #require(AlignmentModel.fromMount(sky: sky, axes: axes))
+        let back = model.sky(for: AxisPosition(primary: wrap180(90 + 3), secondary: 20.5))
+        #expect(abs(wrap180(back.azimuth - 90)) < 1e-6 && abs(back.altitude - 20) < 1e-6)
+    }
+
+    @Test func reversedAzimuthAxis() throws {
+        let sky = Horizontal(azimuth: 60, altitude: 30)
+        let model = try #require(AlignmentModel.fromMount(sky: sky, axes: AxisPosition(primary: -60, secondary: 30)))
+        #expect(model.azimuthSense == -1)
+        let back = model.sky(for: AxisPosition(primary: -100, secondary: 50))
+        #expect(abs(wrap180(back.azimuth - 100)) < 1e-6 && abs(back.altitude - 50) < 1e-6)
+    }
+}

@@ -119,6 +119,8 @@ struct SettingsView: View {
                 }
                 #endif
                 Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
+                Toggle("Use the mount's own alignment", isOn: $model.settings.captureMountAlignment)
+                    .help("When connecting, read where the mount thinks it's pointing before switching to Special mode, so Smooth tracking works without a star alignment")
             }
         } header: {
             Text("Mount connection")

@@ -113,8 +113,13 @@ final class MountSession {
                 transport = relay
                 #endif
                 let client = MountClient(transport: transport)
-                identity = try await client.enterSpecialMode()
+                if s.captureMountAlignment {
+                    identity = try await captureMountAlignment(client, transport)
+                } else {
+                    identity = try await client.enterSpecialMode()
+                }
                 let raw = try await client.positions()
+                let s = settings
                 unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
                 special = client
             }
@@ -664,6 +669,32 @@ final class MountSession {
         alignmentPoints = []
     }
 
+    /// Reads the mount's own pointing in Normal mode, switches to Special mode, reads the raw
+    /// axes, and keeps the pair as the alignment: the mount was aligned already, so Smooth
+    /// tracking can start without a star alignment. If the mount is in Special mode already,
+    /// it's switched out for the reading and back.
+    private func captureMountAlignment(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
+        status = "Reading the mount's alignment…"
+        if try await client.identify().isSpecialMode {
+            _ = try await client.exitSpecialMode()
+        }
+        let pointing = try await NormalModeClient(transport: transport).altAz()
+        let identity = try await client.enterSpecialMode()
+        let raw = try await client.positions()
+        let sky = Horizontal(azimuth: pointing.azimuth, altitude: pointing.altitude)
+        guard let app, let model = AlignmentModel.fromMount(sky: sky, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary)) else {
+            status = "Couldn't use the mount's alignment; align on stars instead."
+            return identity
+        }
+        app.settings.alignment = model
+        app.settings.alignmentRMS = nil
+        app.settings.alignmentStars = 0
+        app.settings.alignmentFromMount = true
+        status = String(format: "Using the mount's alignment (az zero %+.2f°, alt zero %+.2f°%@)",
+                        wrap180(model.yaw), model.altitudeOffset, model.azimuthSense < 0 ? ", azimuth reversed" : "")
+        return identity
+    }
+
     /// Fits and saves the model. One star keeps the previous axis direction; the first alignment needs two.
     func finishAlignment() -> Bool {
         guard let app else { return false }
@@ -673,6 +704,7 @@ final class MountSession {
         app.settings.alignment = model
         app.settings.alignmentRMS = alignmentPoints.count > 2 ? model.rms(alignmentPoints) : nil
         app.settings.alignmentStars = alignmentPoints.count
+        app.settings.alignmentFromMount = false
         if let raw = axes?.primary {
             // Re-anchor the turn count to the new model.
             unwrapper = AxisUnwrapper(raw: wrap180(raw), model: model, limits: app.settings.limits)

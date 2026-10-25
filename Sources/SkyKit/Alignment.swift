@@ -180,3 +180,16 @@ public enum AlignmentStarPicker {
         return chosen
     }
 }
+
+extension AlignmentModel {
+    /// The mount's own alignment, captured at the switch to Special mode: where the mount said
+    /// it was pointing in Normal mode (`:GAC#`) just before, and the raw axes (`:P2#`) just after.
+    /// One point, so the mount is taken as level. Which way the azimuth axis counts can't be
+    /// told from one point; the sense needing the smaller zero offset is kept, since an aligned
+    /// mount's axis zero sits near north.
+    public static func fromMount(sky: Horizontal, axes: AxisPosition) -> AlignmentModel? {
+        let point = AlignmentPoint(targetName: "Mount", date: .now, sky: sky, axes: axes)
+        return [1.0, -1.0].compactMap { fit([point], azimuthSense: $0) }
+            .min { abs(wrap180($0.yaw)) < abs(wrap180($1.yaw)) }
+    }
+}
