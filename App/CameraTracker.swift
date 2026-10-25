@@ -54,7 +54,7 @@ final class CameraTracker {
     // MARK: Picking
 
     /// A click in the image, in frame pixels.
-    func click(at point: (x: Double, y: Double)) async {
+    func click(at point: (x: Double, y: Double), radius: Double = 30) async {
         if settingAim {
             let size = camera.frameSize
             guard size.width > 1, size.height > 1 else { return }
@@ -64,17 +64,17 @@ final class CameraTracker {
             message = "Aim point set."
             return
         }
-        await pick(at: point)
+        await pick(at: point, radius: radius)
     }
 
     private var latestFrame: GrayFrame?
 
-    func pick(at point: (x: Double, y: Double)) async {
+    func pick(at point: (x: Double, y: Double), radius: Double = 30) async {
         guard let frame = latestFrame else {
             message = "Start the camera first."
             return
         }
-        guard let picked = MovingObjectTracker(frame: frame, at: point, radius: 30) else {
+        guard let picked = MovingObjectTracker(frame: frame, at: point, radius: radius) else {
             message = "Nothing stands out from the sky there. Click right on it."
             return
         }
@@ -106,6 +106,7 @@ final class CameraTracker {
 
     private func handle(_ frame: GrayFrame) {
         latestFrame = frame
+        defer { centreZoom(frame) }
         guard var tracker else { return }
         let guiding = app?.guider.isCalibrating == true
         let axes = mount?.axes(at: frame.timestamp)
@@ -135,6 +136,14 @@ final class CameraTracker {
             }
         }
         if tracker.state == .lost, !wasLost { message = "Lost it. Click it again to pick it up." }
+    }
+
+    /// Zoomed in, the view follows the object, or sits on the aim point when nothing is picked.
+    private func centreZoom(_ frame: GrayFrame) {
+        guard camera.zoom > 1, frame.width > 1, frame.height > 1 else { return }
+        let p = tracker.map { (x: $0.x, y: $0.y) } ?? aimPoint
+        let centre = (x: p.x / Double(frame.width - 1), y: p.y / Double(frame.height - 1))
+        if hypot(centre.x - camera.zoomCentre.x, centre.y - camera.zoomCentre.y) > 0.002 { camera.zoomCentre = centre }
     }
 
     /// For the mount loop: where the target is at `date`, in axis coordinates.

@@ -4,51 +4,63 @@ import SwiftUI
 /// Camera tracking: the camera image full size, click on something and the mount follows it.
 struct CameraTrackView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("camera.imageFraction") private var imageFraction = 0.68
+    @AppStorage("camera.zoom") private var zoom = 1.0
 
     var body: some View {
         let camera = model.cameraTracker.camera
         GeometryReader { proxy in
             if proxy.size.width > 760 {
-                HStack(spacing: 0) {
+                // Mac and iPad: image | controls, the divider draggable.
+                ResizableSplit(axis: .horizontal, fraction: $imageFraction, range: 0.4...0.75) {
                     CameraTrackScreen()
                         .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Divider()
-                    ScrollView {
-                        VStack(spacing: 10) {
-                            CameraTrackControls()
-                            MountPanel(showsGuiding: false)
-                        }
-                        .padding(12)
-                    }
-                    .frame(width: 340)
+                } second: {
+                    ScrollView { panel.padding(12) }
                 }
             } else {
                 ScrollView {
                     VStack(spacing: 10) {
-                        CameraTrackScreen().frame(height: proxy.size.width * 9 / 16)
-                        CameraTrackControls()
-                        MountPanel(showsGuiding: false)
+                        CameraTrackScreen()
+                        panel
                     }
                     .padding(12)
                 }
             }
         }
         // Every frame is needed while this screen is up; guiding alone needs about ten a second.
-        .onAppear { camera.deliversFrames = true }
-        .onDisappear { camera.deliversFrames = false }
+        // The zoom is this screen's; guiding's small preview shows the whole frame.
+        .onAppear {
+            camera.deliversFrames = true
+            camera.zoom = zoom
+        }
+        .onDisappear {
+            camera.deliversFrames = false
+            camera.zoom = 1
+        }
+        .onChange(of: camera.zoom) { _, new in zoom = new }
+    }
+
+    private var panel: some View {
+        VStack(spacing: 10) {
+            CameraTrackControls()
+            MountPanel(showsGuiding: false)
+        }
     }
 }
 
 /// The camera image, the aim point and whatever is being followed. A click picks an object.
 struct CameraTrackScreen: View {
     @Environment(AppModel.self) private var model
+    @State private var pinchStart: Double?
+    static let zooms = [1.0, 2, 4, 8]
 
     var body: some View {
         let tracker = model.cameraTracker
         let camera = tracker.camera
         GeometryReader { proxy in
-            let layout = FrameLayout(frame: camera.frameSize, view: proxy.size)
+            let layout = FrameLayout(frame: camera.frameSize, shown: camera.previewRect, view: proxy.size)
             ZStack {
                 Color.black
                 if let image = camera.preview {
@@ -56,6 +68,10 @@ struct CameraTrackScreen: View {
                 }
                 Canvas { context, _ in draw(&context, layout) }
                 VStack {
+                    HStack {
+                        Spacer()
+                        zoomPicker.padding(10)
+                    }
                     Spacer()
                     Text(hint)
                         .font(.callout)
@@ -68,11 +84,38 @@ struct CameraTrackScreen: View {
             .contentShape(Rectangle())
             .onTapGesture(coordinateSpace: .local) { location in
                 guard camera.isRunning, let point = layout.frame(location) else { return }
-                Task { await tracker.click(at: point) }
+                // About 30 points on screen, however far it's zoomed.
+                Task { await tracker.click(at: point, radius: max(6, 30 / layout.scale)) }
             }
+            .gesture(MagnifyGesture()
+                .onChanged { value in
+                    let start = pinchStart ?? camera.zoom
+                    pinchStart = start
+                    camera.zoom = min(max(start * value.magnification, 1), 8)
+                }
+                .onEnded { _ in pinchStart = nil })
         }
+        // The image's own shape, so there's no black frame around it.
+        .aspectRatio(camera.frameSize.width > 0 ? Double(camera.frameSize.width) / Double(camera.frameSize.height) : 16 / 9,
+                     contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityLabel(tracker.tracker == nil ? "Camera view. Click an object to track it." : "Camera view, following an object")
+    }
+
+    private var zoomPicker: some View {
+        let camera = model.cameraTracker.camera
+        return Picker("Zoom", selection: Binding(
+            get: { Self.zooms.min { abs($0 - camera.zoom) < abs($1 - camera.zoom) } ?? 1 },
+            set: { camera.zoom = $0 })) {
+            ForEach(Self.zooms, id: \.self) { Text("\(Int($0))×").tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .padding(4)
+        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .environment(\.colorScheme, .dark)
+        .help("Digital zoom: crops the camera's full-resolution picture around the target, or the aim point (pinch to zoom too)")
     }
 
     private var hint: String {
@@ -125,21 +168,23 @@ struct CameraTrackScreen: View {
     }
 }
 
-/// Maps between frame pixels and the view, for an image fitted inside it.
+/// Maps between frame pixels and the view, for the shown part of the frame fitted inside it.
 struct FrameLayout {
     let scale: Double
     let origin: CGPoint
-    let frameSize: (width: Int, height: Int)
+    let shown: CGRect
 
-    init(frame: (width: Int, height: Int), view: CGSize) {
-        frameSize = frame
-        guard frame.width > 0, frame.height > 0 else {
+    init(frame: (width: Int, height: Int), shown: CGRect, view: CGSize) {
+        let all = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
+        self.shown = shown.isEmpty ? all : shown
+        guard self.shown.width > 0, self.shown.height > 0 else {
             scale = 0
             origin = .zero
             return
         }
-        scale = min(view.width / Double(frame.width), view.height / Double(frame.height))
-        origin = CGPoint(x: (view.width - Double(frame.width) * scale) / 2, y: (view.height - Double(frame.height) * scale) / 2)
+        scale = min(view.width / self.shown.width, view.height / self.shown.height)
+        origin = CGPoint(x: (view.width - self.shown.width * scale) / 2 - self.shown.minX * scale,
+                         y: (view.height - self.shown.height * scale) / 2 - self.shown.minY * scale)
     }
 
     func view(_ p: (x: Double, y: Double)) -> CGPoint {
@@ -150,7 +195,7 @@ struct FrameLayout {
     func frame(_ point: CGPoint) -> (x: Double, y: Double)? {
         guard scale > 0 else { return nil }
         let x = (point.x - origin.x) / scale, y = (point.y - origin.y) / scale
-        guard x >= 0, y >= 0, x < Double(frameSize.width), y < Double(frameSize.height) else { return nil }
+        guard shown.contains(CGPoint(x: x, y: y)) else { return nil }
         return (x, y)
     }
 }
@@ -166,6 +211,9 @@ struct CameraTrackControls: View {
             CameraControls()
 
             HStack {
+                Toggle("Move the mount", isOn: $tracker.drivesMount)
+                    .disabled(tracker.driveBlocker != nil)
+                Spacer()
                 Button(role: .destructive) {
                     Task { await tracker.release() }
                 } label: {
@@ -174,9 +222,6 @@ struct CameraTrackControls: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(tracker.tracker == nil && !mount.tracksCamera)
                 .help("Stop following and stop the mount (Esc)")
-                Spacer()
-                Toggle("Move the mount", isOn: $tracker.drivesMount)
-                    .disabled(tracker.driveBlocker != nil)
             }
             if let blocker = tracker.driveBlocker {
                 Text(blocker).font(.caption).foregroundStyle(.secondary)
@@ -195,7 +240,7 @@ struct CameraTrackControls: View {
                     .disabled(model.settings.cameraAimX == 0.5 && model.settings.cameraAimY == 0.5)
             }
 
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Button(model.guider.isCalibrating ? "Calibrating…" : "Calibrate") { Task { await tracker.calibrate() } }
                     .disabled(model.guider.isCalibrating || mount.kind != .usb || mount.isTracking || tracker.tracker == nil)
                     .help("Click something that isn't moving (a star, a distant light or mast), then calibrate: the mount nudges each axis and watches it move.")

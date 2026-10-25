@@ -62,11 +62,11 @@ struct CameraControls: View {
                     .buttonStyle(.borderless)
                     .help("Look for cameras again (an iPhone appears when it's nearby, locked and on the same Apple ID)")
                     .accessibilityLabel("Refresh camera list")
-                if camera.isRunning {
-                    Button("Stop camera") { camera.stop() }
-                } else {
-                    Button("Start camera") { Task { await camera.start(deviceID: model.settings.cameraDeviceID) } }
-                }
+            }
+            if camera.isRunning {
+                Button("Stop camera") { camera.stop() }
+            } else {
+                Button("Start camera") { Task { await camera.start(deviceID: model.settings.cameraDeviceID) } }
             }
             if let error = camera.error { Text(error).font(.caption).foregroundStyle(.red) }
         }
