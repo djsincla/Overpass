@@ -47,7 +47,7 @@ The full command set and these notes are in [docs/iOptron-Special-Mode-Protocol.
 
 ## Accuracy
 
-Satellite positions come from SGP4 through [SatelliteKit](https://github.com/gavineadie/SatelliteKit), with one correction. SatelliteKit 2.1.2 reads the exponent of the TLE drag term (B*) as a character code, so every satellite had its drag set to about 10⁻⁵², and low orbits ran late by roughly 0.6 s a day after epoch and 200 s after two weeks. That explained a few things. Overpass now reads the TLE columns itself and hands SatelliteKit the right value.
+Satellite positions come from SGP4 through [SatelliteKit](https://github.com/gavineadie/SatelliteKit), with one correction. SatelliteKit 2.1.2 reads the exponent of the TLE drag term (B*) as a character code, so every satellite had its drag set to about 10⁻⁵², and low orbits ran late by roughly 0.6 s a day after epoch and 200 s after two weeks. That explained a few things. Overpass now reads the TLE columns itself and hands SatelliteKit the right value. The bug is reported upstream as [SatelliteKit #16](https://github.com/gavineadie/SatelliteKit/issues/16), with a one-line fix in [#17](https://github.com/gavineadie/SatelliteKit/pull/17).
 
 I checked the results against two independent sources:
 

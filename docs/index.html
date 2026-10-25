@@ -145,7 +145,7 @@
 
 <section>
   <h2>Accuracy</h2>
-  <p>Satellite positions come from SGP4 through SatelliteKit, with one correction. SatelliteKit 2.1.2 reads the exponent of the TLE drag term as a character code, so every satellite had its drag set to about 10<sup>−52</sup> and low orbits ran late by roughly 0.6 s a day after epoch and 200 s after two weeks. That explained a few things. Overpass now reads the TLE columns itself.</p>
+  <p>Satellite positions come from SGP4 through SatelliteKit, with one correction. SatelliteKit 2.1.2 reads the exponent of the TLE drag term as a character code, so every satellite had its drag set to about 10<sup>−52</sup> and low orbits ran late by roughly 0.6 s a day after epoch and 200 s after two weeks. That explained a few things. Overpass now reads the TLE columns itself. The bug is reported upstream as <a href="https://github.com/gavineadie/SatelliteKit/issues/16">SatelliteKit #16</a>, with a one-line fix in <a href="https://github.com/gavineadie/SatelliteKit/pull/17">#17</a>.</p>
   <table>
     <tr><th>Checked against</th><th>What</th><th>Agreement</th></tr>
     <tr><td>Reference SGP4 (Vallado, as used by Skyfield)</td><td>Vanguard 1, and the ISS a week after epoch</td><td class="num">within 10 m</td></tr>
