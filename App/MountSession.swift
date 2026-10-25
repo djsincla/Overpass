@@ -775,14 +775,17 @@ final class MountSession {
 
     /// True while Check axes runs.
     private(set) var isCheckingAxes = false
+    /// The last axis check's readings, for diagnosing an inconclusive result.
+    private(set) var axisCheckReport: String?
 
     /// Measures which way each raw axis counts and refits the alignment: compares the mount's
     /// own pointing (Normal mode) with the raw axes (Special mode) here, after nudging altitude
-    /// about 2.5°, and after nudging azimuth about 2.5°, then returns to where it started.
+    /// about 5°, and after nudging azimuth about 5°, then returns to where it started.
     func checkAxes() async {
         guard let special, specialTransport != nil, !isTracking else { return }
         await cancelTracking()
         isCheckingAxes = true
+        axisCheckReport = nil
         prepareTask = Task {
             defer { isCheckingAxes = false; prepareTask = nil }
             do {
@@ -791,16 +794,21 @@ final class MountSession {
                 status = "Checking axes 2 of 3: nudging altitude…"
                 // Raw secondary up 5°; if that's the wrong way it's lower, which the check reveals.
                 let lift: Double = start.sky.altitude > 70 ? -1 : 1
-                try await nudgeRaw(special, primary: 0, secondary: lift * 2.5)
+                try await nudgeRaw(special, primary: 0, secondary: lift * 5)
                 let raised = try await compareWithMount(special)
                 status = "Checking axes 3 of 3: nudging azimuth…"
                 let turn: Double = wouldHitCableStop(raised.axes, primaryRate: 1) ? -1 : 1
-                try await nudgeRaw(special, primary: turn * 2.5, secondary: 0)
+                try await nudgeRaw(special, primary: turn * 5, secondary: 0)
                 let turned = try await compareWithMount(special)
                 try await special.slew(primary: wrap180(start.axes.primary), secondary: start.axes.secondary)
 
                 let altitude = AlignmentModel.axisSenses(start, raised).altitude
                 let azimuth = AlignmentModel.axisSenses(raised, turned).azimuth
+                func line(_ name: String, _ p: AlignmentPoint) -> String {
+                    String(format: "%@  mount az %7.2f alt %6.2f  ·  raw P0 %8.2f P1 %7.2f",
+                           name, p.sky.azimuth, p.sky.altitude, wrap180(p.axes.primary), p.axes.secondary)
+                }
+                axisCheckReport = [line("start ", start), line("alt+5 ", raised), line("az+5  ", turned)].joined(separator: "\n")
                 guard let altitude, let azimuth, let app else {
                     status = "Axis check inconclusive: an axis didn't move as expected. Nothing changed."
                     return

@@ -236,6 +236,13 @@ struct MountPanel: View {
                     .help("Nudges each axis a little and compares with the mount's own pointing, to learn which way the axes count and refit the alignment")
                 Button("Align…") { showingAlignment = true }.controlSize(.small)
             }
+            if let report = mount.axisCheckReport {
+                Text(report)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
             HStack {
                 Text("Centre \(target.name), then sync to improve the mount's pointing.")
