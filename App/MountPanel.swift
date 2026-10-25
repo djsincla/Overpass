@@ -145,7 +145,9 @@ struct MountPanel: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(target?.name ?? "No target set").font(.callout.weight(.medium)).lineLimit(1)
                     if let detail = targetDetail {
-                        Text(detail).font(.caption.monospacedDigit()).foregroundStyle(mount.isTracking ? Theme.target : .secondary).lineLimit(1)
+                        Text(detail).font(.caption.monospacedDigit())
+                            .foregroundStyle(model.timeShift != 0 ? Theme.focus : mount.isTracking ? Theme.target : .secondary)
+                            .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 4)
@@ -195,9 +197,11 @@ struct MountPanel: View {
     /// "Step · tracking" while running; otherwise when the pass starts and how high it gets.
     private var targetDetail: String? {
         guard model.targetObject != nil else { return nil }
-        if let mode = model.mount.trackingMode { return "\(mode.rawValue) tracking" }
+        let shift = model.timeShift
+        let timeline = shift == 0 ? "" : " · timeline \(shift < 0 ? "−" : "+")\(countdown(abs(shift)))"
+        if let mode = model.mount.trackingMode { return "\(mode.rawValue) tracking\(timeline)" }
         if let pass = model.targetPass {
-            return "\(pass.start.date.formatted(date: .omitted, time: .shortened)) · peaks \(Int(pass.maxAltitude))°"
+            return "\(pass.start.date.formatted(date: .omitted, time: .shortened)) · peaks \(Int(pass.maxAltitude))°\(timeline)"
         }
         return nil
     }

@@ -103,8 +103,7 @@ struct ObserveView: View {
                     liveObjects: model.liveObjects(at: date),
                     highlightedObjectID: model.highlightedObject?.id,
                     targetObjectID: model.targetObjectID,
-                    // The scope points in real time, so it only belongs on the live sky.
-                    scopePosition: model.timeShift == 0 ? model.mount.skyPosition : nil,
+                    scopePosition: model.mount.skyPosition,
                     onTapObject: { model.highlight(objectID: $0) })
         }
     }
@@ -155,7 +154,7 @@ struct PassesList: View {
                                                 target: model.targetPassID == pass.id))
                 .contextMenu {
                     Button("Set as tracking target") { model.setTarget(pass: pass) }
-                        .disabled(model.mount.isTracking || pass.end.date < .now)
+                        .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
                     Button("Details") { detail = pass }
                 }
             }
@@ -168,7 +167,7 @@ struct PassesList: View {
                             ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } }
                             ToolbarItem(placement: .primaryAction) {
                                 Button("Set as tracking target") { model.setTarget(pass: pass); detail = nil }
-                                    .disabled(model.mount.isTracking || pass.end.date < .now)
+                                    .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
                             }
                         }
                 }

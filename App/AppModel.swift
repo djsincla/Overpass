@@ -143,8 +143,8 @@ final class AppModel {
     /// SkyObject ids ("sat:25544", "body:moon", "star:Vega"). Predictions and highlights follow these.
     var selected: Set<String> { didSet { save(Array(selected), "selectedObjects"); if selected != oldValue { schedulePrediction() } } }
 
-    /// The time bar: how far the dome and the lists are moved from now (±2 days). Never
-    /// affects the mount, which always works in real time.
+    /// The time bar: how far the dome, the lists and tracking are moved from now (±2 days).
+    /// Sync and alignment always use real time.
     var timeShift: TimeInterval = 0 {
         didSet { if timeShift != 0 && !predictedWide { schedulePrediction() } }
     }
@@ -266,10 +266,11 @@ final class AppModel {
         guard !mount.isTracking, let object = highlightedObject else { return }
         targetObjectID = object.id
         if case .satellite(let s) = object {
-            // Only a pass that hasn't finished in real time can be tracked.
-            let highlighted = highlightedPass(at: viewDate()).flatMap { $0.end.date > .now ? $0 : nil }
+            // Tracking follows the time bar, so any pass not over at that time can be tracked.
+            let now = viewDate()
+            let highlighted = highlightedPass(at: now)
             let pass = highlighted?.noradID == s.noradID ? highlighted
-                : passes.first { $0.noradID == s.noradID && $0.end.date > .now }
+                : passes.first { $0.noradID == s.noradID && $0.end.date > now }
             targetPassKey = pass.map { ($0.noradID, $0.start.date) }
         } else {
             targetPassKey = nil
@@ -277,7 +278,7 @@ final class AppModel {
     }
 
     func setTarget(pass: SatellitePass) {
-        guard !mount.isTracking, pass.end.date > .now else { return }
+        guard !mount.isTracking, pass.end.date > viewDate() else { return }
         targetObjectID = "sat:\(pass.noradID)"
         targetPassKey = (pass.noradID, pass.start.date)
     }

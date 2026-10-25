@@ -66,6 +66,11 @@ final class MountSession {
 
     private var settings: Settings { app?.settings ?? Settings() }
 
+    /// The time tracking follows: the Observe screen's time bar, so a shifted timeline can be
+    /// rehearsed on the mount. Timeouts and step intervals still use the real clock, and sync and
+    /// alignment always use real time (the scope is on the real star).
+    private var skyNow: Date { app?.viewDate() ?? .now }
+
     var availableModes: [TrackingMode] {
         switch kind {
         case .wifi: [.passive, .step]
@@ -348,7 +353,7 @@ final class MountSession {
 
     /// Where `pass` first reaches the start elevation, if it hasn't already gone past it.
     func startPoint(of pass: SatellitePass) -> PassSample? {
-        guard let point = pass.startPoint(above: startAltitude), point.date > .now else { return nil }
+        guard let point = pass.startPoint(above: startAltitude), point.date > skyNow else { return nil }
         return point
     }
 
@@ -366,7 +371,7 @@ final class MountSession {
                     status = "Slewing to start point at full speed…"
                     try await goto(normal, to: point.position)
                     // MSS leaves tracking off, so the mount holds there.
-                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSinceNow))"
+                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSince(skyNow)))"
                 } else if let special {
                     try await driveToPlanStart(pass, special)
                 }
@@ -396,7 +401,7 @@ final class MountSession {
             let goal = plan.start
             if abs(goal.primary - current.primary) < 0.02 && abs(goal.secondary - current.secondary) < 0.02 {
                 try await special.stop()
-                status = "Ready at the start point · rises in \(countdown(plan.samples[0].date.timeIntervalSinceNow))"
+                status = "Ready at the start point · rises in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))"
                 return
             }
             guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
@@ -414,7 +419,7 @@ final class MountSession {
         let observer = s.observer
         // Get there by the allowed way round first; the RA/Dec goto that starts tracking is then tiny.
         status = "Slewing at full speed…"
-        try await goto(normal, to: try observer.look(at: object.target, AstroTime(.now)))
+        try await goto(normal, to: try observer.look(at: object.target, AstroTime(skyNow)))
 
         if how == .holdPosition {
             status = "Holding position (geostationary)"
@@ -427,7 +432,7 @@ final class MountSession {
         }
         // The Moon's parallax changes as it moves, so re-centre it every few minutes.
         repeat {
-            let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(.now))
+            let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(skyNow))
             try await normal.slew(rightAscension: ra, declination: dec, rate: rate)
             status = "Mount tracking at \(rate == .lunar ? "lunar" : rate == .solar ? "solar" : "sidereal") rate"
             if how != .lunar { return }
@@ -441,25 +446,26 @@ final class MountSession {
         while !Task.isCancelled {
             let s = settings
             let tick = Date.now
+            let sky = skyNow
             let interval = max(0.5, s.stepInterval)
-            if let pass, tick > pass.end.date + 5 {
+            if let pass, sky > pass.end.date + 5 {
                 status = "Pass over"
                 return
             }
-            var aim = try StepTracking.aim(at: object.target, observer: s.observer, now: tick + timeOffset,
+            var aim = try StepTracking.aim(at: object.target, observer: s.observer, now: sky + timeOffset,
                                            lead: StepTracking.defaultLead(interval: interval))
             aim.azimuth = normalizedDegrees(aim.azimuth + azimuthOffset)
             aim.altitude += altitudeOffset
 
             if aim.altitude < startAltitude {
                 // Before the pass: wait where it first reaches the start elevation, once.
-                if let pass, let point = pass.startPoint(above: startAltitude), tick < point.date, !waitingAtRise {
+                if let pass, let point = pass.startPoint(above: startAltitude), sky < point.date, !waitingAtRise {
                     status = "Slewing to start point at full speed…"
                     try await goto(normal, to: point.position)
                     waitingAtRise = true
                 }
                 status = pass.flatMap { $0.startPoint(above: startAltitude) }
-                    .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSinceNow))" }
+                    .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSince(skyNow)))" }
                     ?? "Below \(Int(startAltitude))°"
             } else {
                 // Read at the end of the last step; good enough to tell which way round to go.
@@ -557,7 +563,7 @@ final class MountSession {
         while !Task.isCancelled {
             let s = settings
             let latency = 0.05
-            let t = Date.now + timeOffset + latency
+            let t = skyNow + timeOffset + latency
             guard let current = try await readPosition() else { return }
 
             var desired: AxisPosition
@@ -578,7 +584,7 @@ final class MountSession {
                     desired = plan.start
                     rates = (0, 0)
                     controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
-                    status = "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSinceNow))"
+                    status = "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))"
                 }
             } else {
                 // Not a pass: follow the object directly, staying on the current azimuth turn.
