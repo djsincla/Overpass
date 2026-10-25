@@ -120,3 +120,44 @@ extension SatellitePass {
         track.first { $0.position.altitude >= altitude }
     }
 }
+
+/// One period above the horizon for a slow mover: the Sun, Moon, planets, stars.
+public struct UpPeriod: Sendable {
+    /// Nil when it was already up at the start of the search (the rise is before it).
+    public let rise: Date?
+    public let peak: Date?
+    /// Nil when it's still up at the end of the search, or never sets (circumpolar).
+    public let set: Date?
+    public let maxAltitude: Double?
+    public let riseAzimuth: Double?
+    public let setAzimuth: Double?
+}
+
+extension Observer {
+    /// Every period above `horizon` that starts before `to`, beginning with the one in progress
+    /// at `from` if the object is up then. A circumpolar object gives one period with no set.
+    public func upPeriods(of target: some Target, from: Date, to: Date, horizon: Double = 0) throws -> [UpPeriod] {
+        var periods: [UpPeriod] = []
+        var t = from
+        while t < to {
+            let v = try visibility(of: target, at: t, horizon: horizon)
+            guard v.rise != nil || v.set != nil else {
+                // Up the whole window (circumpolar), or not rising within it (polar night).
+                if v.altitude > horizon {
+                    periods.append(UpPeriod(rise: nil, peak: v.peak, set: nil, maxAltitude: v.maxAltitude,
+                                            riseAzimuth: nil, setAzimuth: nil))
+                    break
+                }
+                t += 30 * 3600
+                continue
+            }
+            if let rise = v.rise, rise >= to { break }
+            let azimuth = { (date: Date?) in try date.map { try self.look(at: target, AstroTime($0)).azimuth } }
+            periods.append(UpPeriod(rise: v.rise.flatMap { $0 >= from ? $0 : nil }, peak: v.peak, set: v.set,
+                                    maxAltitude: v.maxAltitude, riseAzimuth: try azimuth(v.rise), setAzimuth: try azimuth(v.set)))
+            guard let set = v.set else { break }
+            t = max(set + 60, t + 60)
+        }
+        return periods
+    }
+}

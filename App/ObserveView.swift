@@ -76,6 +76,15 @@ struct ObserveView: View {
                     .help("Night vision: red on black")
                 }
                 ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        model.calculatorObjectID = model.highlightedObject?.id ?? model.selectedObjects.first?.id
+                    } label: {
+                        Label("Pass calculator", systemImage: "calendar.badge.clock")
+                    }
+                    .help("Every pass of an object over the next two weeks")
+                    .disabled(model.selectedObjects.isEmpty)
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button { showingFilters = true } label: {
                         Label("Pass filters", systemImage: "line.3.horizontal.decrease.circle")
                     }
@@ -85,6 +94,10 @@ struct ObserveView: View {
                 }
             }
             .sheet(isPresented: $showingFilters) { FilterSheet() }
+            .sheet(isPresented: Binding(get: { model.calculatorObjectID != nil },
+                                        set: { if !$0 { model.calculatorObjectID = nil } })) {
+                PassCalculatorView(objectID: model.calculatorObjectID ?? "")
+            }
         }
     }
 
@@ -156,6 +169,7 @@ struct PassesList: View {
                     Button("Set as tracking target") { model.setTarget(pass: pass) }
                         .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
                     Button("Details") { detail = pass }
+                    Button("Pass calculator…") { model.calculatorObjectID = "sat:\(pass.noradID)" }
                 }
             }
             .listStyle(.plain)
@@ -230,6 +244,7 @@ struct SelectedObjectsList: View {
                     .contextMenu {
                         Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
                             .disabled(model.mount.isTracking)
+                        Button("Pass calculator…") { model.calculatorObjectID = object.id }
                     }
                 }
                 .listStyle(.plain)

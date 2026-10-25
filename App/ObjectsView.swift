@@ -78,6 +78,8 @@ struct ObjectsView: View {
                         Button("Add a TLE URL…") { addingURL = true }
                         Button("Import a TLE file…") { importing = true }
                         Divider()
+                        Button("Deselect satellites that never rise here") { Task { await model.deselectNeverRising() } }
+                            .disabled(model.isPruning)
                         Button("Clear selection", role: .destructive) { model.selected = [] }
                     } label: {
                         Label("More", systemImage: model.isRefreshing ? "arrow.triangle.2.circlepath" : "ellipsis.circle")
@@ -275,6 +277,8 @@ struct SourceHeader: View {
             Menu {
                 Button(filtered ? "Select the \(shown.count) shown" : "Select all \(shown.count)") { select(shown, true) }
                 Button(filtered ? "Deselect the \(shown.count) shown" : "Deselect all") { select(shown, false) }
+                Button("Deselect ones that never rise here") { Task { await model.deselectNeverRising(in: group) } }
+                    .disabled(model.isPruning)
                 if filtered {
                     Divider()
                     Button("Show all \(group.satellites.count)") { clearFilters() }

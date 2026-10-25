@@ -176,6 +176,10 @@ final class AppModel {
     private(set) var passes: [SatellitePass] = []
     private(set) var isPredicting = false
     private(set) var isRefreshing = false
+    /// Checking selected satellites for ones that never rise here.
+    private(set) var isPruning = false
+    /// The object the pass calculator is open on.
+    var calculatorObjectID: String?
     var message: String?
 
     let mount = MountSession()
@@ -318,6 +322,38 @@ final class AppModel {
             guard let h = try? observer.look(at: object.target, time), h.altitude > 0 else { return nil }
             let sunlit: Bool = if case .satellite(let s) = object { (try? s.isSunlit(at: time)) ?? false } else { true }
             return LiveObject(id: object.id, name: object.name, position: h, sunlit: sunlit)
+        }
+    }
+
+    /// Deselects the selected satellites (in one source, or all) that never get above the lowest
+    /// altitude from here in the next week: wrong latitude for their orbit, or geostationary
+    /// below the horizon.
+    func deselectNeverRising(in group: SourceGroup? = nil) async {
+        let ids = group.map { Set($0.satellites.map(\.noradID)) }
+        let candidates: [SatelliteTarget] = selectedObjects.compactMap { object in
+            guard case .satellite(let s) = object, ids?.contains(s.noradID) ?? true else { return nil }
+            return s
+        }
+        guard !candidates.isEmpty else {
+            message = "No selected satellites to check."
+            return
+        }
+        isPruning = true
+        defer { isPruning = false }
+        var predictor = PassPredictor(observer: settings.observer)
+        predictor.minimumAltitude = settings.minimumAltitude
+        let now = Date.now
+        let never = await predictor.neverRising(candidates, from: now, to: now + 7 * 86_400)
+        var selection = selected
+        selection.subtract(never.map { "sat:\($0.noradID)" })
+        selected = selection
+        let above = "above \(Int(settings.minimumAltitude))° from here in the next 7 days"
+        if never.isEmpty {
+            message = "All \(candidates.count) selected satellites rise \(above)."
+        } else {
+            let names = never.map(\.name).sorted()
+            let list = names.prefix(10).joined(separator: ", ") + (names.count > 10 ? ", and \(names.count - 10) more" : "")
+            message = "Deselected \(never.count) of \(candidates.count) that never rise \(above): \(list)."
         }
     }
 

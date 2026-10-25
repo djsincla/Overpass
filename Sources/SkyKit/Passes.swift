@@ -88,6 +88,33 @@ public struct PassPredictor: Sendable {
         return h.altitude - threshold(h.azimuth)
     }
 
+    /// Whether the satellite gets above the minimum altitude (and mask) at all in [from, to].
+    /// A coarse scan that stops at the first sighting and builds no tracks, so it's cheap enough
+    /// to run over hundreds of satellites. Grazes shorter than the scan step can be missed.
+    public func rises(_ target: SatelliteTarget, from: Date, to: Date) throws -> Bool {
+        let step: TimeInterval = target.period < 225 ? 20 : 300
+        var t = from
+        while t <= to {
+            if try margin(target, t) > 0 { return true }
+            t += step
+        }
+        return false
+    }
+
+    /// The satellites that never get above the minimum altitude in [from, to]. Ones that fail
+    /// to propagate (decayed, bad elements) count as never rising.
+    public func neverRising(_ targets: [SatelliteTarget], from: Date, to: Date) async -> [SatelliteTarget] {
+        let predictor = self
+        return await withTaskGroup(of: SatelliteTarget?.self) { group in
+            for target in targets {
+                group.addTask { ((try? predictor.rises(target, from: from, to: to)) ?? false) ? nil : target }
+            }
+            var never: [SatelliteTarget] = []
+            for await t in group { if let t { never.append(t) } }
+            return never
+        }
+    }
+
     /// All passes in [from, to], oldest first.
     public func passes(of target: SatelliteTarget, from: Date, to: Date) throws -> [SatellitePass] {
         // Coarse scan short enough not to miss brief low passes of LEO objects.
