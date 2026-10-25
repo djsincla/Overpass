@@ -298,6 +298,7 @@ struct TraceView: View {
         let all = model.mount.trace
         let trace = all.last.map { last in all.filter { last.date.timeIntervalSince($0.date) <= 60 } } ?? []
         let gaps = trace.map(\.loopInterval)
+        let stall = max(0.3, 1.5 * model.settings.trackingPeriod)
         let errors = trace.map { $0.error * 3600 }.sorted()
         let median = errors.isEmpty ? 0 : errors[errors.count / 2]
         VStack(alignment: .leading, spacing: 4) {
@@ -324,8 +325,8 @@ struct TraceView: View {
                     line.addLine(to: CGPoint(x: size.width, y: y(mark)))
                     context.stroke(line, with: .color(.secondary.opacity(0.25)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                 }
-                // Loop stalls (over 0.3 s) as red bars.
-                for s in trace where s.loopInterval > 0.3 {
+                // Loop stalls (well over the update period) as red bars.
+                for s in trace where s.loopInterval > stall {
                     context.fill(Path(CGRect(x: x(s.date) - 1, y: 0, width: 2, height: size.height)), with: .color(Theme.scope.opacity(0.6)))
                 }
                 var path = Path()

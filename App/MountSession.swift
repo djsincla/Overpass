@@ -629,6 +629,9 @@ final class MountSession {
         while !Task.isCancelled {
             let loopStart = Date.now
             let s = settings
+            // A correction acts for a whole period: 1.5 × error per second over 2 s would
+            // overshoot and grow, so keep gain × period under about 0.7.
+            controller.gain = min(1.5, 0.7 / s.trackingPeriod)
             // Position is compared at the moment the axes were read; only the feed-forward
             // rate looks ahead, to when the speed command takes effect. Aiming the position
             // ahead as well held the scope ~50 ms in front of the satellite (tens of arc-seconds).
@@ -655,7 +658,9 @@ final class MountSession {
                         continue
                     }
                     desired = target.axes
-                    let ahead = plan.target(at: t + latency) ?? target
+                    // The speed is held until the next update: use the satellite's speed over that
+                    // interval (its middle), which at long periods matters more than the latency.
+                    let ahead = plan.target(at: t + latency + s.trackingPeriod / 2) ?? target
                     rates = (ahead.primaryRate, ahead.secondaryRate)
                     // Far off with no mount slew to catch up with: catch up at full speed.
                     controller.maximumCorrection = gap > 2 ? max(s.maximumAzimuthRate, s.maximumAltitudeRate) : 2
