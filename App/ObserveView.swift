@@ -92,6 +92,17 @@ struct ObserveView: View {
                 if model.isPredicting {
                     ToolbarItem(placement: .status) { ProgressView().controlSize(.small) }
                 }
+                // Always reachable, however the panels are arranged or scrolled.
+                if model.mount.isTracking || model.mount.isPreparing {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(role: .destructive) { Task { await model.mount.stopAll() } } label: {
+                            Label("Cancel tracking", systemImage: "xmark.circle.fill")
+                        }
+                        .tint(Theme.scope)
+                        .keyboardShortcut(.escape, modifiers: [])
+                        .help("Cancel tracking or the move to the start point, and stop the mount (Esc)")
+                    }
+                }
             }
             .sheet(isPresented: $showingFilters) { FilterSheet() }
             .sheet(isPresented: Binding(get: { model.calculatorObjectID != nil },

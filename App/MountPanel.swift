@@ -150,6 +150,13 @@ struct MountPanel: View {
                             .lineLimit(1)
                     }
                 }
+                if target != nil && !mount.isTracking && !mount.isPreparing {
+                    Button { model.clearTarget() } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help("Clear the tracking target")
+                        .accessibilityLabel("Clear target")
+                }
                 Spacer(minLength: 4)
                 Button(highlighted.map { "Set to \($0.name)" } ?? "Set target") { model.setTargetFromHighlight() }
                     .controlSize(.small)
@@ -163,7 +170,12 @@ struct MountPanel: View {
             }
 
             HStack {
-                if let pass = model.targetPass, !mount.isTracking {
+                if mount.isPreparing {
+                    Button(role: .destructive) { Task { await mount.stopAll() } } label: {
+                        Label("Cancel move", systemImage: "xmark.circle")
+                    }
+                    .help("Stop moving to the start point (Esc)")
+                } else if let pass = model.targetPass, !mount.isTracking {
                     if let point = mount.startPoint(of: pass) {
                         Button {
                             Task { await mount.moveToStart(of: pass) }
