@@ -13,6 +13,8 @@ struct SettingsView: View {
 
     @Environment(AppModel.self) private var model
     @State private var advice: [CableStopAdvisor.Option] = []
+    @State private var slewTest: String?
+    @State private var testingSlew = false
     #if os(macOS)
     @State private var serialPorts: [String] = []
     #endif
@@ -146,6 +148,18 @@ struct SettingsView: View {
                 Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
                 Toggle("Use the mount's own alignment", isOn: $model.settings.captureMountAlignment)
                     .help("When connecting, read where the mount thinks it's pointing before switching to Special mode, so Smooth tracking works without a star alignment")
+                Button(testingSlew ? "Testing the mount's slew…" : "Test the mount's slew") {
+                    testingSlew = true
+                    Task {
+                        slewTest = await model.mount.testNativeSlew()
+                        testingSlew = false
+                    }
+                }
+                .disabled(testingSlew || model.mount.kind != .usb || model.mount.state != .connected)
+                .help("Moves the azimuth axis about 25°, including across north, to learn how the mount's own slew counts position. Stand by the mount.")
+                if let slewTest {
+                    Text(slewTest).font(.caption.monospacedDigit()).textSelection(.enabled)
+                }
             }
         } header: {
             Text("Mount connection")

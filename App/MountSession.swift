@@ -778,6 +778,78 @@ final class MountSession {
         return true
     }
 
+    // MARK: Testing the mount's own slew
+
+    /// Finds out how `:T0#` reads its target: whether it uses the same zero and direction as the
+    /// position reading, and what it does across the ±180° wrap (the short way, or the long way
+    /// round as if ±180° were two ends). Every move is watched and stopped if it goes more than 2°
+    /// the wrong way. Returns a report.
+    func testNativeSlew() async -> String {
+        guard let special else { return "Connect over USB (Special mode) first." }
+        await stopAll()
+        var report: [String] = []
+        do {
+            guard let start = try await readPosition() else { return "No position from the mount." }
+            let r0 = wrap180(start.primary)
+            report.append(String(format: "Start: azimuth axis reads %+.2f°.", r0))
+
+            // 1. A small move inside the reading's range.
+            let near = r0 - 5 > -170 ? r0 - 5 : r0 + 5
+            report.append(try await watchSlew(special, to: near, label: "5° slew"))
+
+            // 2. Across the wrap, if the cable stop allows it there.
+            let side: Double = r0 >= 0 ? 1 : -1
+            let before = side * 177, after = -side * 177
+            let current = try await readPosition() ?? start
+            let wrapGoal = current.primary + wrap180(after - wrap180(current.primary))
+            let crossing = AxisPosition(primary: wrapGoal, secondary: current.secondary)
+            let model = settings.alignment ?? AlignmentModel()
+            let lo = settings.cableStopAzimuth + model.yaw + settings.cableMargin
+            let path = [current.primary, current.primary + wrap180(before - wrap180(current.primary)), crossing.primary]
+                .map { model.azimuthSense * $0 }
+            if path.allSatisfy({ $0 > lo && $0 < lo + 360 - 2 * settings.cableMargin }) {
+                report.append(try await watchSlew(special, to: before, label: "Slew to the wrap"))
+                report.append(try await watchSlew(special, to: after, label: "6° across the wrap"))
+            } else {
+                report.append("Skipped the wrap test: the cable stop is in the way from here.")
+            }
+        } catch {
+            try? await special.stop()
+            report.append("Stopped: \(describe(error))")
+        }
+        try? await special.stop()
+        let text = report.joined(separator: "\n")
+        status = "Slew test finished"
+        return text
+    }
+
+    /// One `:T0#` slew to a raw reading, watched at 4 Hz for up to 15 s.
+    private func watchSlew(_ special: MountClient, to raw: Double, label: String) async throws -> String {
+        guard let first = try await readPosition() else { return "\(label): no position." }
+        let from = wrap180(first.primary)
+        // Which way the short path goes, on the continuous axis.
+        let shortWay = wrap180(raw - from)
+        try await special.slew(primary: raw, secondary: first.secondary)
+        let started = Date.now
+        var moved = 0.0
+        while Date.now.timeIntervalSince(started) < 15 {
+            try await Task.sleep(for: .milliseconds(250))
+            guard let now = try await readPosition() else { break }
+            moved = now.primary - first.primary
+            let reading = wrap180(now.primary)
+            if abs(wrap180(reading - raw)) < 0.2 {
+                return String(format: "%@ from %+.2f° to %+.2f°: arrived after moving %+.1f° (the short way is %+.1f°). %@", label, from, raw, moved, shortWay,
+                              abs(moved - shortWay) < 1 ? "Same frame as the reading." : "A different way round from the reading.")
+            }
+            if moved * shortWay < 0 && abs(moved) > 2 {
+                try await special.stop()
+                return String(format: "%@ from %+.2f° to %+.2f°: went the wrong way (%+.1f° when the short way is %+.1f°), stopped.", label, from, raw, moved, shortWay)
+            }
+        }
+        try await special.stop()
+        return String(format: "%@ from %+.2f° to %+.2f°: hadn't arrived after 15 s, moved %+.1f°, stopped.", label, from, raw, moved)
+    }
+
     /// Polls (4 Hz) until the axes reach `target`, or stop moving short of it. False if the
     /// mount is moving away from the target instead.
     private func waitForArrival(_ target: AxisPosition, deadline: Date) async throws -> Bool {
