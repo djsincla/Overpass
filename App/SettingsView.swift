@@ -84,6 +84,12 @@ struct SettingsView: View {
                         LabeledSlider("Altitude axis up to", value: $model.settings.maximumAltitudeAxis, in: 95...180, step: 5, unit: "°")
                     }
                     LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
+                    Picker("Normal mode updates", selection: $model.settings.normalModePeriod) {
+                        ForEach([0.5, 1, 2, 5], id: \.self) { period in
+                            Text("Every \(period.formatted(.number.precision(.fractionLength(0...1)))) s").tag(period)
+                        }
+                    }
+                    .help("Normal mode (WiFi or USB): how often the position is read while idle, and the shortest Step tracking interval. Sub-second commands have caused trouble on the HAZ46 in Normal mode.")
                     Picker("Smooth tracking updates", selection: $model.settings.trackingPeriod) {
                         ForEach([0.05, 0.1, 0.2, 0.5, 1, 2], id: \.self) { period in
                             Text("Every \(period.formatted(.number.precision(.fractionLength(0...2)))) s").tag(period)

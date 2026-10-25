@@ -138,7 +138,7 @@ struct MountPanel: View {
                     Chip(text: "Smooth", systemImage: "waveform.path", tint: Theme.accent).help(modeExplanation)
                 }
                 if mount.preferredMode == .step && mount.kind?.isSpecialMode == false {
-                    Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
+                    Stepper(value: $model.settings.stepInterval, in: max(0.5, model.settings.normalModePeriod)...10, step: 0.5) {
                         Text("every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
                             .font(.callout.monospacedDigit())
                     }

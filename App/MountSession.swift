@@ -306,7 +306,9 @@ final class MountSession {
                         }
                     }
                 }
-                try? await Task.sleep(for: .milliseconds(500))
+                // Special mode is polled twice a second; Normal mode at its configured pace.
+                let pause = special != nil ? 0.5 : max(0.5, settings.normalModePeriod)
+                try? await Task.sleep(for: .seconds(pause))
             }
         }
     }
@@ -600,7 +602,7 @@ final class MountSession {
             let s = settings
             let tick = Date.now
             let sky = skyNow
-            let interval = max(0.5, s.stepInterval)
+            let interval = max(s.normalModePeriod, s.stepInterval)
             if let pass, sky > pass.end.date + 5 {
                 status = "Pass over"
                 return

@@ -59,6 +59,9 @@ struct Settings: Codable, Equatable {
     var trackingStartAltitude: Double = 10
 
     var stepInterval: Double = 2
+    /// Normal mode (WiFi or USB): the shortest time between commands, for position polling and
+    /// Step tracking. Sub-second updates have caused trouble on the HAZ46 in Normal mode.
+    var normalModePeriod: Double = 1
     /// Smooth tracking: seconds between speed updates. Each takes a position read and a speed
     /// command, about 45 ms on the HAZ46, so 0.05 runs them nearly back to back.
     var trackingPeriod: Double = 0.1

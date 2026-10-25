@@ -91,5 +91,6 @@ Everything here was measured on one HAZ46 (MountInfo 0052 / 8052) over USB, with
 - One Smooth-tracking update (`:P2#` plus `:M2…#`) takes about 45 ms at 115,200 baud, nearly all of it waiting for the mount to answer, so 0.05 s is about as fast as updates can go.
 - Every 5 s or so, one position reply comes about 15 ms late. Timestamping positions at a typical exchange delay, and holding the planned speed through a lone outlier, removed the 10–20″ spikes this caused.
 - Settled Smooth tracking has a median error of about 2–3″, which is the mount's own reading noise.
+- In Normal mode, commands more often than once a second have caused problems (the user's observation, 25 Oct 2026; details not yet pinned down). Overpass's Normal-mode polling and Step tracking default to once a second, configurable from 0.5 to 5 s.
 - On the Mac, the USB adapter is a Prolific PL2303G and appears as `/dev/cu.PL2303G-USBtoUART210`.
 
