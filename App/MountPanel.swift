@@ -1,6 +1,7 @@
 import IOptronKit
 import SkyKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Connection, manual moves, tracking and fine tuning, kept compact so it fits without scrolling.
 struct MountPanel: View {
@@ -168,6 +169,9 @@ struct MountPanel: View {
             if let target, let scope = mount.skyPosition {
                 PointingError(target: target, scope: scope)
             }
+            if !mount.trace.isEmpty {
+                TraceView()
+            }
 
             HStack {
                 if mount.isPreparing {
@@ -298,6 +302,77 @@ struct MountPanel: View {
         case .unknown(let code): "Mount \(code)"
         }
         return "\(name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
+    }
+}
+
+/// The last minute of Smooth tracking: the error over time (log scale, 1″ to 1°), with any
+/// stalls of the loop marked, and the raw numbers to export.
+struct TraceView: View {
+    @Environment(AppModel.self) private var model
+    @State private var exporting = false
+
+    var body: some View {
+        let trace = model.mount.trace
+        let gaps = trace.map(\.loopInterval)
+        let errors = trace.map { $0.error * 3600 }.sorted()
+        let median = errors.isEmpty ? 0 : errors[errors.count / 2]
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                SectionLabel("Last minute")
+                Spacer()
+                Text(String(format: "median %.0f″ · worst %.0f″ · longest loop %.2f s", median, errors.last ?? 0, gaps.max() ?? 0))
+                    .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                Button { exporting = true } label: { Image(systemName: "square.and.arrow.down") }
+                    .buttonStyle(.borderless)
+                    .help("Save the last minute of tracking as CSV")
+                    .accessibilityLabel("Export trace")
+            }
+            Canvas { context, size in
+                guard let last = trace.last?.date else { return }
+                func x(_ d: Date) -> CGFloat { size.width * (1 - CGFloat(last.timeIntervalSince(d)) / 60) }
+                func y(_ arcsec: Double) -> CGFloat {
+                    size.height * (1 - CGFloat(min(max(log10(max(arcsec, 1)) / log10(3600), 0), 1)))
+                }
+                // Guides at 10″, 1′ and 10′.
+                for mark in [10.0, 60, 600] {
+                    var line = Path()
+                    line.move(to: CGPoint(x: 0, y: y(mark)))
+                    line.addLine(to: CGPoint(x: size.width, y: y(mark)))
+                    context.stroke(line, with: .color(.secondary.opacity(0.25)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                }
+                // Loop stalls (over 0.3 s) as red bars.
+                for s in trace where s.loopInterval > 0.3 {
+                    context.fill(Path(CGRect(x: x(s.date) - 1, y: 0, width: 2, height: size.height)), with: .color(Theme.scope.opacity(0.6)))
+                }
+                var path = Path()
+                for (i, s) in trace.enumerated() {
+                    let p = CGPoint(x: x(s.date), y: y(s.error * 3600))
+                    if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                context.stroke(path, with: .color(Theme.sunlit), lineWidth: 1.2)
+            }
+            .frame(height: 44)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+            .accessibilityLabel(String(format: "Tracking error over the last minute, median %.0f arc-seconds", median))
+        }
+        .fileExporter(isPresented: $exporting, document: CSVFile(text: model.mount.traceCSV),
+                      contentType: .commaSeparatedText, defaultFilename: "overpass-trace") { _ in }
+    }
+}
+
+/// Plain CSV text, for the file exporter.
+struct CSVFile: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    var text: String
+
+    init(text: String) { self.text = text }
+
+    init(configuration: ReadConfiguration) throws {
+        text = String(decoding: configuration.file.regularFileContents ?? Data(), as: UTF8.self)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }
 

@@ -41,7 +41,7 @@ targets:
         # Mac only; iOS ignores these. Sandboxed so it can go through the Mac App Store.
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
-        com.apple.security.files.user-selected.read-only: true
+        com.apple.security.files.user-selected.read-write: true
         com.apple.security.personal-information.location: true
         # The mount's USB serial port.
         com.apple.security.device.serial: true

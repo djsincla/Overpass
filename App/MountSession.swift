@@ -15,6 +15,25 @@ enum TrackingMode: String, CaseIterable, Identifiable {
 
 enum JogDirection { case up, down, left, right }
 
+/// One pass of the Smooth tracking loop. Errors are on the sky (azimuth scaled by cos altitude), degrees.
+struct TraceSample {
+    let date: Date
+    /// When the axes were read (the middle of the exchange).
+    let read: Date
+    /// Seconds since the previous pass of the loop.
+    let loopInterval: TimeInterval
+    let primary: Double
+    let secondary: Double
+    let primaryError: Double
+    let secondaryError: Double
+    let feedPrimary: Double
+    let feedSecondary: Double
+    let commandPrimary: Double
+    let commandSecondary: Double
+
+    var error: Double { (primaryError * primaryError + secondaryError * secondaryError).squareRoot() }
+}
+
 /// The connection to the mount, manual moves, alignment and the three tracking modes.
 @MainActor @Observable
 final class MountSession {
@@ -42,6 +61,9 @@ final class MountSession {
     /// What's being tracked, for the camera guider.
     private(set) var trackingObject: SkyObject?
     private(set) var trackingMode: TrackingMode?
+    /// The last minute of the Smooth tracking loop, for diagnosing jumps and lag.
+    private(set) var trace: [TraceSample] = []
+    private var lastLoop: Date?
     var isTracking: Bool { trackingTask != nil }
 
     // Fine tuning, applied live by Step and Smooth tracking.
@@ -336,6 +358,8 @@ final class MountSession {
         trackingName = object.name
         trackingObject = object
         trackingMode = mode
+        trace = []
+        lastLoop = nil
         status = "Starting…"
         trackingTask = Task {
             do {
@@ -642,8 +666,40 @@ final class MountSession {
             let command = controller.rates(desired: desired, primaryRate: rates.0, secondaryRate: rates.1, current: current)
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
+            record(current: current, desired: desired, feed: rates, command: command)
             try await Task.sleep(for: .milliseconds(100))
         }
+    }
+
+    /// Adds one loop iteration to the trace, keeping the last minute.
+    private func record(current: AxisPosition, desired: AxisPosition, feed: (Double, Double),
+                        command: (primary: Double, secondary: Double)) {
+        let now = Date.now
+        let altitude = (settings.alignment ?? AlignmentModel()).sky(for: current).altitude
+        trace.append(TraceSample(date: now, read: skyPositionDate ?? now,
+                                 loopInterval: lastLoop.map { now.timeIntervalSince($0) } ?? 0,
+                                 primary: current.primary, secondary: current.secondary,
+                                 primaryError: (desired.primary - current.primary) * cos(altitude.radians),
+                                 secondaryError: desired.secondary - current.secondary,
+                                 feedPrimary: feed.0, feedSecondary: feed.1,
+                                 commandPrimary: command.primary, commandSecondary: command.secondary))
+        lastLoop = now
+        if let first = trace.first, now.timeIntervalSince(first.date) > 60 {
+            trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > 60 }.count)
+        }
+    }
+
+    /// The trace as CSV: times in seconds from the first sample, angles in degrees, errors in arc-seconds.
+    var traceCSV: String {
+        guard let start = trace.first?.date else { return "" }
+        var lines = ["t,read_t,loop_interval,primary,secondary,primary_error_arcsec,secondary_error_arcsec,feed_primary,feed_secondary,command_primary,command_secondary"]
+        for s in trace {
+            lines.append(String(format: "%.3f,%.3f,%.3f,%.5f,%.5f,%.1f,%.1f,%.5f,%.5f,%.5f,%.5f",
+                                s.date.timeIntervalSince(start), s.read.timeIntervalSince(start), s.loopInterval,
+                                s.primary, s.secondary, s.primaryError * 3600, s.secondaryError * 3600,
+                                s.feedPrimary, s.feedSecondary, s.commandPrimary, s.commandSecondary))
+        }
+        return lines.joined(separator: "\n") + "\n"
     }
 
     /// A Special-mode goto with the mount's own full-speed slew (`:T0#`/`:T1#`), in legs that
