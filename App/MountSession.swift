@@ -404,6 +404,9 @@ final class MountSession {
         guard let plan = MountPlanner(limits: s.limits, model: model).plan(pass.track(above: startAltitude)) else {
             throw MountSessionError.untrackablePass
         }
+        status = "Slewing to start point at full speed…"
+        try await slewAxes(special, to: plan.start)
+        // The mount's slew gets close; rate control settles the last fraction of a degree.
         var controller = RateController(limits: s.limits)
         controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
         let deadline = Date.now + 300
@@ -572,6 +575,7 @@ final class MountSession {
         } else {
             plan = nil
         }
+        var mountSlews = true
 
         while !Task.isCancelled {
             let s = settings
@@ -593,7 +597,13 @@ final class MountSession {
                     controller.maximumCorrection = 2
                     status = "Tracking"
                 } else {
-                    // Before the pass: drive to the start of the plan and hold.
+                    // Before the pass: get to the start of the plan at full speed, then hold.
+                    if mountSlews, abs(plan.start.primary - current.primary) > 1 || abs(plan.start.secondary - current.secondary) > 1 {
+                        status = "Slewing to start point at full speed…"
+                        // If the mount refuses, rate control does the move instead.
+                        mountSlews = try await slewAxes(special, to: plan.start)
+                        continue
+                    }
                     desired = plan.start
                     rates = (0, 0)
                     controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
@@ -618,6 +628,57 @@ final class MountSession {
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
             try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    /// A Special-mode goto with the mount's own full-speed slew (`:T0#`/`:T1#`), in legs that
+    /// can't be taken the wrong way round (see `AxisSlew`). Returns within about half a degree;
+    /// callers settle the rest under rate control. If the mount refuses a slew, it returns
+    /// early and rate control does the whole move.
+    /// Returns false if the mount refused its slew command.
+    @discardableResult
+    private func slewAxes(_ special: MountClient, to goal: AxisPosition) async throws -> Bool {
+        let deadline = Date.now + 300
+        while !Task.isCancelled {
+            guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+            guard let current = try await readPosition() else { return true }
+            if abs(goal.primary - current.primary) < 0.5 && abs(goal.secondary - current.secondary) < 0.5 { return true }
+            switch AxisSlew.next(current: current.primary, goal: goal.primary) {
+            case .slew(let raw, let unwrapped):
+                do {
+                    try await special.slew(primary: raw, secondary: goal.secondary)
+                } catch is ReplyError {
+                    return false
+                }
+                try await waitForArrival(AxisPosition(primary: unwrapped, secondary: goal.secondary), deadline: deadline)
+            case .crossWrap(let direction):
+                // A few degrees under rate control carries it across the ±180° reading wrap.
+                let rate = direction * min(settings.maximumAzimuthRate, 2)
+                if wouldHitCableStop(current, primaryRate: rate) { throw MountSessionError.pastCableStop }
+                try await special.setSpeeds(primary: rate, secondary: 0)
+                try await Task.sleep(for: .seconds(1.5))
+                try await special.stop()
+            }
+        }
+        return true
+    }
+
+    /// Polls (4 Hz) until the axes reach `target`, or stop moving short of it.
+    private func waitForArrival(_ target: AxisPosition, deadline: Date) async throws {
+        var last: AxisPosition?
+        var still = 0
+        while !Task.isCancelled {
+            try await Task.sleep(for: .milliseconds(250))
+            guard let current = try await readPosition() else { return }
+            if abs(target.primary - current.primary) < 0.1 && abs(target.secondary - current.secondary) < 0.1 { return }
+            if let last, abs(last.primary - current.primary) < 0.005 && abs(last.secondary - current.secondary) < 0.005 {
+                still += 1
+                if still >= 4 { return }
+            } else {
+                still = 0
+            }
+            last = current
+            guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
         }
     }
 

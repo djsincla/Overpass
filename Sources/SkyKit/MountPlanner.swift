@@ -164,3 +164,31 @@ public struct MountPlanner: Sendable {
         return zip(forward, backward).map { ($0 + $1) / 2 }
     }
 }
+
+/// Planning a Special-mode goto on the primary axis with the mount's own slew (`:T0#`), which
+/// takes a raw reading in ±180°. The way round it would choose for a long move, or across the
+/// ±180° wrap, isn't documented, so legs are kept short of both: under `maximumLeg`, and never
+/// across the wrap. The wrap itself is crossed slowly under rate control.
+public enum AxisSlew {
+    public enum Step: Equatable, Sendable {
+        /// Slew to this raw reading, which is `unwrapped` on the continuous axis.
+        case slew(raw: Double, unwrapped: Double)
+        /// At the wrap with further to go: drive across it at a set rate, in this direction (±1).
+        case crossWrap(direction: Double)
+    }
+
+    public static func next(current: Double, goal: Double, maximumLeg: Double = 170, wrapMargin: Double = 1) -> Step {
+        let diff = goal - current
+        let direction: Double = diff < 0 ? -1 : 1
+        let target = current + max(-maximumLeg, min(maximumLeg, diff))
+        let turns = current - wrap180(current)
+        let raw = target - turns
+        let limit = 180 - wrapMargin
+        if abs(raw) <= limit { return .slew(raw: raw, unwrapped: target) }
+        // The leg would pass the wrap: stop just short of it, or cross it if already there.
+        if abs(wrap180(current) - direction * limit) > wrapMargin / 2 {
+            return .slew(raw: direction * limit, unwrapped: direction * limit + turns)
+        }
+        return .crossWrap(direction: direction)
+    }
+}

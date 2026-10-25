@@ -138,3 +138,25 @@ let zenithPass: [PassSample] = {
         #expect(abs(wrap180(back.azimuth - 100)) < 1e-6 && abs(back.altitude - 50) < 1e-6)
     }
 }
+
+@Suite struct AxisSlewTests {
+    @Test func shortMoveIsOneSlew() {
+        #expect(AxisSlew.next(current: 10, goal: 100) == .slew(raw: 100, unwrapped: 100))
+        // On a later turn: the raw target drops the whole turns.
+        #expect(AxisSlew.next(current: 370, goal: 400) == .slew(raw: 40, unwrapped: 400))
+    }
+
+    @Test func longMoveIsSplit() {
+        #expect(AxisSlew.next(current: -170, goal: 170) == .slew(raw: 0, unwrapped: 0))
+    }
+
+    @Test func stopsShortOfTheWrapThenCrossesIt() {
+        // 150 → 200 passes raw +180: first to 179, then across under rate control, then on.
+        #expect(AxisSlew.next(current: 150, goal: 200) == .slew(raw: 179, unwrapped: 179))
+        #expect(AxisSlew.next(current: 179, goal: 200) == .crossWrap(direction: 1))
+        #expect(AxisSlew.next(current: 182, goal: 200) == .slew(raw: -160, unwrapped: 200))
+        // And the other way.
+        #expect(AxisSlew.next(current: -150, goal: -200) == .slew(raw: -179, unwrapped: -179))
+        #expect(AxisSlew.next(current: -179, goal: -200) == .crossWrap(direction: -1))
+    }
+}
