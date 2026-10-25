@@ -128,8 +128,39 @@ struct ObserveView: View {
                     highlightedObjectID: model.highlightedObject?.id,
                     targetObjectID: model.targetObjectID,
                     scopePosition: model.mount.skyPosition,
-                    onTapObject: { model.highlight(objectID: $0) })
+                    onTapObject: { model.highlight(objectID: $0) },
+                    menu: { AnyView(domeMenu($0)) })
         }
+    }
+
+    /// Right-click on anything in the sky: track it, target it, select it, or plan around it.
+    @ViewBuilder
+    private func domeMenu(_ id: String) -> some View {
+        let mount = model.mount
+        let name = model.object(id)?.name ?? id
+        let isTarget = model.targetObjectID == id
+        let busy = mount.isTracking || mount.isPreparing
+        Text(name)
+        if isTarget && busy {
+            Button("Stop tracking") { Task { await mount.stopAll() } }
+            Button("Untrack") { Task { await model.untrack() } }
+        } else {
+            if model.object(id)?.isSun == true {
+                Button("Track the Sun from the mount panel (needs a filter)") {}.disabled(true)
+            } else {
+                Button("Track \(name)") { Task { await model.track(objectID: id) } }
+                    .disabled(busy || !model.canTrack(model.object(id)))
+            }
+            Button("Set as tracking target") { model.highlight(objectID: id); model.setTargetFromHighlight() }
+                .disabled(busy || isTarget)
+            if isTarget {
+                Button("Untrack") { Task { await model.untrack() } }
+            }
+        }
+        Divider()
+        Button("Highlight") { model.highlight(objectID: id) }
+        Button(model.isSelected(id) ? "Remove from selection" : "Add to selection") { model.toggle(id) }
+        Button("Pass calculator…") { model.calculatorObjectID = id }
     }
 
     @ViewBuilder

@@ -65,6 +65,10 @@ final class MountSession {
     private(set) var trace: [TraceSample] = []
     private var lastLoop: Date?
     var isTracking: Bool { trackingTask != nil }
+    /// The mode chosen in the tracking card; WiFi offers Passive or Step, USB is always Smooth.
+    var preferredMode = TrackingMode.step
+    /// What tracking will actually use with this connection.
+    var effectiveMode: TrackingMode { kind == .usb ? .smooth : preferredMode }
 
     // Fine tuning, applied live by Step and Smooth tracking.
     /// Seconds added to "now": positive aims further along the track (fixes along-track TLE error).

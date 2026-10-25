@@ -297,6 +297,31 @@ final class AppModel {
         targetPassKey = nil
     }
 
+    /// Whether `object` can be tracked now, with this connection and mode.
+    func canTrack(_ object: SkyObject?) -> Bool {
+        guard let object, mount.state == .connected else { return false }
+        switch (mount.kind, mount.effectiveMode) {
+        case (.wifi, .passive): return object.passiveTracking != nil
+        case (.usb, _): return settings.alignment != nil
+        default: return true
+        }
+    }
+
+    /// Tracks the locked target only, never whatever happens to be highlighted. The Sun needs
+    /// the filter confirmation first, which callers show.
+    func startTracking() async {
+        guard let target = targetObject, canTrack(target) else { return }
+        await mount.track(target, mode: mount.effectiveMode, pass: targetPass)
+    }
+
+    /// Makes `objectID` the target and starts tracking it (from the sky view's menu).
+    func track(objectID: String) async {
+        guard !mount.isTracking, let object = object(objectID), !object.isSun else { return }
+        highlight(objectID: objectID)
+        setTargetFromHighlight()
+        await startTracking()
+    }
+
     /// Stops tracking (or the move to the start point) and lets go of the target.
     func untrack() async {
         if mount.isTracking || mount.isPreparing { await mount.stopAll() }

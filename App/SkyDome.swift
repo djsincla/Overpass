@@ -18,6 +18,10 @@ struct SkyDome: View {
     /// Where the scope is pointing.
     var scopePosition: Horizontal?
     var onTapObject: ((String) -> Void)?
+    /// Right-click (long press on touch) menu for an object on the dome, by id.
+    var menu: ((String) -> AnyView)?
+    /// The object under the pointer, so a right-click acts on it.
+    @State private var hoveredID: String?
 
     var body: some View {
         GeometryReader { proxy in
@@ -33,15 +37,28 @@ struct SkyDome: View {
                 }
                 drawLiveObjects(&context, geometry)
                 if let scopePosition { drawScope(&context, geometry, scopePosition) }
+                if let hoveredID, let hovered = pickable(geometry).first(where: { $0.id == hoveredID }) {
+                    let p = hovered.point
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - 13, y: p.y - 13, width: 26, height: 26)),
+                                   with: .color(.white.opacity(0.55)), lineWidth: 1)
+                }
             }
             .contentShape(Rectangle())
             .gesture(SpatialTapGesture().onEnded { tap in
-                guard let onTapObject else { return }
-                let nearest = liveObjects.min {
-                    distance(geometry.point($0.position), tap.location) < distance(geometry.point($1.position), tap.location)
-                }
-                if let nearest, distance(geometry.point(nearest.position), tap.location) < 30 { onTapObject(nearest.id) }
+                if let id = nearest(to: tap.location, geometry) { onTapObject?(id) }
             })
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    let id = nearest(to: location, geometry)
+                    if id != hoveredID { hoveredID = id }
+                case .ended:
+                    hoveredID = nil
+                }
+            }
+            .contextMenu {
+                if let menu, let id = hoveredID ?? highlightedObjectID { menu(id) }
+            }
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityElement()
@@ -49,6 +66,29 @@ struct SkyDome: View {
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+
+    /// Everything drawn that can be clicked: selected objects, and the stars, Sun, Moon and
+    /// planets above the horizon. Selected ones come first, so they win a tie.
+    private func pickable(_ g: DomeGeometry) -> [(id: String, point: CGPoint)] {
+        let time = AstroTime(date)
+        var items = liveObjects.map { ($0.id, g.point($0.position)) }
+        for body in SolarSystemBody.allCases {
+            let h = observer.horizontal(ofEarthFixed: body.earthFixedPosition(at: time))
+            if h.altitude > 0 { items.append(("body:\(body.rawValue)", g.point(h))) }
+        }
+        for star in BrightStars.all {
+            let h = observer.horizontal(ofEarthFixed: star.earthFixedPosition(at: time))
+            if h.altitude > 0 { items.append(("star:\(star.name)", g.point(h))) }
+        }
+        var seen = Set<String>()
+        return items.filter { seen.insert($0.0).inserted }.map { (id: $0.0, point: $0.1) }
+    }
+
+    /// The object within 30 points of `location`, nearest first.
+    private func nearest(to location: CGPoint, _ g: DomeGeometry) -> String? {
+        pickable(g).filter { distance($0.point, location) < 30 }
+            .min { distance($0.point, location) < distance($1.point, location) }?.id
+    }
 
     var accessibilitySummary: String {
         var parts = ["Sky chart"]

@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 /// Connection, manual moves, tracking and fine tuning, kept compact so it fits without scrolling.
 struct MountPanel: View {
     @Environment(AppModel.self) private var model
-    @State private var mode = TrackingMode.step
     @State private var confirmingSun = false
     @State private var showingAlignment = false
 
@@ -39,12 +38,12 @@ struct MountPanel: View {
         }
         .sheet(isPresented: $showingAlignment) { AlignmentSheet() }
         .alert("Point at the Sun?", isPresented: $confirmingSun) {
-            Button("I have a solar filter fitted", role: .destructive) { Task { await startTracking() } }
+            Button("I have a solar filter fitted", role: .destructive) { Task { await model.startTracking() } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Never point a telescope, finder or camera at the Sun without a proper full-aperture solar filter. It can blind you instantly and destroy equipment.")
         }
-        .onChange(of: mount.kind) { _, _ in mode = mount.availableModes.first ?? .step }
+        .onChange(of: mount.kind) { _, _ in mount.preferredMode = mount.availableModes.first ?? .step }
     }
 
     // MARK: Header: connection, position, STOP
@@ -114,7 +113,7 @@ struct MountPanel: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if mount.availableModes.count > 1 {
-                    Picker("Mode", selection: $mode) {
+                    Picker("Mode", selection: Bindable(mount).preferredMode) {
                         ForEach(mount.availableModes) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
@@ -125,7 +124,7 @@ struct MountPanel: View {
                 } else {
                     Chip(text: "Smooth", systemImage: "waveform.path", tint: Theme.accent).help(modeExplanation)
                 }
-                if mode == .step && mount.kind == .wifi {
+                if mount.preferredMode == .step && mount.kind == .wifi {
                     Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
                         Text("every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
                             .font(.callout.monospacedDigit())
@@ -209,13 +208,13 @@ struct MountPanel: View {
                     .help("Smooth tracking needs a star alignment: centre two or three bright stars")
                 } else {
                     Button {
-                        if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }
+                        if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await model.startTracking() } }
                     } label: {
                         Label("Start tracking", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.go)
-                    .disabled(!canTrack(model.targetObject))
+                    .disabled(!model.canTrack(model.targetObject))
                 }
             }
         }
@@ -269,27 +268,11 @@ struct MountPanel: View {
     }
 
     private var modeExplanation: String {
-        switch (model.mount.kind, mode) {
+        switch (model.mount.kind, model.mount.preferredMode) {
         case (.wifi, .passive): "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
         case (.wifi, _): "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
         default: "Smooth: varies both axis speeds continuously. Best for imaging satellites."
         }
-    }
-
-    private func canTrack(_ object: SkyObject?) -> Bool {
-        guard let object else { return false }
-        switch (model.mount.kind, mode) {
-        case (.wifi, .passive): return object.passiveTracking != nil
-        case (.usb, _): return model.settings.alignment != nil
-        default: return true
-        }
-    }
-
-    /// Tracks the locked target only, never whatever happens to be highlighted.
-    private func startTracking() async {
-        guard let target = model.targetObject else { return }
-        let effective = model.mount.kind == .usb ? .smooth : mode
-        await model.mount.track(target, mode: effective, pass: model.targetPass)
     }
 
     private func describe(_ identity: MountIdentity) -> String {
