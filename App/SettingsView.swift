@@ -79,6 +79,12 @@ struct SettingsView: View {
                         LabeledSlider("Altitude axis up to", value: $model.settings.maximumAltitudeAxis, in: 95...180, step: 5, unit: "°")
                     }
                     LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
+                    Picker("Smooth tracking updates", selection: $model.settings.trackingPeriod) {
+                        Text("Every 0.05 s").tag(0.05)
+                        Text("Every 0.1 s").tag(0.1)
+                        Text("Every 0.2 s").tag(0.2)
+                    }
+                    .help("How often Smooth tracking reads the axes and sets the speeds. Each update takes about 45 ms on the HAZ46, so 0.05 s runs them nearly back to back.")
                     LabeledSlider("Azimuth speed", value: $model.settings.maximumAzimuthRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("Altitude speed", value: $model.settings.maximumAltitudeRate, in: 1...10, step: 0.5, unit: "°/s")
                     LabeledSlider("On target within", value: Binding(get: { model.settings.pointingTolerance * 60 },

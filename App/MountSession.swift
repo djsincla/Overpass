@@ -554,9 +554,6 @@ final class MountSession {
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
 
-    /// Smooth tracking loop period, seconds.
-    private static let trackingPeriod = 0.1
-
     /// The HAZ46 goes to about 6°/s at its top speed; slightly under, so the quiet wait errs long.
     private static let estimatedSlewRate = 5.0
 
@@ -706,8 +703,8 @@ final class MountSession {
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
             record(current: current, desired: desired, feed: rates, command: command, held: glitch)
-            // Ten updates a second; reading the axes and setting the speeds take part of that.
-            let rest = Self.trackingPeriod - Date.now.timeIntervalSince(loopStart)
+            // Reading the axes and setting the speeds take part of each period.
+            let rest = s.trackingPeriod - Date.now.timeIntervalSince(loopStart)
             if rest > 0.005 { try await Task.sleep(for: .seconds(rest)) }
         }
     }

@@ -53,6 +53,9 @@ struct Settings: Codable, Equatable {
     var trackingStartAltitude: Double = 10
 
     var stepInterval: Double = 2
+    /// Smooth tracking: seconds between speed updates. Each takes a position read and a speed
+    /// command, about 45 ms on the HAZ46, so 0.05 runs them nearly back to back.
+    var trackingPeriod: Double = 0.1
     /// From star alignment; Smooth tracking needs it.
     var alignment: AlignmentModel?
     var alignmentRMS: Double?
