@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overpass</title>
+<meta name="description" content="Satellite, Sun, Moon and planet tracking for iOptron HAZ and HAE mounts on macOS and iOS.">
+<link rel="icon" type="image/png" href="images/icon.png">
+<style>
+  :root {
+    --sky-top: #05070f;
+    --sky-bottom: #0d1430;
+    --panel: rgba(255, 255, 255, 0.045);
+    --panel-edge: rgba(255, 255, 255, 0.09);
+    --text: #e6e9f2;
+    --muted: #9aa3ba;
+    --accent: #5cc8ff;
+    --amber: #ffc847;
+    --green: #52e68f;
+    --red: #ff5561;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--sky-top); }
+  body {
+    margin: 0;
+    color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(ellipse at 50% -10%, #1a2550 0%, transparent 60%),
+                linear-gradient(var(--sky-top), var(--sky-bottom) 70%, var(--sky-top));
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { overflow-wrap: anywhere; font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; }
+  html, body { overflow-x: hidden; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  header { text-align: center; padding: 72px 0 32px; }
+  header img { width: 132px; height: 132px; filter: drop-shadow(0 10px 30px rgba(92, 200, 255, 0.25)); }
+  h1 { font-size: 3.2rem; letter-spacing: -0.02em; margin: 14px 0 4px; }
+  .meta { color: var(--muted); font-size: 0.95rem; }
+  .meta b { color: var(--amber); font-weight: 600; }
+  .buttons { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .button { padding: 10px 20px; border-radius: 999px; border: 1px solid var(--panel-edge); background: var(--panel); color: var(--text); font-weight: 600; }
+  .button.primary { background: #2a7fd6; border-color: #2a7fd6; color: #fff; }
+  .button:hover { text-decoration: none; filter: brightness(1.15); }
+
+  .lead { max-width: 760px; margin: 0 auto 40px; font-size: 1.12rem; color: #cfd5e4; text-align: center; }
+  .shot { border-radius: 14px; overflow: hidden; border: 1px solid var(--panel-edge); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .caption { text-align: center; color: var(--muted); font-size: 0.85rem; margin: 10px 0 0; }
+
+  section { margin: 64px 0; }
+  h2 { font-size: 1.5rem; margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 14px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .card p { margin: 0; color: #c3c9d8; font-size: 0.97rem; }
+  .card ul { margin: 6px 0 0; padding-left: 18px; color: #c3c9d8; font-size: 0.97rem; }
+
+  .notes li { margin-bottom: 8px; color: #c9cfdd; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--panel-edge); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  td.num { font-variant-numeric: tabular-nums; color: var(--green); white-space: nowrap; }
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 16px; }
+  .status .card h3 span { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
+  pre { background: rgba(0,0,0,0.35); border: 1px solid var(--panel-edge); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+
+  footer { border-top: 1px solid var(--panel-edge); margin-top: 80px; padding: 28px 0 48px; color: var(--muted); font-size: 0.88rem; text-align: center; }
+
+  @media (max-width: 600px) {
+    header { padding-top: 48px; }
+    h1 { font-size: 2.4rem; }
+    body { font-size: 16px; }
+    th, td { padding: 8px 6px; }
+    td.num { white-space: normal; }
+    .lead { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <img src="images/icon.png" alt="Overpass app icon">
+  <h1>Overpass</h1>
+  <div class="meta"><b>Version 0.1.0</b> &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</div>
+  <div class="buttons">
+    <a class="button primary" href="https://github.com/djsincla/Overpass">Source on GitHub</a>
+    <a class="button" href="https://github.com/djsincla/Overpass/archive/refs/tags/v0.1.0.zip">Download 0.1.0 source</a>
+  </div>
+</header>
+
+<p class="lead">For the longest time I have been running Heavenscape SkyTrack on a Windows laptop to drive my iOptron strain-wave mounts. It works, but it meant keeping a Windows machine alive for one job, and that machine was always the one that wanted an update on a clear night. Overpass is the native macOS and iOS replacement.</p>
+
+<div class="shot"><img src="images/observe.png" alt="Overpass on a Mac: the sky dome with a satellite pass, the pass list and the mount controls while Smooth tracking"></div>
+<p class="caption">Smooth tracking EYESAT A (AO-27) on a HAZ46 over USB, 32″ off target while it caught up.</p>
+
+<section>
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Passes</h3>
+      <p>SGP4 prediction from CelesTrak groups, your own URLs or local TLE files, with the age of each source shown. Filter by peak elevation, duration, visibility, distance from the Sun and whether the mount can keep up. A time bar moves the sky up to two days either way, and the mount will follow it if you want to rehearse a pass in daylight.</p>
+    </div>
+    <div class="card">
+      <h3>Tracking</h3>
+      <ul>
+        <li><b>Passive</b> over WiFi: one goto, then the mount's own sidereal, lunar or solar rate.</li>
+        <li><b>Step</b> over WiFi: a goto to where the target will be, every couple of seconds. Fine for an antenna and jumpy in a telescope.</li>
+        <li><b>Smooth</b> over USB: both axis rates varied about seven times a second against a planned track, settling to a median error of about 2″.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Cable stop</h3>
+      <p>Set the azimuth the mount must never rotate through and every slew and pass is planned around it, going the long way round when it has to. Over-the-top flips are there for passes close to the zenith.</p>
+    </div>
+    <div class="card">
+      <h3>Conjunctions</h3>
+      <p>Space station transits of the Moon and Sun around any place you choose, out to two weeks, on a map with the band where the transit is visible and the time along its centreline. Watched events refresh their elements and recalculate as the day gets closer.</p>
+    </div>
+    <div class="card">
+      <h3>Also included</h3>
+      <p>A pass calculator out to fourteen days for any object, star alignment, camera guiding with an iPhone through Continuity Camera, and a red night-vision mode.</p>
+    </div>
+    <div class="card">
+      <h3>Connecting</h3>
+      <p>WiFi uses iOptron's normal command set on the mount's own network. USB uses Special Mode, which only works over USB; on a Mac the HAZ46 cable appears as <code>/dev/cu.PL2303G-USBtoUART210</code>. An iPhone or iPad needs a relay on the mount's USB port, such as a Raspberry Pi running <code>ser2net</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>What I found out about the HAZ46</h2>
+  <p>iOptron's Special Mode documentation stops short of a few things that matter, so this is what the mount actually does.</p>
+  <ul class="notes">
+    <li>P0 reads azimuth minus 180°, so its zero faces south, and P1 reads the zenith distance, so it counts down as the tube rises. I found this out when a satellite approaching the horizon had the tube pointing straight up.</li>
+    <li>After the mount has been in Special Mode, <code>:GAC#</code> in Normal mode reads az 0°, alt 0° until the mount is aligned again.</li>
+    <li>After <code>:ZZZ#</code> the mount says nothing for about a second while it changes modes, and anything asked in that second times out.</li>
+    <li>Every 5 seconds it answers a position request about 15 ms late, which at satellite speeds looks like a 10 to 20″ tracking error if you trust the timestamp of the reply.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Accuracy</h2>
+  <p>Satellite positions come from SGP4 through SatelliteKit, with one correction. SatelliteKit 2.1.2 reads the exponent of the TLE drag term as a character code, so every satellite had its drag set to about 10<sup>−52</sup> and low orbits ran late by roughly 0.6 s a day after epoch and 200 s after two weeks. That explained a few things. Overpass now reads the TLE columns itself.</p>
+  <table>
+    <tr><th>Checked against</th><th>What</th><th>Agreement</th></tr>
+    <tr><td>Reference SGP4 (Vallado, as used by Skyfield)</td><td>Vanguard 1, and the ISS a week after epoch</td><td class="num">within 10 m</td></tr>
+    <tr><td>transit-finder.com, same TLEs</td><td>14 ISS and Tiangong transits of the Moon and Sun around Griffith Observatory over two weeks</td><td class="num">0.13 s · 0.5 km · 4% width</td></tr>
+    <tr><td>Meeus, <i>Astronomical Algorithms</i></td><td>Sun, Moon and planet positions</td><td class="num">worked examples</td></tr>
+  </table>
+  <p style="color: var(--muted); font-size: 0.92rem; margin-top: 14px;">None of this makes a TLE more accurate than it is. ISS reboosts move events by seconds, which is why watched conjunctions refresh their elements.</p>
+</section>
+
+<section>
+  <h2>Status</h2>
+  <div class="status">
+    <div class="card">
+      <h3><span style="background: var(--green)"></span>Tested on a HAZ46</h3>
+      <p>The WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode and Smooth tracking at about 2″.</p>
+    </div>
+    <div class="card">
+      <h3><span style="background: var(--amber)"></span>Not yet tested on hardware</h3>
+      <p>The iOS build, the USB relay, camera guiding, the route around the cable stop, and the fix for the 5 second timing glitch, which I ran out of battery before trying.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Building</h2>
+  <p>The Xcode project is generated from <code>project.yml</code>, and the tests run with Swift Package Manager.</p>
+<pre><code>git clone https://github.com/djsincla/Overpass.git
+cd Overpass
+xcodegen
+open Overpass.xcodeproj
+swift test</code></pre>
+  <p>You will need your own signing team in <code>project.yml</code>. Read the cable stop settings before you trust the app with your cabling; a mount that slews into its own tripod is still your problem.</p>
+</section>
+
+<footer>
+  Overpass 0.1.0 &nbsp;·&nbsp; Copyright 2026 Dwayne Sinclair &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/blob/main/LICENSE">Apache License 2.0</a><br>
+  Uses <a href="https://github.com/gavineadie/SatelliteKit">SatelliteKit</a> by Gavin Eadie (MIT). Not affiliated with or supported by iOptron.
+</footer>
+
+</div>
+</body>
+</html>

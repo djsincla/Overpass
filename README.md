@@ -80,3 +80,9 @@ swift test
 ## Version history
 
 **0.1.0**, 24 October 2026. First version: pass prediction and filtering, Passive, Step and Smooth tracking, the cable stop, star and mount alignment, the time bar, the pass calculator, conjunctions, camera guiding and night vision, tested on a HAZ46.
+
+## Licence
+
+Overpass is released under the [Apache License 2.0](LICENSE). It uses [SatelliteKit](https://github.com/gavineadie/SatelliteKit) by Gavin Eadie under the MIT License; see [NOTICE](NOTICE).
+
+Nothing here is supported by iOptron, and a mount that slews into its own tripod is still your problem. Read the cable stop section of the settings before you trust it with your cabling.
