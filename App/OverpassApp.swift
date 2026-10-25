@@ -21,6 +21,8 @@ struct ContentView: View {
                 .tabItem { Label("Observe", systemImage: "scope") }
             ObjectsView()
                 .tabItem { Label("Objects", systemImage: "checklist") }
+            ConjunctionsView()
+                .tabItem { Label("Conjunctions", systemImage: "moon.stars") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }

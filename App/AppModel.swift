@@ -188,6 +188,7 @@ final class AppModel {
 
     let mount = MountSession()
     let guider = Guider()
+    let conjunctions = ConjunctionsModel()
 
     private var catalog: TLECatalog?
     private var predictionTask: Task<Void, Never>?
@@ -208,12 +209,14 @@ final class AppModel {
         }
         mount.app = self
         guider.app = self
+        conjunctions.app = self
     }
 
     func start() async {
         await reloadFromCatalog()
         schedulePrediction()
         await refreshDue()
+        conjunctions.startWatching()
     }
 
     // MARK: Objects and selection
@@ -403,16 +406,19 @@ final class AppModel {
         schedulePrediction()
     }
 
-    func refresh(_ id: String) async {
+    /// `quietly`: an automatic refresh, so "too soon" and network failures aren't reported.
+    func refresh(_ id: String, quietly: Bool = false) async {
         guard let catalog else { return }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
             try await catalog.refresh(id)
         } catch TLECatalogError.tooSoon(let next) {
-            message = "CelesTrak asks for at least 2 hours between downloads. Try again after \(next.formatted(date: .omitted, time: .shortened))."
+            if !quietly {
+                message = "CelesTrak asks for at least 2 hours between downloads. Try again after \(next.formatted(date: .omitted, time: .shortened))."
+            }
         } catch {
-            message = "Refresh failed: \(error.localizedDescription)"
+            if !quietly { message = "Refresh failed: \(error.localizedDescription)" }
         }
         await reloadFromCatalog()
         schedulePrediction()
@@ -554,13 +560,13 @@ final class AppModel {
 
     // MARK: Persistence
 
-    private func save(_ value: some Encodable, _ key: String) {
+    func save(_ value: some Encodable, _ key: String) {
         if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: key) }
     }
 
     /// Loads saved values over the defaults, so a newer app version with extra settings
     /// keeps everything the user already set instead of resetting it.
-    private static func load<T: Codable>(_ key: String, default value: T) -> T {
+    static func load<T: Codable>(_ key: String, default value: T) -> T {
         guard let stored = UserDefaults.standard.data(forKey: key) else { return value }
         if let decoded = try? JSONDecoder().decode(T.self, from: stored) { return decoded }
         guard var base = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(value))) as? [String: Any],
