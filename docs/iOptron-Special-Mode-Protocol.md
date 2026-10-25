@@ -73,6 +73,7 @@ Everything here was measured on one HAZ46 (MountInfo 0052 / 8052) over USB, with
 - After `:ZZZ#` the mount is silent for about a second; ask `:MountInfo#` again until it answers in the new mode, and never toggle twice.
 - The mount keeps its position through a switch, in both directions. Entering Special mode, P0/P1 match the Normal-mode position exactly.
 - Leaving Special mode, Normal mode (`:GAC#`) reports a **placeholder** for several seconds: az 0, alt 0 one time, az 180°, alt 90° another. Then it reports the real position again. In one case it was back within 12 s; Overpass waits up to 20 s.
+- After leaving Special mode, the hand controller asks whether to perform an alignment, and Normal mode **won't track until it's synced** (the user, 25 Oct 2026). A sync on a target answers it. Overpass syncs once the real position is back: on the target if the scope is within 0.5° of it, otherwise on where it knows the scope points. After a disconnect that left Special mode, it does this on the next Normal-mode connect, over WiFi or USB.
 - Normal mode can be tracking sidereal by itself. Stop it (`:ST0#`, `:Q#`) and wait until the readings settle before switching, or the position carried across is already stale.
 
 **Syncing**

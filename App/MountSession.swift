@@ -181,7 +181,7 @@ final class MountSession {
                     throw MountSessionError.inSpecialMode
                 }
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
-                await checkNormalPosition(client)
+                await syncIfLeftSpecialMode(client)
                 normal = client
                 identity = id
             case .usbNormal:
@@ -200,13 +200,13 @@ final class MountSession {
                     await holdStill(special: special)
                     _ = try await special.exitSpecialMode()
                     await holdStill(normal: client)
-                    await waitForNormalPosition(client)
+                    let position = await waitForNormalPosition(client)
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
-                    await checkNormalPosition(client)
+                    await syncAfterSwitch(client, position: position)
                     id = try await client.identify()
                 } else {
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
-                    await checkNormalPosition(client)
+                    await syncIfLeftSpecialMode(client)
                 }
                 normal = client
                 identity = id
@@ -244,6 +244,7 @@ final class MountSession {
             }
             await holdStill(special: special)
             if (try? await special.exitSpecialMode()) != nil, let transport = usbTransport {
+                normalNeedsSync = true
                 await holdStill(normal: NormalModeClient(transport: transport))
                 // No sync: on the HAZ46 a :CM# sync here added the position a second time
                 // (25 Oct 2026). Just record what Normal mode reports.
@@ -1070,6 +1071,7 @@ final class MountSession {
                     + describe(sky) + " → reads " + describe(reads))
                 if off < 0.1 {
                     recordHeld = false
+                    normalNeedsSync = false
                     remember(sky, now: true)
                     status = "Synced on \(object.name)"
                 } else {
@@ -1214,9 +1216,64 @@ final class MountSession {
         return nil
     }
 
+    /// After switching to Normal mode the hand controller asks whether to perform an alignment;
+    /// a sync answers it. Once the real position is back (never during the placeholder), sync on
+    /// the target if the scope is on it, otherwise on where Overpass knows the scope points, and
+    /// read the position back to check.
+    private func syncAfterSwitch(_ normal: NormalModeClient, position: Horizontal?) async {
+        guard let position else {
+            status = "Normal mode, but the mount still reported a placeholder position after 20 s, so it wasn't synced"
+            return
+        }
+        var name = "the scope's position"
+        var sky = knownPointing?.horizontal ?? position
+        if let target = app?.targetObject, let h = try? settings.observer.look(at: target.target, AstroTime(.now)),
+           angularSeparation(h.unitVector, sky.unitVector) < 0.5 {
+            name = target.name
+            sky = h
+        }
+        do {
+            try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
+            let after = try await normal.altAz()
+            let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
+            let off = angularSeparation(reads.unitVector, sky.unitVector)
+            log("Sync after switching to Normal mode, on \(name): mount read " + describe(position) + ", sent " + describe(sky)
+                + ", now reads " + describe(reads))
+            if off < 0.1 {
+                recordHeld = false
+                normalNeedsSync = false
+                remember(sky, now: true)
+                status = "Normal mode, synced on \(name)"
+            } else {
+                status = String(format: "Normal mode: synced on %@, but the mount now reads %@, %.2f° away. In the mount log.", name, describe(reads), off)
+            }
+        } catch {
+            status = "Normal mode, but the sync failed: \(describe(error))"
+        }
+    }
+
+    /// A Normal-mode connect: if Overpass last left the mount by taking it out of Special mode,
+    /// sync it now (it won't track until then); otherwise just compare with the record.
+    private func syncIfLeftSpecialMode(_ normal: NormalModeClient) async {
+        guard normalNeedsSync else {
+            await checkNormalPosition(normal)
+            return
+        }
+        status = "Waiting for the mount's position…"
+        let position = await waitForNormalPosition(normal)
+        await syncAfterSwitch(normal, position: position)
+    }
+
     // MARK: Switching modes over USB
 
     private(set) var isSwitchingMode = false
+
+    /// Set when Overpass took the mount out of Special mode without syncing it (a disconnect):
+    /// Normal mode won't track until it's synced, so the next Normal-mode connect does it.
+    private var normalNeedsSync: Bool {
+        get { AppModel.load("normalNeedsSync", default: false) }
+        set { app?.save(newValue, "normalNeedsSync") }
+    }
 
     /// Over USB: Special mode to Normal mode or back, without disconnecting. Tracking stops and
     /// the mount is still before the switch, and the session carries on in the new mode.
@@ -1243,16 +1300,16 @@ final class MountSession {
                 let normal = NormalModeClient(transport: transport)
                 await holdStill(normal: normal)
                 status = "Waiting for the mount's position…"
-                await waitForNormalPosition(normal)
+                let position = await waitForNormalPosition(normal)
                 try await normal.configure(latitude: settings.latitude, longitude: settings.longitude)
-                await checkNormalPosition(normal)
+                await syncAfterSwitch(normal, position: position)
                 self.special = nil
                 unwrapper = nil
                 self.normal = normal
                 identity = try await normal.identify()
                 kind = .usbNormal
                 app?.settings.connection = .usbNormal
-                if status.hasPrefix("Switching") || status.hasPrefix("Waiting") { status = "Normal mode" }
+
             } else if let normal {
                 status = "Switching to Special mode…"
                 let client = MountClient(transport: transport)
