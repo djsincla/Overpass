@@ -81,3 +81,17 @@ import Testing
         #expect(NormalCommand.setMaximumSlewSpeed(3).wire == ":MSR7#")
     }
 }
+
+#if os(macOS)
+@Suite struct SerialPortNameTests {
+    @Test func recognisesUSBSerialAdapters() {
+        for name in ["cu.usbserial-1410", "cu.usbmodem14201", "cu.wchusbserial1420", "cu.SLAB_USBtoUART",
+                     "cu.PL2303G-USBtoUART210"] {
+            #expect(SerialTransport.isLikelyUSBSerial(name), "\(name)")
+        }
+        for name in ["cu.Bluetooth-Incoming-Port", "cu.debug-console", "cu.JBLFlip3", "tty.usbserial-1410"] {
+            #expect(!SerialTransport.isLikelyUSBSerial(name), "\(name)")
+        }
+    }
+}
+#endif

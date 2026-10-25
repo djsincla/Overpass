@@ -126,8 +126,17 @@ public final class SerialTransport: MountTransport, @unchecked Sendable {
     /// Likely mount ports: USB serial adapters and CDC devices.
     public static func availablePorts() -> [String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? []
-        return names.filter { $0.hasPrefix("cu.usbserial") || $0.hasPrefix("cu.usbmodem") || $0.hasPrefix("cu.wchusbserial")
-            || $0.hasPrefix("cu.SLAB") }.map { "/dev/" + $0 }.sorted()
+        return names.filter(isLikelyUSBSerial).map { "/dev/" + $0 }.sorted()
+    }
+
+    /// USB serial adapters, by the names their drivers give them: Apple's own (usbserial,
+    /// usbmodem), WCH, Silicon Labs, FTDI, and Prolific's newer driver (PL2303G-USBtoUART…).
+    /// Bluetooth devices also appear as cu.* ports; those are left out.
+    public static func isLikelyUSBSerial(_ name: String) -> Bool {
+        guard name.hasPrefix("cu.") else { return false }
+        let lower = name.lowercased()
+        return ["usbserial", "usbmodem", "wchusbserial", "slab", "usbtouart", "pl2303", "ftdi", "uart"]
+            .contains { lower.contains($0) }
     }
 
     public init(path: String, baud: speed_t = 115_200) throws {

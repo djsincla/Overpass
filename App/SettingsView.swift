@@ -5,6 +5,9 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var advice: [CableStopAdvisor.Option] = []
+    #if os(macOS)
+    @State private var serialPorts: [String] = []
+    #endif
 
     var body: some View {
         @Bindable var model = model
@@ -97,10 +100,17 @@ struct SettingsView: View {
                 }
             case .usb:
                 #if os(macOS)
-                Picker("USB port", selection: $model.settings.serialPath) {
-                    Text("Choose…").tag("")
-                    ForEach(SerialTransport.availablePorts(), id: \.self) { Text($0).tag($0) }
+                HStack {
+                    Picker("USB port", selection: $model.settings.serialPath) {
+                        Text("Choose…").tag("")
+                        ForEach(serialPorts, id: \.self) { Text($0).tag($0) }
+                    }
+                    Button { serialPorts = SerialTransport.availablePorts() } label: { Image(systemName: "arrow.clockwise") }
+                        .buttonStyle(.borderless)
+                        .help("Look for USB serial ports again (after plugging the mount in)")
+                        .accessibilityLabel("Refresh USB ports")
                 }
+                .onAppear { serialPorts = SerialTransport.availablePorts() }
                 #else
                 TextField("Relay address", text: $model.settings.relayHost).autocorrectionDisabled()
                 LabeledContent("Relay port") {
