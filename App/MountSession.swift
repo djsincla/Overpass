@@ -489,6 +489,8 @@ final class MountSession {
             } catch is CancellationError {
             } catch {
                 status = describe(error)
+                log("Tracking \(object.name) (\(mode)) stopped: \(describe(error))")
+                log("Tracking \(object.name) (\(mode)) stopped: \(describe(error))")
                 try? await normal?.stop()
                 try? await special?.stop()
             }
@@ -586,14 +588,52 @@ final class MountSession {
         case .solar: .solar
         default: .sidereal
         }
-        // The Moon's parallax changes as it moves, so re-centre it every few minutes.
-        repeat {
-            let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(skyNow))
-            try await normal.slew(rightAscension: ra, declination: dec, rate: rate)
-            status = "Mount tracking at \(rate == .lunar ? "lunar" : rate == .solar ? "solar" : "sidereal") rate"
-            if how != .lunar { return }
-            try await Task.sleep(for: .seconds(300))
-        } while !Task.isCancelled
+        let rateName = rate == .lunar ? "lunar" : rate == .solar ? "solar" : "sidereal"
+        // The Moon's parallax changes as it moves, so it's re-centred every few minutes. Between
+        // times, watch the mount's own status, so a stop shows here and in the mount log.
+        var recentred = Date.distantPast
+        var lastState: Int?
+        while !Task.isCancelled {
+            if how == .lunar ? Date.now.timeIntervalSince(recentred) > 300 : recentred == .distantPast {
+                let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(skyNow))
+                do {
+                    try await normal.slew(rightAscension: ra, declination: dec, rate: rate)
+                    log(String(format: "Passive %@: RA/Dec goto (RA %.4f° Dec %.4f°) accepted, %@ rate", object.name, ra, dec, rateName))
+                } catch {
+                    log("Passive \(object.name): RA/Dec goto failed: \(describe(error))")
+                    throw error
+                }
+                recentred = .now
+            }
+            let state = try? await normal.systemStatus()
+            if let state, state != lastState {
+                log("Passive \(object.name): mount status \(state) (\(Self.systemStatusName(state)))")
+                lastState = state
+            }
+            switch state {
+            case 1, 5: status = "Mount tracking at \(rateName) rate"
+            case 2: status = "Mount slewing…"
+            case let other?:
+                status = "The mount stopped tracking (it reports \(Self.systemStatusName(other)))"
+            case nil: break
+            }
+            try await Task.sleep(for: .seconds(max(2, settings.normalModePeriod * 3)))
+        }
+    }
+
+    /// `:GLS#` system status digit.
+    static func systemStatusName(_ digit: Int) -> String {
+        switch digit {
+        case 0: "stopped"
+        case 1: "tracking"
+        case 2: "slewing"
+        case 3: "guiding"
+        case 4: "meridian flip"
+        case 5: "tracking with PEC"
+        case 6: "parked"
+        case 7: "stopped at home"
+        default: "status \(digit)"
+        }
     }
 
     private func runStep(_ object: SkyObject, pass: SatellitePass?) async throws {
