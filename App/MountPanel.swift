@@ -158,6 +158,10 @@ struct MountPanel: View {
                     .help(mount.isTracking ? "Stop tracking to change the target" : "Use the highlighted object as the tracking target")
             }
 
+            if let target, let scope = mount.skyPosition {
+                PointingError(target: target, scope: scope)
+            }
+
             HStack {
                 if let pass = model.targetPass, !mount.isTracking {
                     if let point = mount.startPoint(of: pass) {
@@ -273,6 +277,74 @@ struct MountPanel: View {
         case .unknown(let code): "Mount \(code)"
         }
         return "\(name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
+    }
+}
+
+/// How far the scope is from where the target is (with the fine-tune offsets), in arc-seconds,
+/// on a logarithmic bar from 1″ to 10°: green within an arc-minute, amber within ten.
+struct PointingError: View {
+    @Environment(AppModel.self) private var model
+    let target: SkyObject
+    let scope: Horizontal
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            if let error = error(at: context.date) {
+                content(error)
+            }
+        }
+    }
+
+    private func content(_ error: (total: Double, azimuth: Double, altitude: Double)) -> some View {
+        let arcsec = error.total * 3600
+        let color = arcsec < 60 ? Theme.target : arcsec < 600 ? Theme.focus : Theme.scope
+        // 1″ at the left, 10° (36,000″) at the right.
+        let fraction = min(max(log10(max(arcsec, 1)) / log10(36_000), 0), 1)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel("Off target")
+                Spacer()
+                Text(String(format: "Az %+.0f″  Alt %+.0f″", error.azimuth * 3600, error.altitude * 3600))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Text(arcsec < 100_000 ? "\(Int(arcsec.rounded()))″" : String(format: "%.1f°", error.total))
+                    .font(.system(.title3, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(color)
+                    .contentTransition(.numericText())
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.10))
+                    Capsule().fill(color.gradient)
+                        .frame(width: max(6, proxy.size.width * fraction))
+                        .shadow(color: color.opacity(0.5), radius: 3)
+                    // Marks at 1′ and 10′.
+                    ForEach([60.0, 600.0], id: \.self) { mark in
+                        Rectangle().fill(Color.primary.opacity(0.35))
+                            .frame(width: 1)
+                            .offset(x: proxy.size.width * log10(mark) / log10(36_000))
+                    }
+                }
+            }
+            .frame(height: 6)
+            .animation(.easeOut(duration: 0.3), value: fraction)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Off target by \(Int(arcsec.rounded())) arc-seconds")
+    }
+
+    /// Angular distance and its components on the sky (azimuth scaled by cos altitude), degrees.
+    private func error(at date: Date) -> (total: Double, azimuth: Double, altitude: Double)? {
+        let mount = model.mount
+        let time = AstroTime(model.viewDate(date) + mount.timeOffset)
+        guard var aim = try? model.settings.observer.look(at: target.target, time) else { return nil }
+        aim.azimuth = normalizedDegrees(aim.azimuth + mount.azimuthOffset)
+        aim.altitude += mount.altitudeOffset
+        let a1 = scope.altitude.radians, a2 = aim.altitude.radians
+        let dAz = wrap180(aim.azimuth - scope.azimuth).radians, dAlt = a2 - a1
+        // Haversine: stays accurate down to fractions of an arc-second.
+        let h = sin(dAlt / 2) * sin(dAlt / 2) + cos(a1) * cos(a2) * sin(dAz / 2) * sin(dAz / 2)
+        let total = (2 * asin(min(1, h.squareRoot()))).degrees
+        return (total, dAz.degrees * cos((a1 + a2) / 2), dAlt.degrees)
     }
 }
 
