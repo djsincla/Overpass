@@ -154,7 +154,7 @@ struct SettingsView: View {
                 if model.settings.connection.isSpecialMode {
                     Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
                     Toggle("Use the mount's own alignment", isOn: $model.settings.captureMountAlignment)
-                        .help("When connecting, read where the mount thinks it's pointing before switching to Special mode, so Smooth tracking works without a star alignment")
+                        .help("Use iOptron's own axis coordinates instead of a star alignment. The mount loses its position when it changes mode, so each time it enters Special mode Overpass sets the axes to where the scope points: from the mount's Normal-mode position if it has one, otherwise from where Overpass last saw it.")
                     Button(testingSlew ? "Testing the mount's slew…" : "Test the mount's slew") {
                         testingSlew = true
                         Task {

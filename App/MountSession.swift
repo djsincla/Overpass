@@ -96,6 +96,27 @@ final class MountSession {
     /// The USB line (or, on iPhone and iPad, the relay), for Normal-mode commands on the way out
     /// of Special mode.
     private var usbTransport: MountTransport?
+
+    /// Where Overpass last knew the tube pointed, kept across launches. The mount loses its
+    /// position whenever it changes mode (Normal mode reads az 0, alt 0 after Special mode, and
+    /// Special mode starts from that), so Overpass is the record and tells the mount after
+    /// every switch.
+    struct KnownPointing: Codable, Equatable {
+        var azimuth: Double
+        var altitude: Double
+        var date: Date
+        var horizontal: Horizontal { Horizontal(azimuth: azimuth, altitude: altitude) }
+    }
+    private(set) var knownPointing: KnownPointing? = AppModel.load("knownPointing", default: KnownPointing?.none)
+    private var knownPointingSaved = Date.distantPast
+
+    private func remember(_ pointing: Horizontal, now: Bool = false) {
+        knownPointing = KnownPointing(azimuth: pointing.azimuth, altitude: pointing.altitude, date: .now)
+        if now || Date.now.timeIntervalSince(knownPointingSaved) > 5 {
+            app?.save(knownPointing, "knownPointing")
+            knownPointingSaved = .now
+        }
+    }
     /// Set when a `:T0`/`:T1` slew headed away from its target; rate control does moves after that.
     private var nativeSlewWentWrongWay = false
     private var pollTask: Task<Void, Never>?
@@ -139,6 +160,7 @@ final class MountSession {
                     throw MountSessionError.inSpecialMode
                 }
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                await restoreNormalPosition(client)
                 normal = client
                 identity = id
             case .usbNormal:
@@ -152,22 +174,20 @@ final class MountSession {
                     let raw = try await special.positions()
                     let model = s.alignment ?? .iOptronSpecialMode
                     let pointing = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
+                    remember(pointing, now: true)
                     _ = try await special.exitSpecialMode()
                     await syncNormalMode(to: pointing, over: transport)
                     id = try await client.identify()
                 } else {
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    await restoreNormalPosition(client)
                 }
                 normal = client
                 identity = id
             case .usb:
                 let transport = try await openUSB(s)
                 let client = MountClient(transport: transport)
-                if s.captureMountAlignment {
-                    identity = try await captureMountAlignment(client, transport)
-                } else {
-                    identity = try await client.enterSpecialMode()
-                }
+                identity = try await enterSpecialMode(client, transport)
                 let raw = try await client.positions()
                 let s = settings
                 unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
@@ -192,6 +212,7 @@ final class MountSession {
             // comes back reading az 0, alt 0, so tell it.
             var pointing: Horizontal?
             if settings.alignment != nil, (try? await readPosition()) != nil { pointing = skyPosition }
+            if let pointing { remember(pointing, now: true) }
             if (try? await special.exitSpecialMode()) != nil, let pointing, let transport = usbTransport {
                 await syncNormalMode(to: pointing, over: transport)
             }
@@ -236,6 +257,7 @@ final class MountSession {
         do {
             try await normal.configure(latitude: s.latitude, longitude: s.longitude)
             try await normal.sync(altitude: pointing.altitude, azimuth: pointing.azimuth)
+            remember(pointing, now: true)
             status = String(format: "Left Special mode; the mount now knows it points at az %.2f°, alt %.2f°", pointing.azimuth, pointing.altitude)
         } catch {
             status = "Left Special mode, but couldn't set the mount's position: \(describe(error))"
@@ -298,6 +320,7 @@ final class MountSession {
         axes = current
         let model = settings.alignment ?? AlignmentModel()
         skyPosition = model.sky(for: current)
+        if settings.alignment != nil, let skyPosition { remember(skyPosition) }
         try checkCableRange(current)
         return current
     }
@@ -640,6 +663,8 @@ final class MountSession {
         let h = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
         skyPositionDate = positionTime(asked: asked, answered: .now)
         skyPosition = h
+        // 0, 0 is what the mount reads after a mode change, not a position.
+        if abs(h.azimuth) > 1e-6 || abs(h.altitude) > 1e-6 { remember(h) }
         return h
     }
 
@@ -1021,40 +1046,65 @@ final class MountSession {
         alignmentPoints = []
     }
 
-    /// The mount's own alignment, so Smooth tracking can start without a star alignment.
+    /// Special mode, with the axes set to where the tube really points. Entering Special mode
+    /// the mount takes its axes from its Normal-mode position, which reads az 0, alt 0 after any
+    /// earlier spell in Special mode, so Overpass syncs them (`:S0`/`:S1`): to the mount's own
+    /// Normal-mode reading when that's real, otherwise to the last position Overpass saw.
     ///
-    /// In Special mode the HAZ reports its axes in its own aligned coordinates: P0 is azimuth
-    /// − 180° and P1 the zenith distance (`AlignmentModel.iOptronSpecialMode`). So when the
-    /// mount is already in Special mode, that convention is used as it is. From Normal mode,
-    /// where the mount was pointing (`:GAC#`) is read first and paired with the axes, which also
-    /// corrects any small zero offset. The Normal-mode position resets to 0, 0 after the mount
-    /// has been in Special mode, so that reading is only used when it's real, and the mode is
-    /// never switched just to read it.
-    private func captureMountAlignment(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
-        status = "Reading the mount's alignment…"
-        var pointing: Horizontal?
-        if try await client.identify().isSpecialMode == false {
-            let p = try await NormalModeClient(transport: transport).altAz()
-            if abs(p.altitude) > 1e-6 || abs(p.azimuth) > 1e-6 { pointing = Horizontal(azimuth: p.azimuth, altitude: p.altitude) }
+    /// With "Use the mount's own alignment" (or no star alignment), the axes follow iOptron's
+    /// convention (`AlignmentModel.iOptronSpecialMode`: P0 azimuth − 180°, P1 from the zenith);
+    /// otherwise the star alignment, so either way the axes and the model agree.
+    private func enterSpecialMode(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
+        if settings.captureMountAlignment || settings.alignment == nil, let app {
+            app.settings.alignment = .iOptronSpecialMode
+            app.settings.alignmentRMS = nil
+            app.settings.alignmentStars = 0
+            app.settings.alignmentFromMount = true
         }
+        let model = settings.alignment ?? .iOptronSpecialMode
+
+        if try await client.identify().isSpecialMode {
+            // Already in Special mode, so no switch has reset the axes. Check them against the record.
+            let identity = try await client.identify()
+            if let known = knownPointing, let raw = try? await client.positions() {
+                let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
+                let off = angularSeparation(here.unitVector, known.horizontal.unitVector)
+                status = off > 0.5
+                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; align, or check nothing moved it", off)
+                    : "Special mode: the axes agree with where Overpass last saw the scope"
+            }
+            return identity
+        }
+
+        status = "Reading the mount's position…"
+        let reading = try await NormalModeClient(transport: transport).altAz()
+        let real = abs(reading.altitude) > 1e-6 || abs(reading.azimuth) > 1e-6
+        let pointing = real ? Horizontal(azimuth: reading.azimuth, altitude: reading.altitude) : knownPointing?.horizontal
         let identity = try await client.enterSpecialMode()
-        let raw = try await client.positions()
-        guard let app else { return identity }
-        let convention = AlignmentModel.iOptronSpecialMode
-        var model = convention
-        if let pointing, let fitted = AlignmentModel.fromMount(sky: pointing, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary),
-                                                              azimuthSense: convention.azimuthSense,
-                                                              altitudeSense: convention.altitudeSense) {
-            model = fitted
+        guard let pointing else {
+            status = "Special mode, but neither the mount nor Overpass knows where it points: align on a star first"
+            return identity
         }
-        app.settings.alignment = model
-        app.settings.alignmentRMS = nil
-        app.settings.alignmentStars = 0
-        app.settings.alignmentFromMount = true
-        status = pointing == nil
-            ? "Using the mount's own coordinates (P0 azimuth − 180°, P1 from the zenith)"
-            : String(format: "Using the mount's alignment (az zero %+.2f°, alt zero %+.2f°)", wrap180(model.yaw), model.altitudeOffset)
+        let axes = model.axes(for: pointing)
+        try await client.sync(primary: axes.primary, secondary: axes.secondary)
+        remember(pointing, now: true)
+        let source = real ? "the mount's own position" : "where Overpass last saw the scope"
+        status = String(format: "Special mode, axes set from %@: az %.2f°, alt %.2f°", source, pointing.azimuth, pointing.altitude)
         return identity
+    }
+
+    /// Normal mode reading az 0, alt 0 (after Special mode): sync it to where Overpass last saw
+    /// the scope.
+    private func restoreNormalPosition(_ client: NormalModeClient) async {
+        guard let reading = try? await client.altAz(), abs(reading.altitude) < 1e-6, abs(reading.azimuth) < 1e-6,
+              let known = knownPointing else { return }
+        do {
+            try await client.sync(altitude: known.altitude, azimuth: known.azimuth)
+            status = String(format: "The mount had lost its position; set it to where Overpass last saw the scope (az %.2f°, alt %.2f°)",
+                            known.azimuth, known.altitude)
+        } catch {
+            status = "The mount has lost its position, and setting it failed: \(describe(error))"
+        }
     }
 
     /// Fits and saves the model. One star keeps the previous axis direction; the first alignment needs two.
