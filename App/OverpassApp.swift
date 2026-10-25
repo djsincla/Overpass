@@ -25,9 +25,26 @@ struct ContentView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .tint(Theme.accent)
-        .preferredColorScheme(model.settings.alwaysDark ? .dark : nil)
+        .modifier(Appearance(dark: model.settings.alwaysDark || model.settings.redMode))
         .modifier(NightVision(enabled: model.settings.redMode))
         .task { await model.start() }
+    }
+}
+
+/// Dark, or whatever the system uses. On macOS, SwiftUI's preferredColorScheme doesn't let go
+/// once it has forced dark (the window stays dark after switching back to nil), so set the
+/// app's appearance directly there.
+struct Appearance: ViewModifier {
+    let dark: Bool
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.onChange(of: dark, initial: true) { _, dark in
+            NSApp.appearance = dark ? NSAppearance(named: .darkAqua) : nil
+        }
+        #else
+        content.preferredColorScheme(dark ? .dark : nil)
+        #endif
     }
 }
 
@@ -40,7 +57,6 @@ struct NightVision: ViewModifier {
     func body(content: Content) -> some View {
         if enabled {
             content
-                .preferredColorScheme(.dark)
                 .grayscale(1)
                 .colorMultiply(Color(red: 1, green: 0, blue: 0))
         } else {

@@ -45,7 +45,7 @@ struct Settings: Codable, Equatable {
     /// Night vision: the whole app in red on black, to keep dark adaptation at the eyepiece.
     var redMode = false
     /// Dark appearance regardless of the system setting: a bright screen ruins night vision.
-    var alwaysDark = true
+    var alwaysDark = false
     /// iPhone/iPad: switch the home-screen icon to the red one as well.
     var redAppIcon = false
 

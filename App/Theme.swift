@@ -6,19 +6,19 @@ enum Theme {
     /// Buttons and selection: a sky blue that keeps white text readable.
     static let accent = Color(red: 0.22, green: 0.58, blue: 0.96)
     /// A satellite in sunlight: the pass track, the profile, the "lit" chips.
-    static let sunlit = Color(red: 0.36, green: 0.86, blue: 1.0)
+    static let sunlit = Color.adaptive(light: (0.0, 0.52, 0.74), dark: (0.36, 0.86, 1.0))
     /// In the Earth's shadow.
-    static let eclipsed = Color(white: 0.72)
+    static let eclipsed = Color.adaptive(light: (0.45, 0.45, 0.48), dark: (0.72, 0.72, 0.72))
     /// The highlighted (focused) object.
-    static let focus = Color(red: 1.0, green: 0.78, blue: 0.28)
+    static let focus = Color.adaptive(light: (0.78, 0.47, 0.0), dark: (1.0, 0.78, 0.28))
     /// The locked tracking target, and "go".
-    static let target = Color(red: 0.32, green: 0.90, blue: 0.56)
+    static let target = Color.adaptive(light: (0.08, 0.58, 0.30), dark: (0.32, 0.90, 0.56))
     /// Where the scope is pointing, and "stop".
-    static let scope = Color(red: 1.0, green: 0.33, blue: 0.38)
+    static let scope = Color.adaptive(light: (0.86, 0.14, 0.22), dark: (1.0, 0.33, 0.38))
     /// The fill for "Start tracking": the target green, deep enough for white text.
     static let go = Color(red: 0.13, green: 0.62, blue: 0.36)
-    static let rising = Color(red: 0.32, green: 0.90, blue: 0.56)
-    static let setting = Color(red: 1.0, green: 0.62, blue: 0.30)
+    static let rising = Color.adaptive(light: (0.08, 0.58, 0.30), dark: (0.32, 0.90, 0.56))
+    static let setting = Color.adaptive(light: (0.85, 0.40, 0.04), dark: (1.0, 0.62, 0.30))
 
     /// Deep space behind the dome, the same in light and dark appearance (it's a window on the sky).
     static let space = LinearGradient(colors: [Color(red: 0.02, green: 0.03, blue: 0.07),
@@ -55,6 +55,30 @@ enum Theme {
         case .body: "circle.fill"
         case .star: "sparkle"
         }
+    }
+}
+
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
+
+extension Color {
+    /// One colour for light appearance and another for dark: the bright tints that glow on a
+    /// dark background are too pale to read on white.
+    static func adaptive(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+        #if os(macOS)
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+        #else
+        Color(uiColor: UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+        #endif
     }
 }
 
