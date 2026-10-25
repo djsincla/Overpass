@@ -21,6 +21,8 @@ settings:
     DEVELOPMENT_TEAM: HG979YFABK
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "6.0"
+    # The version: bump MARKETING_VERSION per release, CURRENT_PROJECT_VERSION per build
+    # (packaging/release.sh reads them from here).
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -72,10 +74,7 @@ targets:
         "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphone*]": AppIconRed
         PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
         PRODUCT_NAME: Overpass
-        # The version: bump MARKETING_VERSION per release, CURRENT_PROJECT_VERSION per build.
         # Notarisation needs the hardened runtime for Developer ID builds.
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"

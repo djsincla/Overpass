@@ -7,3 +7,4 @@ DerivedData/
 Overpass.xcodeproj/
 Screenshot*.png
 overpass-trace*.csv
+build/
