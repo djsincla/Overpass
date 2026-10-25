@@ -93,6 +93,8 @@ final class MountSession {
     private var special: MountClient?
     private var tcp: TCPTransport?
     private var unwrapper: AxisUnwrapper?
+    /// Set when a `:T0`/`:T1` slew headed away from its target; rate control does moves after that.
+    private var nativeSlewWentWrongWay = false
     private var pollTask: Task<Void, Never>?
     private var trackingTask: Task<Void, Never>?
     private var prepareTask: Task<Void, Never>?
@@ -156,6 +158,7 @@ final class MountSession {
                 let raw = try await client.positions()
                 let s = settings
                 unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
+                nativeSlewWentWrongWay = false
                 special = client
             }
             kind = s.connection
@@ -740,6 +743,7 @@ final class MountSession {
     /// Returns false if the mount refused its slew command.
     @discardableResult
     private func slewAxes(_ special: MountClient, to goal: AxisPosition) async throws -> Bool {
+        guard !nativeSlewWentWrongWay else { return false }
         let deadline = Date.now + 300
         while !Task.isCancelled {
             guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
@@ -752,7 +756,16 @@ final class MountSession {
                 } catch is ReplyError {
                     return false
                 }
-                try await waitForArrival(AxisPosition(primary: unwrapped, secondary: goal.secondary), deadline: deadline)
+                guard try await waitForArrival(AxisPosition(primary: unwrapped, secondary: goal.secondary), deadline: deadline) else {
+                    // Heading away from the target: the mount's idea of that position isn't ours
+                    // (it may count turns past north itself). Stop before it reaches the cable,
+                    // and leave moves to rate control, where the app owns the turns.
+                    try await special.stop()
+                    nativeSlewWentWrongWay = true
+                    status = String(format: "The mount's slew to %.1f° went the wrong way from %.1f° (now %.1f°); moving under rate control instead",
+                                    raw, wrap180(current.primary), wrap180(axes?.primary ?? current.primary))
+                    return false
+                }
             case .crossWrap(let direction):
                 // A few degrees under rate control carries it across the ±180° reading wrap.
                 let rate = direction * min(settings.maximumAzimuthRate, 2)
@@ -765,23 +778,29 @@ final class MountSession {
         return true
     }
 
-    /// Polls (4 Hz) until the axes reach `target`, or stop moving short of it.
-    private func waitForArrival(_ target: AxisPosition, deadline: Date) async throws {
+    /// Polls (4 Hz) until the axes reach `target`, or stop moving short of it. False if the
+    /// mount is moving away from the target instead.
+    private func waitForArrival(_ target: AxisPosition, deadline: Date) async throws -> Bool {
         var last: AxisPosition?
         var still = 0
+        var closest = Double.infinity
         while !Task.isCancelled {
             try await Task.sleep(for: .milliseconds(250))
-            guard let current = try await readPosition() else { return }
-            if abs(target.primary - current.primary) < 0.1 && abs(target.secondary - current.secondary) < 0.1 { return }
+            guard let current = try await readPosition() else { return true }
+            if abs(target.primary - current.primary) < 0.1 && abs(target.secondary - current.secondary) < 0.1 { return true }
+            let distance = max(abs(target.primary - current.primary), abs(target.secondary - current.secondary))
+            closest = min(closest, distance)
+            if distance > closest + 1 { return false }
             if let last, abs(last.primary - current.primary) < 0.005 && abs(last.secondary - current.secondary) < 0.005 {
                 still += 1
-                if still >= 4 { return }
+                if still >= 4 { return true }
             } else {
                 still = 0
             }
             last = current
             guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
         }
+        return true
     }
 
     /// Axis readings for a mount-frame direction, on the azimuth turn nearest `reference`.
