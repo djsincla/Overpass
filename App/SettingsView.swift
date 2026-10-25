@@ -90,6 +90,15 @@ struct SettingsView: View {
 
                 Section("About") {
                     LabeledContent("Version", value: Self.version)
+                    Link(destination: URL(string: "https://djsincla.github.io/Overpass/")!) {
+                        Label("Website", systemImage: "globe")
+                    }
+                    Link(destination: URL(string: "https://github.com/djsincla/Overpass")!) {
+                        Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    Link(destination: URL(string: "https://github.com/djsincla/Overpass/blob/main/LICENSE")!) {
+                        Label("Apache License 2.0", systemImage: "doc.text")
+                    }
                 }
             }
             .formStyle(.grouped)
