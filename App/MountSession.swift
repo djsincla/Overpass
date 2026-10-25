@@ -363,9 +363,8 @@ final class MountSession {
         prepareTask = Task {
             do {
                 if let normal {
-                    try await routeCheck(to: point.position)
                     status = "Slewing to start point at full speed…"
-                    try await slewAndWait(normal, to: point.position)
+                    try await goto(normal, to: point.position)
                     // MSS leaves tracking off, so the mount holds there.
                     status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSinceNow))"
                 } else if let special {
@@ -413,11 +412,11 @@ final class MountSession {
         guard let how = object.passiveTracking else { throw MountSessionError.notPassive }
         let s = settings
         let observer = s.observer
-        try await routeCheck(to: try observer.look(at: object.target, AstroTime(.now)))
+        // Get there by the allowed way round first; the RA/Dec goto that starts tracking is then tiny.
+        status = "Slewing at full speed…"
+        try await goto(normal, to: try observer.look(at: object.target, AstroTime(.now)))
 
         if how == .holdPosition {
-            let h = try observer.look(at: object.target, AstroTime(.now))
-            try await normal.slew(altitude: h.altitude, azimuth: h.azimuth)
             status = "Holding position (geostationary)"
             return
         }
@@ -455,16 +454,22 @@ final class MountSession {
             if aim.altitude < startAltitude {
                 // Before the pass: wait where it first reaches the start elevation, once.
                 if let pass, let point = pass.startPoint(above: startAltitude), tick < point.date, !waitingAtRise {
-                    try await routeCheck(to: point.position)
                     status = "Slewing to start point at full speed…"
-                    try await slewAndWait(normal, to: point.position)
+                    try await goto(normal, to: point.position)
                     waitingAtRise = true
                 }
                 status = pass.flatMap { $0.startPoint(above: startAltitude) }
                     .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSinceNow))" }
                     ?? "Below \(Int(startAltitude))°"
             } else {
-                try await routeCheck(to: aim)
+                // Read at the end of the last step; good enough to tell which way round to go.
+                let here = if let skyPosition { skyPosition } else { try await currentAltAz(normal) }
+                guard let legs = route(from: here, to: aim) else { throw MountSessionError.inCableMargin }
+                if legs.count > 1 {
+                    // The track crosses the cable stop: go back round the other way, then carry on.
+                    try await goto(normal, to: aim, from: here)
+                    continue
+                }
                 do {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
                     status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude)
@@ -481,32 +486,57 @@ final class MountSession {
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
 
-    /// A normal-mode goto at full speed. While the mount slews, only its status is checked (once a
-    /// second): position queries mid-slew made the motion stutter, so the readout updates on arrival.
-    private func slewAndWait(_ normal: NormalModeClient, to target: Horizontal) async throws {
+    /// The HAZ46 goes to about 6°/s at its top speed; slightly under, so the quiet wait errs long.
+    private static let estimatedSlewRate = 5.0
+
+    /// A normal-mode goto at full speed that never swings through the cable stop. The mount
+    /// takes the shorter way round by itself, so when the allowed way is the long way, it's
+    /// sent in legs (each under 180°) that all turn the same way.
+    private func goto(_ normal: NormalModeClient, to target: Horizontal, from start: Horizontal? = nil) async throws {
+        let s = settings
+        var here = if let start { start } else { try await currentAltAz(normal) }
+        guard let legs = route(from: here, to: target) else { throw MountSessionError.inCableMargin }
+        let message = status
+        for (i, leg) in legs.enumerated() {
+            if legs.count > 1 {
+                let way = wrap180(leg.azimuth - here.azimuth) > 0 ? "clockwise" : "anticlockwise"
+                status = "Going round the cable stop (\(Int(s.cableStopAzimuth))°) \(way) · leg \(i + 1) of \(legs.count)"
+            }
+            try await slewAndWait(normal, from: here, to: leg)
+            here = leg
+        }
+        if legs.count > 1 { status = message }
+    }
+
+    /// Normal mode: the cable stop's allowed route from here to there, as gotos.
+    private func route(from: Horizontal, to: Horizontal) -> [Horizontal]? {
+        CableRoute.legs(from: from, to: to, stop: settings.cableStopAzimuth, margin: settings.cableMargin)
+    }
+
+    private func currentAltAz(_ normal: NormalModeClient) async throws -> Horizontal {
+        let p = try await normal.altAz()
+        let h = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
+        skyPosition = h
+        return h
+    }
+
+    /// One goto at full speed, waited out. Any command mid-slew makes the mount hesitate, so the
+    /// app stays silent for about as long as the slew should take, then checks once a second.
+    private func slewAndWait(_ normal: NormalModeClient, from start: Horizontal, to target: Horizontal) async throws {
         if !maximumSpeedSet {
             try await normal.setMaximumSlewSpeed(9)
             maximumSpeedSet = true
         }
         try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
+        let distance = max(abs(wrap180(target.azimuth - start.azimuth)), abs(target.altitude - start.altitude))
+        // Plus time to speed up and slow down.
+        try await Task.sleep(for: .seconds(distance / Self.estimatedSlewRate + 2))
         let deadline = Date.now + 180
         while try await normal.isSlewing() {
             guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
             try await Task.sleep(for: .seconds(1))
         }
-        let p = try await normal.altAz()
-        skyPosition = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
-    }
-
-    /// Normal mode slews take the mount's own route; refuse any that would swing through the cable stop.
-    private func routeCheck(to target: Horizontal) async throws {
-        guard let normal else { return }
-        let s = settings
-        let current = try await normal.altAz()
-        if StepTracking.shorterRouteCrossesStop(from: current.azimuth, to: target.azimuth,
-                                                stop: s.cableStopAzimuth, margin: s.cableMargin) {
-            throw MountSessionError.routeCrossesCableStop
-        }
+        _ = try await currentAltAz(normal)
     }
 
     private func runSmooth(_ object: SkyObject, pass: SatellitePass?) async throws {
@@ -661,7 +691,7 @@ final class MountSession {
 
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
-    case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
+    case untrackablePass, routeCrossesCableStop, inCableMargin, pastCableStop, belowHorizon, couldNotReachStart
 
     var message: String {
         switch self {
@@ -673,6 +703,7 @@ enum MountSessionError: Error {
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
         case .untrackablePass: "This pass crosses the cable stop or exceeds the altitude limits."
         case .routeCrossesCableStop: "Stopped: that move would swing through the cable stop."
+        case .inCableMargin: "Can't point there: it's inside the margin around the cable stop (Settings → Cable stop)."
         case .pastCableStop: "Stopped at the cable stop."
         case .belowHorizon: "It's below your horizon."
         case .couldNotReachStart: "Stopped: the mount didn't reach the start point within 5 minutes."
