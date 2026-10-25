@@ -78,6 +78,27 @@ public enum Geodesy {
         return normalizedDegrees(atan2(y, x).degrees)
     }
 
+    /// Shortest distance from `point` to a polyline (km), treating each segment as straight in a
+    /// local flat projection: fine over the few hundred km a transit path spans.
+    public static func distance(from point: Geodetic, toPath path: [Geodetic]) -> Double {
+        guard let first = path.first else { return .infinity }
+        guard path.count > 1 else { return distance(point, first) }
+        let k = cos(point.latitude.radians)
+        func flat(_ g: Geodetic) -> (x: Double, y: Double) {
+            (wrap180(g.longitude - point.longitude).radians * k * meanRadius, (g.latitude - point.latitude).radians * meanRadius)
+        }
+        var best = Double.infinity
+        for (a, b) in zip(path, path.dropFirst()) {
+            let p = flat(a), q = flat(b)
+            let dx = q.x - p.x, dy = q.y - p.y
+            let lengthSquared = dx * dx + dy * dy
+            let t = lengthSquared > 0 ? max(0, min(1, -(p.x * dx + p.y * dy) / lengthSquared)) : 0
+            let x = p.x + t * dx, y = p.y + t * dy
+            best = min(best, (x * x + y * y).squareRoot())
+        }
+        return best
+    }
+
     /// The point `distance` km from `start` on `bearing`.
     public static func destination(from start: Geodetic, bearing: Double, distance: Double) -> Geodetic {
         let d = distance / meanRadius, t = bearing.radians, p1 = start.latitude.radians

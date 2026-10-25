@@ -104,3 +104,15 @@ import Testing
         #expect(drift.distance < 0.5)
     }
 }
+
+@Suite struct PathDistanceTests {
+    @Test func distanceToAPolyline() {
+        let start = Geodetic(latitude: 35, longitude: -120)
+        let path = (0...10).map { Geodesy.destination(from: start, bearing: 90, distance: Double($0)) }
+        let off = Geodesy.destination(from: path[5], bearing: 0, distance: 3)
+        #expect(abs(Geodesy.distance(from: off, toPath: path) - 3) < 0.01)
+        // Beyond the end: distance to the end point.
+        let past = Geodesy.destination(from: path[10], bearing: 90, distance: 4)
+        #expect(abs(Geodesy.distance(from: past, toPath: path) - 4) < 0.01)
+    }
+}

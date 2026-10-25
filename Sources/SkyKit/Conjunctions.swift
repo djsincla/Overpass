@@ -215,7 +215,11 @@ public struct ConjunctionFinder: Sendable {
         let distance = Geodesy.distance(best.centre, centre)
         guard distance <= radius else { return nil }
 
-        let width = (best.left != nil && best.right != nil) ? Geodesy.distance(best.left!, best.right!) : 0
+        // Across the band, not edge to edge: the edge points aren't opposite each other when the
+        // band is oblique (low Moon or Sun), so measure each edge's distance from the centreline.
+        let centreline = path.map(\.centre)
+        let width = [best.left, best.right].compactMap { $0 }
+            .map { Geodesy.distance(from: $0, toPath: centreline) }.reduce(0, +)
         let site = best.centre.observer
         let m = body.earthFixedPosition(at: time(when))
         let look = site.horizontal(ofEarthFixed: m)
