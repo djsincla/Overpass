@@ -184,6 +184,13 @@ struct MountPanel: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.scope)
+                } else if mount.kind == .usb && model.settings.alignment == nil {
+                    // Special mode reports raw axis angles: nothing to aim with until stars tie them to the sky.
+                    Button { showingAlignment = true } label: {
+                        Label("Align first…", systemImage: "star.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .help("Smooth tracking needs a star alignment: centre two or three bright stars")
                 } else {
                     Button {
                         if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await startTracking() } }

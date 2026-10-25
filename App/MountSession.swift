@@ -687,6 +687,7 @@ final class MountSession {
         switch error {
         case let e as MountSessionError: e.message
         case TransportError.timedOut: "The mount stopped answering."
+        case MountClientError.modeDidNotChange: "The mount didn't switch to Special mode. Power it off and on, then connect again."
         case TransportError.closed: "The connection closed."
         case TransportError.cannotOpen(let why): "Couldn't open the port: \(why)"
         case NormalModeError.slewRefused: "The mount refused the slew (below its altitude limit?)"

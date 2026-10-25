@@ -13,8 +13,13 @@ public actor MountClient {
     private let transport: MountTransport
     public private(set) var identity: MountIdentity?
 
-    public init(transport: MountTransport) {
+    /// How long the mount takes to switch modes after `:ZZZ#`. It doesn't answer while it
+    /// switches, so asking straight away times out.
+    private let modeSwitchSettle: Duration
+
+    public init(transport: MountTransport, modeSwitchSettle: Duration = .seconds(1)) {
         self.transport = transport
+        self.modeSwitchSettle = modeSwitchSettle
     }
 
     private let serial = SerialExecutor()
@@ -43,16 +48,31 @@ public actor MountClient {
     public func enterSpecialMode() async throws -> MountIdentity {
         let current = try await identify()
         if current.isSpecialMode { return current }
-        try await send(.toggleMode)
-        return try await identify()
+        return try await toggleMode(toSpecial: true)
     }
 
     public func exitSpecialMode() async throws -> MountIdentity {
         let current = try await identify()
         guard current.isSpecialMode else { return current }
         try await stop()
+        return try await toggleMode(toSpecial: false)
+    }
+
+    /// Sends `:ZZZ#`, waits for the switch, and asks again until the mount answers in the new
+    /// mode. Never toggles twice: an answer in the old mode just means it isn't done yet.
+    private func toggleMode(toSpecial special: Bool) async throws -> MountIdentity {
         try await send(.toggleMode)
-        return try await identify()
+        var lastError: Error = MountClientError.modeDidNotChange
+        for _ in 0..<5 {
+            try await Task.sleep(for: modeSwitchSettle)
+            do {
+                let identity = try await identify()
+                if identity.isSpecialMode == special { return identity }
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
     }
 
     /// Current (primary, secondary) positions in degrees.
@@ -96,4 +116,9 @@ public actor MountClient {
         try Reply.ack(try await send(.sync(.primary, centiarcsec: Centiarcsec.fromDegrees(primary))))
         try Reply.ack(try await send(.sync(.secondary, centiarcsec: Centiarcsec.fromDegrees(secondary))))
     }
+}
+
+public enum MountClientError: Error, Equatable {
+    /// The mount kept answering in the old mode after `:ZZZ#`.
+    case modeDidNotChange
 }

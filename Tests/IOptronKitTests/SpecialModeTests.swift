@@ -84,8 +84,15 @@ final class ScriptedTransport: MountTransport, @unchecked Sendable {
     init(replies: [String]) { self.replies = replies }
 
     func write(_ text: String) async throws { written.append(text) }
-    func read(count: Int) async throws -> String { replies.removeFirst() }
-    func read(until terminator: Character) async throws -> String { replies.removeFirst() }
+    /// A reply of "<timeout>" stands for the mount not answering.
+    func read(count: Int) async throws -> String { try next() }
+    func read(until terminator: Character) async throws -> String { try next() }
+
+    private func next() throws -> String {
+        let reply = replies.removeFirst()
+        if reply == "<timeout>" { throw TransportError.timedOut }
+        return reply
+    }
 }
 
 @Suite struct MountClientTests {
@@ -94,6 +101,22 @@ final class ScriptedTransport: MountTransport, @unchecked Sendable {
         let identity = try await MountClient(transport: transport).enterSpecialMode()
         #expect(identity.model == .haz46 && identity.isSpecialMode)
         #expect(transport.written == [":MountInfo#", ":ZZZ#", ":MountInfo#"])
+    }
+
+    @Test func waitsForTheModeSwitch() async throws {
+        // Silent while switching, then still Normal once, then Special: one toggle, three asks.
+        let transport = ScriptedTransport(replies: ["0052", "<timeout>", "0052", "8052"])
+        let identity = try await MountClient(transport: transport, modeSwitchSettle: .zero).enterSpecialMode()
+        #expect(identity.isSpecialMode)
+        #expect(transport.written == [":MountInfo#", ":ZZZ#", ":MountInfo#", ":MountInfo#", ":MountInfo#"])
+    }
+
+    @Test func givesUpIfTheModeNeverChanges() async throws {
+        let transport = ScriptedTransport(replies: ["0052"] + Array(repeating: "0052", count: 5))
+        await #expect(throws: MountClientError.modeDidNotChange) {
+            try await MountClient(transport: transport, modeSwitchSettle: .zero).enterSpecialMode()
+        }
+        #expect(transport.written.filter { $0 == ":ZZZ#" }.count == 1)
     }
 
     @Test func doesNotToggleWhenAlreadySpecial() async throws {
