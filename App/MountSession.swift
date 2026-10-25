@@ -109,6 +109,27 @@ final class MountSession {
     }
     private(set) var knownPointing: KnownPointing? = AppModel.load("knownPointing", default: KnownPointing?.none)
     private var knownPointingSaved = Date.distantPast
+    /// Set when the mount's position disagrees with the record: readings stop updating the record
+    /// until the position is set or aligned, so the good value isn't overwritten by the bad one.
+    private(set) var recordHeld = false
+
+    /// Mode switches and position syncs, for working out what the mount does with them.
+    static let logFile = AppModel.storage.appending(path: "mount-log.txt")
+
+    func log(_ line: String) {
+        let text = "\(Date.now.formatted(.iso8601)) \(line)\n"
+        let file = Self.logFile
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try? handle.close()
+        } else {
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(text.utf8).write(to: file)
+        }
+    }
+
+    private func describe(_ h: Horizontal) -> String { String(format: "az %.3f° alt %.3f°", h.azimuth, h.altitude) }
 
     private func remember(_ pointing: Horizontal, now: Bool = false) {
         knownPointing = KnownPointing(azimuth: pointing.azimuth, altitude: pointing.altitude, date: .now)
@@ -160,7 +181,7 @@ final class MountSession {
                     throw MountSessionError.inSpecialMode
                 }
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
-                await restoreNormalPosition(client)
+                await checkNormalPosition(client)
                 normal = client
                 identity = id
             case .usbNormal:
@@ -175,12 +196,14 @@ final class MountSession {
                     let model = s.alignment ?? .iOptronSpecialMode
                     let pointing = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
                     remember(pointing, now: true)
+                    log(String(format: "USB Normal connect, leaving Special mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary) + describe(pointing))
                     _ = try await special.exitSpecialMode()
-                    await syncNormalMode(to: pointing, over: transport)
+                    try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    await checkNormalPosition(client)
                     id = try await client.identify()
                 } else {
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
-                    await restoreNormalPosition(client)
+                    await checkNormalPosition(client)
                 }
                 normal = client
                 identity = id
@@ -213,8 +236,15 @@ final class MountSession {
             var pointing: Horizontal?
             if settings.alignment != nil, (try? await readPosition()) != nil { pointing = skyPosition }
             if let pointing { remember(pointing, now: true) }
-            if (try? await special.exitSpecialMode()) != nil, let pointing, let transport = usbTransport {
-                await syncNormalMode(to: pointing, over: transport)
+            if let raw = try? await special.positions() {
+                log(String(format: "Disconnect: P0 %+.4f° P1 %+.4f°", raw.primary, raw.secondary) + (pointing.map { " = " + describe($0) } ?? ""))
+            }
+            if (try? await special.exitSpecialMode()) != nil, let transport = usbTransport {
+                // No sync: on the HAZ46 a :CM# sync here added the position a second time
+                // (25 Oct 2026). Just record what Normal mode reports.
+                if let p = try? await NormalModeClient(transport: transport).altAz() {
+                    log(String(format: "Left Special mode: :GAC# az %.3f° alt %.3f°", p.azimuth, p.altitude))
+                }
             }
         }
         await closeTransport()
@@ -246,22 +276,6 @@ final class MountSession {
         #endif
         usbTransport = transport
         return transport
-    }
-
-    /// After leaving Special mode: set the mount's time and place, then sync its Normal-mode
-    /// position to where the tube actually points, so the hand controller and WiFi carry on
-    /// from there instead of from az 0, alt 0.
-    private func syncNormalMode(to pointing: Horizontal, over transport: MountTransport) async {
-        let s = settings
-        let normal = NormalModeClient(transport: transport)
-        do {
-            try await normal.configure(latitude: s.latitude, longitude: s.longitude)
-            try await normal.sync(altitude: pointing.altitude, azimuth: pointing.azimuth)
-            remember(pointing, now: true)
-            status = String(format: "Left Special mode; the mount now knows it points at az %.2f°, alt %.2f°", pointing.azimuth, pointing.altitude)
-        } catch {
-            status = "Left Special mode, but couldn't set the mount's position: \(describe(error))"
-        }
     }
 
     /// Keeps the position readout current while nothing else is talking to the mount.
@@ -320,7 +334,7 @@ final class MountSession {
         axes = current
         let model = settings.alignment ?? AlignmentModel()
         skyPosition = model.sky(for: current)
-        if settings.alignment != nil, let skyPosition { remember(skyPosition) }
+        if settings.alignment != nil, !recordHeld, let skyPosition { remember(skyPosition) }
         try checkCableRange(current)
         return current
     }
@@ -664,7 +678,7 @@ final class MountSession {
         skyPositionDate = positionTime(asked: asked, answered: .now)
         skyPosition = h
         // 0, 0 is what the mount reads after a mode change, not a position.
-        if abs(h.azimuth) > 1e-6 || abs(h.altitude) > 1e-6 { remember(h) }
+        if !recordHeld, abs(h.azimuth) > 1e-6 || abs(h.altitude) > 1e-6 { remember(h) }
         return h
     }
 
@@ -1076,34 +1090,108 @@ final class MountSession {
             return identity
         }
 
-        status = "Reading the mount's position…"
-        let reading = try await NormalModeClient(transport: transport).altAz()
-        let real = abs(reading.altitude) > 1e-6 || abs(reading.azimuth) > 1e-6
-        let pointing = real ? Horizontal(azimuth: reading.azimuth, altitude: reading.altitude) : knownPointing?.horizontal
+        let reading = try? await NormalModeClient(transport: transport).altAz()
+        if let reading { log(String(format: "Entering Special mode: :GAC# az %.3f° alt %.3f°", reading.azimuth, reading.altitude)) }
         let identity = try await client.enterSpecialMode()
-        guard let pointing else {
-            status = "Special mode, but neither the mount nor Overpass knows where it points: align on a star first"
-            return identity
+        // No sync: until the mount's sync commands are understood, only compare and report.
+        if let raw = try? await client.positions() {
+            let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
+            log(String(format: "In Special mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary) + describe(here)
+                + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
+            if let known = knownPointing {
+                let off = angularSeparation(here.unitVector, known.horizontal.unitVector)
+                recordHeld = off > 0.5
+                status = off > 0.5
+                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; use Set position, or align", off)
+                    : "Special mode: the axes agree with where Overpass last saw the scope"
+            }
         }
-        let axes = model.axes(for: pointing)
-        try await client.sync(primary: axes.primary, secondary: axes.secondary)
-        remember(pointing, now: true)
-        let source = real ? "the mount's own position" : "where Overpass last saw the scope"
-        status = String(format: "Special mode, axes set from %@: az %.2f°, alt %.2f°", source, pointing.azimuth, pointing.altitude)
         return identity
     }
 
-    /// Normal mode reading az 0, alt 0 (after Special mode): sync it to where Overpass last saw
-    /// the scope.
-    private func restoreNormalPosition(_ client: NormalModeClient) async {
-        guard let reading = try? await client.altAz(), abs(reading.altitude) < 1e-6, abs(reading.azimuth) < 1e-6,
-              let known = knownPointing else { return }
+    // MARK: Setting the position
+
+    /// Special mode: sets the axes so the scope reads `pointing` (`:S0`/`:S1`), then reads them
+    /// back to check the mount took the values as positions. Returns a report.
+    func setPosition(_ pointing: Horizontal) async -> String {
+        guard let special else { return "Connect over USB (Special mode) first." }
+        await stopAll()
+        let model = settings.alignment ?? .iOptronSpecialMode
+        let axes = model.axes(for: pointing)
         do {
-            try await client.sync(altitude: known.altitude, azimuth: known.azimuth)
-            status = String(format: "The mount had lost its position; set it to where Overpass last saw the scope (az %.2f°, alt %.2f°)",
-                            known.azimuth, known.altitude)
+            let before = try await special.positions()
+            try await special.sync(primary: axes.primary, secondary: axes.secondary)
+            let after = try await special.positions()
+            log(String(format: "Set position to %@: P0 %+.4f° P1 %+.4f° → sent %+.4f° %+.4f° → read %+.4f° %+.4f°",
+                       describe(pointing), before.primary, before.secondary, axes.primary, axes.secondary, after.primary, after.secondary))
+            guard abs(wrap180(after.primary - axes.primary)) < 0.05, abs(after.secondary - axes.secondary) < 0.05 else {
+                return String(format: "The mount didn't take the position as sent: sent P0 %+.3f° P1 %+.3f°, it now reads P0 %+.3f° P1 %+.3f° (it read %+.3f° %+.3f° before). Nothing else was changed; this is in the mount log.",
+                              axes.primary, axes.secondary, after.primary, after.secondary, before.primary, before.secondary)
+            }
+            unwrapper = AxisUnwrapper(raw: after.primary, model: model, limits: settings.limits)
+            recordHeld = false
+            remember(pointing, now: true)
+            _ = try? await readPosition()
+            return "The axes now read " + describe(pointing) + "."
         } catch {
-            status = "The mount has lost its position, and setting it failed: \(describe(error))"
+            return "Couldn't set the position: \(describe(error))"
+        }
+    }
+
+    /// Switches Special → Normal → Special without moving or syncing anything, reading the
+    /// position at each step, to see what a mode change does to it. Returns a report; every
+    /// line also goes to the mount log.
+    func testModeSwitching() async -> String {
+        guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
+        await stopAll()
+        pollTask?.cancel()
+        pollTask = nil
+        defer { startPolling() }
+        let model = settings.alignment ?? .iOptronSpecialMode
+        var report: [String] = []
+        func note(_ line: String) { report.append(line); log("Mode test: " + line) }
+        func axesLine(_ label: String, _ raw: (primary: Double, secondary: Double)) {
+            note(String(format: "%@: P0 %+.4f° P1 %+.4f° = ", label, raw.primary, raw.secondary)
+                 + describe(model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))))
+        }
+        do {
+            axesLine("Special mode", try await special.positions())
+            _ = try await special.exitSpecialMode()
+            let normal = NormalModeClient(transport: transport)
+            let started = Date.now
+            for wait in [0.0, 1, 3, 6] {
+                let delay = wait - Date.now.timeIntervalSince(started)
+                if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+                let p = try await normal.altAz()
+                note(String(format: "Normal mode after %.0f s: :GAC# az %.3f° alt %.3f°", Date.now.timeIntervalSince(started), p.azimuth, p.altitude))
+            }
+            _ = try await special.enterSpecialMode()
+            let back = Date.now
+            for wait in [0.0, 2] {
+                let delay = wait - Date.now.timeIntervalSince(back)
+                if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+                axesLine(String(format: "Special mode again after %.0f s", Date.now.timeIntervalSince(back)), try await special.positions())
+            }
+            if let raw = try? await special.positions() {
+                unwrapper = AxisUnwrapper(raw: raw.primary, model: model, limits: settings.limits)
+            }
+        } catch {
+            note("Stopped: \(describe(error))")
+        }
+        return report.joined(separator: "\n")
+    }
+
+    /// Normal mode: compare the mount's position with Overpass's record and report, without
+    /// syncing (a sync here added the position twice on the HAZ46).
+    private func checkNormalPosition(_ client: NormalModeClient) async {
+        guard let p = try? await client.altAz() else { return }
+        let reading = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
+        log("Normal mode: :GAC# " + describe(reading) + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
+        guard let known = knownPointing else { return }
+        let off = angularSeparation(reading.unitVector, known.horizontal.unitVector)
+        if off > 0.5 {
+            status = String(format: "The mount reads %@, %.1f° from where Overpass last saw the scope (%@)",
+                            describe(reading), off, describe(known.horizontal))
         }
     }
 
@@ -1120,6 +1208,7 @@ final class MountSession {
         app.settings.alignmentRMS = alignmentPoints.count > 2 ? model.rms(alignmentPoints) : nil
         app.settings.alignmentStars = alignmentPoints.count
         app.settings.alignmentFromMount = false
+        recordHeld = false
         if let raw = axes?.primary {
             // Re-anchor the turn count to the new model.
             unwrapper = AxisUnwrapper(raw: wrap180(raw), model: model, limits: app.settings.limits)

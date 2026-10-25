@@ -62,7 +62,7 @@ Examples:
   - **P0 = azimuth − 180°** (zero facing south), increasing clockwise like azimuth.
   - **P1 = zenith distance** (zero with the tube vertical; +90° at the horizon), so it counts *down* as the tube rises.
 - After the mount has been in Special mode, the Normal-mode position (`:GAC#`) reads az 0, alt 0 until it's aligned again, so it can't be used to calibrate the Special-mode axes.
-- Switching modes loses the position in both directions (seen 25 Oct 2026): leaving Special mode, Normal mode reads az 0, alt 0, and entering Special mode again starts the axes from that. Overpass keeps its own record of where the tube points and, after each switch, syncs the mount to it: `:S0`/`:S1` entering Special mode, `:Sas`/`:Sz` + `:CM#` leaving it.
+- Syncing after a mode switch (25 Oct 2026): after leaving Special mode at az 201.95°, alt 19.21°, a Normal-mode `:Sas`/`:Sz` + `:CM#` sync to that same position left the mount reading az 43.91°, alt 38.44°, which is exactly double. So the position wasn't really lost, and `:CM#` on the HAZ46 behaves as an offset added to a position the mount still holds rather than setting it. Overpass no longer syncs automatically on mode switches; it logs what the mount reads, compares it with its own record, and has a no-motion "Test mode switching" in Settings to measure what a switch does.
 - `:T0#` on a HAZ46 (measured 25 Oct 2026 with the app's slew test):
   - The target is in the same frame as the `:P0#` reading: a slew from −177.77° to −172.77° moved +4.9°.
   - It treats ±180° as two ends, not one point. A slew from −172.77° to +177° (10° the short way, across north on a HAZ) set off the long way round, nearly a full turn.

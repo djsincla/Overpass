@@ -15,6 +15,11 @@ struct SettingsView: View {
     @State private var advice: [CableStopAdvisor.Option] = []
     @State private var slewTest: String?
     @State private var testingSlew = false
+    @State private var modeTest: String?
+    @State private var setAzimuth = 0.0
+    @State private var setAltitude = 0.0
+    @State private var positionResult: String?
+    @State private var busy = false
     #if os(macOS)
     @State private var serialPorts: [String] = []
     #endif
@@ -166,6 +171,44 @@ struct SettingsView: View {
                     .help("Moves the azimuth axis about 25°, including across north, to learn how the mount's own slew counts position. Stand by the mount.")
                     if let slewTest {
                         Text(slewTest).font(.caption.monospacedDigit()).textSelection(.enabled)
+                    }
+                    let connected = model.mount.kind == .usb && model.mount.state == .connected
+                    Button(busy ? "Working…" : "Test mode switching") {
+                        busy = true
+                        Task {
+                            modeTest = await model.mount.testModeSwitching()
+                            busy = false
+                        }
+                    }
+                    .disabled(busy || !connected)
+                    .help("Switches to Normal mode and back without moving or syncing anything, reading the position at each step. Nothing moves.")
+                    if let modeTest {
+                        Text(modeTest).font(.caption.monospacedDigit()).textSelection(.enabled)
+                    }
+                    HStack {
+                        Text("Set position")
+                        Spacer()
+                        TextField("Azimuth", value: $setAzimuth, format: .number.precision(.fractionLength(0...3)))
+                            .frame(width: 80).multilineTextAlignment(.trailing)
+                        Text("az")
+                        TextField("Altitude", value: $setAltitude, format: .number.precision(.fractionLength(0...3)))
+                            .frame(width: 80).multilineTextAlignment(.trailing)
+                        Text("alt")
+                        Button("Set") {
+                            busy = true
+                            Task {
+                                positionResult = await model.mount.setPosition(Horizontal(azimuth: setAzimuth, altitude: setAltitude))
+                                busy = false
+                            }
+                        }
+                        .disabled(busy || !connected)
+                    }
+                    .help("Tells the mount where the scope actually points, in degrees, when you know it (a park position, or from a trace). Nothing moves.")
+                    .onAppear {
+                        if let known = model.mount.knownPointing { setAzimuth = known.azimuth; setAltitude = known.altitude }
+                    }
+                    if let positionResult {
+                        Text(positionResult).font(.caption).textSelection(.enabled)
                     }
                 }
             }
