@@ -229,3 +229,16 @@ extension AlignmentModel {
         return (azimuth, altitude)
     }
 }
+
+extension AlignmentModel {
+    /// iOptron's own Special-mode coordinates, measured on a HAZ46 pointed at the Moon: P0 reads
+    /// azimuth − 180° (zero facing south), and P1 reads the zenith distance (zero with the tube
+    /// vertical, counting up towards the horizon). An aligned mount starts in these coordinates.
+    public static var iOptronSpecialMode: AlignmentModel {
+        var model = AlignmentModel()
+        model.yaw = 180
+        model.altitudeSense = -1
+        model.altitudeOffset = 90
+        return model
+    }
+}

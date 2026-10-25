@@ -740,12 +740,13 @@ final class MountSession {
 
     /// The mount's own alignment, so Smooth tracking can start without a star alignment.
     ///
-    /// In Special mode the HAZ reports its axes in its own aligned coordinates: P0 is the
-    /// azimuth (±180°) and P1 the altitude. So when the mount is already in Special mode, the
-    /// axes are used as they are. From Normal mode, where the mount was pointing (`:GAC#`) is
-    /// read first and paired with the axes, which also corrects any small zero offset. The
-    /// Normal-mode position resets to 0, 0 after the mount has been in Special mode, so that
-    /// reading is only used when it's real, and the mode is never switched just to read it.
+    /// In Special mode the HAZ reports its axes in its own aligned coordinates: P0 is azimuth
+    /// − 180° and P1 the zenith distance (`AlignmentModel.iOptronSpecialMode`). So when the
+    /// mount is already in Special mode, that convention is used as it is. From Normal mode,
+    /// where the mount was pointing (`:GAC#`) is read first and paired with the axes, which also
+    /// corrects any small zero offset. The Normal-mode position resets to 0, 0 after the mount
+    /// has been in Special mode, so that reading is only used when it's real, and the mode is
+    /// never switched just to read it.
     private func captureMountAlignment(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
         status = "Reading the mount's alignment…"
         var pointing: Horizontal?
@@ -756,8 +757,11 @@ final class MountSession {
         let identity = try await client.enterSpecialMode()
         let raw = try await client.positions()
         guard let app else { return identity }
-        var model = AlignmentModel()
-        if let pointing, let fitted = AlignmentModel.fromMount(sky: pointing, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary)) {
+        let convention = AlignmentModel.iOptronSpecialMode
+        var model = convention
+        if let pointing, let fitted = AlignmentModel.fromMount(sky: pointing, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary),
+                                                              azimuthSense: convention.azimuthSense,
+                                                              altitudeSense: convention.altitudeSense) {
             model = fitted
         }
         app.settings.alignment = model
@@ -765,7 +769,7 @@ final class MountSession {
         app.settings.alignmentStars = 0
         app.settings.alignmentFromMount = true
         status = pointing == nil
-            ? "Using the mount's own coordinates (P0 azimuth, P1 altitude)"
+            ? "Using the mount's own coordinates (P0 azimuth − 180°, P1 from the zenith)"
             : String(format: "Using the mount's alignment (az zero %+.2f°, alt zero %+.2f°)", wrap180(model.yaw), model.altitudeOffset)
         return identity
     }

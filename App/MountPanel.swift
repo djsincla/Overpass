@@ -247,7 +247,7 @@ struct MountPanel: View {
 
     private var alignmentSummary: String {
         guard model.settings.alignment != nil else { return "none (Smooth needs 2+ stars)" }
-        if model.settings.alignmentFromMount { return "the mount's own (P0 azimuth, P1 altitude)" }
+        if model.settings.alignmentFromMount { return "the mount's own coordinates" }
         let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
         return "\(model.settings.alignmentStars) stars\(rms)"
     }

@@ -58,7 +58,10 @@ Examples:
 - Sign and 7 digits allow up to 9,999,999 → about 27.7°/s; the real limit is set by the mount.
 - The `1` response has **no** trailing `#`, so read exactly one byte.
 - With P0+P1+M0+M1 at about 30 ms each, the HAE (no P2/M2) gets about an 8 Hz control loop; the HAZ (with P2/M2) gets about 16 Hz.
-- What the axis zero points mean (azimuth 0 = north? altitude 0 = horizon?) is **not** stated. Check on hardware, or sync explicitly with S0/S1 after the mount is aligned.
+- What the axis zero points mean is **not** stated by iOptron. Measured on a HAZ46 (24 Oct 2026, pointed at the Moon at az 121.9°, alt 51.5°, reading P0 −58.77°, P1 +39.04°):
+  - **P0 = azimuth − 180°** (zero facing south), increasing clockwise like azimuth.
+  - **P1 = zenith distance** (zero with the tube vertical; +90° at the horizon), so it counts *down* as the tube rises.
+- After the mount has been in Special mode, the Normal-mode position (`:GAC#`) reads az 0, alt 0 until it's aligned again, so it can't be used to calibrate the Special-mode axes.
 
 # Normal mode (RS-232 Command Language V3.10, 2021-01-04): relevant parts
 

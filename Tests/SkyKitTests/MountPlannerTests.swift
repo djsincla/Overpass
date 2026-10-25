@@ -191,3 +191,21 @@ let zenithPass: [PassSample] = {
         #expect(model.altitudeSense == 1 && model.yaw == 1.5)
     }
 }
+
+@Suite struct IOptronSpecialModeTests {
+    // Measured: the Moon at az 121.92°, alt 51.46° read P0 −58.77°, P1 39.04° (centring within about half a degree).
+    let model = AlignmentModel.iOptronSpecialMode
+
+    @Test func matchesTheMoonReading() {
+        let sky = model.sky(for: AxisPosition(primary: -58.77, secondary: 39.04))
+        #expect(abs(wrap180(sky.azimuth - 121.92)) < 1 && abs(sky.altitude - 51.46) < 1)
+        let axes = model.axes(for: Horizontal(azimuth: 121.92, altitude: 51.46))
+        #expect(abs(axes.primary - -58.08) < 1e-6 && abs(axes.secondary - 38.54) < 1e-6)
+    }
+
+    @Test func horizonIsNinetyDegreesFromVertical() {
+        #expect(abs(model.axes(for: Horizontal(azimuth: 180, altitude: 0)).secondary - 90) < 1e-6)
+        #expect(abs(model.axes(for: Horizontal(azimuth: 180, altitude: 90)).secondary) < 1e-6)
+        #expect(abs(model.axes(for: Horizontal(azimuth: 180, altitude: 10)).primary) < 1e-6)
+    }
+}
