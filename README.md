@@ -62,7 +62,11 @@ Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step track
 
 ## Installing
 
-Download `Overpass-0.1.0.dmg` from the [latest release](https://github.com/djsincla/Overpass/releases/latest), open it and drag Overpass to Applications. It is signed with my Developer ID and notarised by Apple, and needs macOS 14 or later. There is no iPhone or iPad build to download yet; those need TestFlight.
+Download [Overpass.dmg](https://github.com/djsincla/Overpass/releases/latest/download/Overpass.dmg) from the [latest release](https://github.com/djsincla/Overpass/releases/latest), open it and drag Overpass to Applications. It is signed with my Developer ID and notarised by Apple, and needs macOS 14 or later. There is no iPhone or iPad build to download yet; those need TestFlight.
+
+## Releasing
+
+`packaging/release.sh` builds, signs with Developer ID, notarises and publishes a Mac release. Bump `MARKETING_VERSION` in `project.yml`, write the notes in `packaging/release-notes/<version>.md`, commit both, then run it; it makes a draft release unless you pass `--publish`, and `--dry-run` stops after building the signed disk image. The comments at the top of the script cover the one-off notarisation setup.
 
 ## Building
 
