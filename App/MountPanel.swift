@@ -230,19 +230,9 @@ struct MountPanel: View {
             HStack {
                 Label("Alignment: \(alignmentSummary)", systemImage: "star.circle").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button(mount.isCheckingAxes ? "Checking…" : "Check axes") { Task { await mount.checkAxes() } }
-                    .controlSize(.small)
-                    .disabled(mount.isCheckingAxes || mount.isTracking)
-                    .help("Nudges each axis a little and compares with the mount's own pointing, to learn which way the axes count and refit the alignment")
                 Button("Align…") { showingAlignment = true }.controlSize(.small)
             }
-            if let report = mount.axisCheckReport {
-                Text(report)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+
         } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
             HStack {
                 Text("Centre \(target.name), then sync to improve the mount's pointing.")
@@ -257,7 +247,7 @@ struct MountPanel: View {
 
     private var alignmentSummary: String {
         guard model.settings.alignment != nil else { return "none (Smooth needs 2+ stars)" }
-        if model.settings.alignmentFromMount { return "from the mount (captured when connecting)" }
+        if model.settings.alignmentFromMount { return "the mount's own (P0 azimuth, P1 altitude)" }
         let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
         return "\(model.settings.alignmentStars) stars\(rms)"
     }

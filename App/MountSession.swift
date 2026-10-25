@@ -62,8 +62,6 @@ final class MountSession {
     private var normal: NormalModeClient?
     private var special: MountClient?
     private var tcp: TCPTransport?
-    /// The USB link, kept for switching to Normal mode briefly to read the mount's own pointing.
-    private var specialTransport: MountTransport?
     private var unwrapper: AxisUnwrapper?
     private var pollTask: Task<Void, Never>?
     private var trackingTask: Task<Void, Never>?
@@ -120,7 +118,6 @@ final class MountSession {
                 transport = relay
                 #endif
                 let client = MountClient(transport: transport)
-                specialTransport = transport
                 if s.captureMountAlignment {
                     identity = try await captureMountAlignment(client, transport)
                 } else {
@@ -158,7 +155,6 @@ final class MountSession {
     private func closeTransport() async {
         await tcp?.close()
         tcp = nil
-        specialTransport = nil
         normal = nil
         special = nil
         unwrapper = nil
@@ -742,129 +738,45 @@ final class MountSession {
         alignmentPoints = []
     }
 
-    /// Reads the mount's own pointing in Normal mode, switches to Special mode, reads the raw
-    /// axes, and keeps the pair as the alignment: the mount was aligned already, so Smooth
-    /// tracking can start without a star alignment. If the mount is in Special mode already,
-    /// it's switched out for the reading and back.
+    /// The mount's own alignment, so Smooth tracking can start without a star alignment.
+    ///
+    /// In Special mode the HAZ reports its axes in its own aligned coordinates: P0 is the
+    /// azimuth (±180°) and P1 the altitude. So when the mount is already in Special mode, the
+    /// axes are used as they are. From Normal mode, where the mount was pointing (`:GAC#`) is
+    /// read first and paired with the axes, which also corrects any small zero offset. The
+    /// Normal-mode position resets to 0, 0 after the mount has been in Special mode, so that
+    /// reading is only used when it's real, and the mode is never switched just to read it.
     private func captureMountAlignment(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
         status = "Reading the mount's alignment…"
-        if try await client.identify().isSpecialMode {
-            _ = try await client.exitSpecialMode()
+        var pointing: Horizontal?
+        if try await client.identify().isSpecialMode == false {
+            let p = try await NormalModeClient(transport: transport).altAz()
+            if abs(p.altitude) > 1e-6 || abs(p.azimuth) > 1e-6 { pointing = Horizontal(azimuth: p.azimuth, altitude: p.altitude) }
         }
-        let pointing = try await NormalModeClient(transport: transport).altAz()
         let identity = try await client.enterSpecialMode()
         let raw = try await client.positions()
-        let sky = Horizontal(azimuth: pointing.azimuth, altitude: pointing.altitude)
-        guard let app, let model = AlignmentModel.fromMount(sky: sky, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary),
-                                                            azimuthSense: settings.measuredAzimuthSense,
-                                                            altitudeSense: settings.measuredAltitudeSense) else {
-            status = "Couldn't use the mount's alignment; align on stars instead."
-            return identity
+        guard let app else { return identity }
+        var model = AlignmentModel()
+        if let pointing, let fitted = AlignmentModel.fromMount(sky: pointing, axes: AxisPosition(primary: raw.primary, secondary: raw.secondary)) {
+            model = fitted
         }
         app.settings.alignment = model
         app.settings.alignmentRMS = nil
         app.settings.alignmentStars = 0
         app.settings.alignmentFromMount = true
-        status = String(format: "Using the mount's alignment (az zero %+.2f°, alt zero %+.2f°)%@",
-                        wrap180(model.yaw), model.altitudeOffset,
-                        settings.measuredAltitudeSense == nil ? " · run Check axes once to confirm the axis directions" : "")
+        status = pointing == nil
+            ? "Using the mount's own coordinates (P0 azimuth, P1 altitude)"
+            : String(format: "Using the mount's alignment (az zero %+.2f°, alt zero %+.2f°)", wrap180(model.yaw), model.altitudeOffset)
         return identity
-    }
-
-    // MARK: Axis check (Special mode)
-
-    /// True while Check axes runs.
-    private(set) var isCheckingAxes = false
-    /// The last axis check's readings, for diagnosing an inconclusive result.
-    private(set) var axisCheckReport: String?
-
-    /// Measures which way each raw axis counts and refits the alignment: compares the mount's
-    /// own pointing (Normal mode) with the raw axes (Special mode) here, after nudging altitude
-    /// about 5°, and after nudging azimuth about 5°, then returns to where it started.
-    func checkAxes() async {
-        guard let special, specialTransport != nil, !isTracking else { return }
-        await cancelTracking()
-        isCheckingAxes = true
-        axisCheckReport = nil
-        prepareTask = Task {
-            defer { isCheckingAxes = false; prepareTask = nil }
-            do {
-                status = "Checking axes 1 of 3: comparing with the mount…"
-                let start = try await compareWithMount(special)
-                status = "Checking axes 2 of 3: nudging altitude…"
-                // Raw secondary up 5°; if that's the wrong way it's lower, which the check reveals.
-                let lift: Double = start.sky.altitude > 70 ? -1 : 1
-                try await nudgeRaw(special, primary: 0, secondary: lift * 5)
-                let raised = try await compareWithMount(special)
-                status = "Checking axes 3 of 3: nudging azimuth…"
-                let turn: Double = wouldHitCableStop(raised.axes, primaryRate: 1) ? -1 : 1
-                try await nudgeRaw(special, primary: turn * 5, secondary: 0)
-                let turned = try await compareWithMount(special)
-                try await special.slew(primary: wrap180(start.axes.primary), secondary: start.axes.secondary)
-
-                let altitude = AlignmentModel.axisSenses(start, raised).altitude
-                let azimuth = AlignmentModel.axisSenses(raised, turned).azimuth
-                func line(_ name: String, _ p: AlignmentPoint) -> String {
-                    String(format: "%@  mount az %7.2f alt %6.2f  ·  raw P0 %8.2f P1 %7.2f",
-                           name, p.sky.azimuth, p.sky.altitude, wrap180(p.axes.primary), p.axes.secondary)
-                }
-                axisCheckReport = [line("start ", start), line("alt+5 ", raised), line("az+5  ", turned)].joined(separator: "\n")
-                guard let altitude, let azimuth, let app else {
-                    status = "Axis check inconclusive: an axis didn't move as expected. Nothing changed."
-                    return
-                }
-                app.settings.measuredAltitudeSense = altitude
-                app.settings.measuredAzimuthSense = azimuth
-                let points = [start, raised, turned]
-                if let model = AlignmentModel.fit(points, azimuthSense: azimuth, altitudeSense: altitude) {
-                    app.settings.alignment = model
-                    app.settings.alignmentRMS = model.rms(points)
-                    app.settings.alignmentStars = 0
-                    app.settings.alignmentFromMount = true
-                    if let raw = axes?.primary {
-                        unwrapper = AxisUnwrapper(raw: wrap180(raw), model: model, limits: app.settings.limits)
-                    }
-                }
-                status = "Axes checked: altitude counts \(altitude > 0 ? "up" : "down (reversed)"), azimuth \(azimuth > 0 ? "clockwise" : "anticlockwise (reversed)"). Alignment refitted (\(String(format: "%.1f′", (app.settings.alignmentRMS ?? 0) * 60)))."
-            } catch is CancellationError {
-                status = "Axis check stopped"
-            } catch {
-                status = "Axis check failed: \(describe(error))"
-                try? await special.stop()
-            }
-        }
-    }
-
-    /// Where the mount says it's pointing (from Normal mode) alongside the raw axes (Special mode).
-    private func compareWithMount(_ special: MountClient) async throws -> AlignmentPoint {
-        guard let transport = specialTransport else { throw MountSessionError.needsUSB }
-        try await special.stop()
-        try await Task.sleep(for: .milliseconds(500))
-        _ = try await special.exitSpecialMode()
-        let pointing = try await NormalModeClient(transport: transport).altAz()
-        identity = try await special.enterSpecialMode()
-        guard let current = try await readPosition() else { throw MountSessionError.needsUSB }
-        return AlignmentPoint(targetName: "Mount", date: .now,
-                              sky: Horizontal(azimuth: pointing.azimuth, altitude: pointing.altitude), axes: current)
-    }
-
-    /// Runs the raw axes at 2°/s for long enough to cover these angles (degrees), then stops.
-    private func nudgeRaw(_ special: MountClient, primary: Double, secondary: Double) async throws {
-        let rate = 2.0
-        let seconds = max(abs(primary), abs(secondary)) / rate
-        try await special.setSpeeds(primary: primary == 0 ? 0 : (primary > 0 ? rate : -rate),
-                                    secondary: secondary == 0 ? 0 : (secondary > 0 ? rate : -rate))
-        try await Task.sleep(for: .seconds(seconds))
-        try await special.stop()
     }
 
     /// Fits and saves the model. One star keeps the previous axis direction; the first alignment needs two.
     func finishAlignment() -> Bool {
         guard let app else { return false }
-        // Measured axis directions win; one star keeps the previous model's.
+        // One star keeps the previous model's axis directions; two or more fit them.
         let single = alignmentPoints.count == 1
-        let sense = app.settings.measuredAzimuthSense ?? (single ? app.settings.alignment?.azimuthSense : nil)
-        let altitudeSense = app.settings.measuredAltitudeSense ?? (single ? app.settings.alignment?.altitudeSense : nil)
+        let sense = single ? app.settings.alignment?.azimuthSense : nil
+        let altitudeSense = single ? app.settings.alignment?.altitudeSense : nil
         guard alignmentPoints.count >= 2 || sense != nil,
               let model = AlignmentModel.fit(alignmentPoints, azimuthSense: sense, altitudeSense: altitudeSense) else { return false }
         app.settings.alignment = model

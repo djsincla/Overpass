@@ -61,9 +61,6 @@ struct Settings: Codable, Equatable {
     var alignmentFromMount = false
     /// On USB connect, take the mount's existing alignment rather than needing a star alignment.
     var captureMountAlignment = true
-    /// Which way the raw axes count, measured by Check axes; nil until measured.
-    var measuredAzimuthSense: Double?
-    var measuredAltitudeSense: Double?
 
     /// Camera guiding: which camera, and how its image moves with the mount.
     var cameraDeviceID: String?
