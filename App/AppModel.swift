@@ -297,6 +297,12 @@ final class AppModel {
         targetPassKey = nil
     }
 
+    /// Stops tracking (or the move to the start point) and lets go of the target.
+    func untrack() async {
+        if mount.isTracking || mount.isPreparing { await mount.stopAll() }
+        clearTarget()
+    }
+
     /// The pass a satellite is on now, or its next one.
     func currentOrNextPass(_ noradID: String, at date: Date) -> SatellitePass? {
         passes.filter { $0.noradID == noradID && $0.end.date > date }.min { $0.start.date < $1.start.date }

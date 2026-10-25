@@ -150,12 +150,12 @@ struct MountPanel: View {
                             .lineLimit(1)
                     }
                 }
-                if target != nil && !mount.isTracking && !mount.isPreparing {
-                    Button { model.clearTarget() } label: { Image(systemName: "xmark.circle.fill") }
+                if target != nil {
+                    Button { Task { await model.untrack() } } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.borderless)
                         .foregroundStyle(.secondary)
-                        .help("Clear the tracking target")
-                        .accessibilityLabel("Clear target")
+                        .help("Untrack: stop tracking and clear the target")
+                        .accessibilityLabel("Untrack")
                 }
                 Spacer(minLength: 4)
                 Button(highlighted.map { "Set to \($0.name)" } ?? "Set target") { model.setTargetFromHighlight() }
@@ -326,9 +326,9 @@ struct PointingError: View {
             HStack(alignment: .firstTextBaseline) {
                 SectionLabel("Off target")
                 Spacer()
-                Text(String(format: "Az %+.0f″  Alt %+.0f″", error.azimuth * 3600, error.altitude * 3600))
+                Text("Az \(arc(error.azimuth, signed: true))  Alt \(arc(error.altitude, signed: true))")
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                Text(arcsec < 100_000 ? "\(Int(arcsec.rounded()))″" : String(format: "%.1f°", error.total))
+                Text(arc(error.total))
                     .font(.system(.title3, design: .monospaced).weight(.semibold))
                     .foregroundStyle(color)
                     .contentTransition(.numericText())
@@ -352,6 +352,20 @@ struct PointingError: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Off target by \(Int(arcsec.rounded())) arc-seconds")
+    }
+
+    /// Arc-seconds under a minute, then minutes and seconds, then degrees and minutes:
+    /// 42″, 12′ 34″, 3° 06′.
+    private func arc(_ degrees: Double, signed: Bool = false) -> String {
+        let sign = signed ? (degrees < 0 ? "−" : "+") : ""
+        let seconds = Int((abs(degrees) * 3600).rounded())
+        switch seconds {
+        case ..<60: return "\(sign)\(seconds)″"
+        case ..<3600: return "\(sign)\(seconds / 60)′ \(String(format: "%02d", seconds % 60))″"
+        default:
+            let minutes = Int((abs(degrees) * 60).rounded())
+            return "\(sign)\(minutes / 60)° \(String(format: "%02d", minutes % 60))′"
+        }
     }
 
     /// Angular distance and its components on the sky (azimuth scaled by cos altitude), degrees.

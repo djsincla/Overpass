@@ -179,8 +179,12 @@ struct PassesList: View {
                 .listRowBackground(RowHighlight(focused: model.highlightedPass(at: date)?.id == pass.id,
                                                 target: model.targetPassID == pass.id))
                 .contextMenu {
-                    Button("Set as tracking target") { model.setTarget(pass: pass) }
-                        .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
+                    if model.targetPassID == pass.id {
+                        Button("Untrack") { Task { await model.untrack() } }
+                    } else {
+                        Button("Set as tracking target") { model.setTarget(pass: pass) }
+                            .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
+                    }
                     Button("Details") { detail = pass }
                     Button("Pass calculator…") { model.calculatorObjectID = "sat:\(pass.noradID)" }
                 }
@@ -255,8 +259,12 @@ struct SelectedObjectsList: View {
                     .listRowBackground(RowHighlight(focused: model.highlightedObject?.id == object.id,
                                                     target: model.targetObjectID == object.id))
                     .contextMenu {
-                        Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
-                            .disabled(model.mount.isTracking)
+                        if model.targetObjectID == object.id {
+                            Button("Untrack") { Task { await model.untrack() } }
+                        } else {
+                            Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
+                                .disabled(model.mount.isTracking)
+                        }
                         Button("Pass calculator…") { model.calculatorObjectID = object.id }
                     }
                 }

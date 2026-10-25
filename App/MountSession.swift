@@ -595,6 +595,15 @@ final class MountSession {
                     return
                 }
                 if let target = plan.target(at: t) {
+                    // Far behind (tracking started mid-pass, or the mount was elsewhere): jump with
+                    // the mount's own slew to where the satellite will be once it gets there.
+                    let gap = max(abs(target.axes.primary - current.primary), abs(target.axes.secondary - current.secondary))
+                    if mountSlews, gap > 2,
+                       let ahead = plan.target(at: t + gap / Self.estimatedSlewRate + 2) {
+                        status = "Catching up at full speed…"
+                        mountSlews = try await slewAxes(special, to: ahead.axes)
+                        continue
+                    }
                     desired = target.axes
                     let ahead = plan.target(at: t + latency) ?? target
                     rates = (ahead.primaryRate, ahead.secondaryRate)
