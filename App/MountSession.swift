@@ -579,9 +579,12 @@ final class MountSession {
 
         while !Task.isCancelled {
             let s = settings
+            // Position is compared at the moment the axes were read; only the feed-forward
+            // rate looks ahead, to when the speed command takes effect. Aiming the position
+            // ahead as well held the scope ~50 ms in front of the satellite (tens of arc-seconds).
             let latency = 0.05
-            let t = skyNow + timeOffset + latency
             guard let current = try await readPosition() else { return }
+            let t = (skyPositionDate ?? .now) + (app?.timeShift ?? 0) + timeOffset
 
             var desired: AxisPosition
             var rates: (Double, Double)
@@ -593,7 +596,8 @@ final class MountSession {
                 }
                 if let target = plan.target(at: t) {
                     desired = target.axes
-                    rates = (target.primaryRate, target.secondaryRate)
+                    let ahead = plan.target(at: t + latency) ?? target
+                    rates = (ahead.primaryRate, ahead.secondaryRate)
                     controller.maximumCorrection = 2
                     status = "Tracking"
                 } else {
@@ -613,6 +617,7 @@ final class MountSession {
                 // Not a pass: follow the object directly, staying on the current azimuth turn.
                 let now = try s.observer.look(at: object.target, AstroTime(t))
                 let later = try s.observer.look(at: object.target, AstroTime(t + 1))
+                // (The rate over the next second already reaches past the command latency.)
                 guard now.altitude > s.minimumAltitude else { throw MountSessionError.belowHorizon }
                 let a = axesNear(model.mountFrame(now), model, current.primary)
                 let b = axesNear(model.mountFrame(later), model, a.primary)
@@ -622,7 +627,8 @@ final class MountSession {
                 status = "Tracking"
             }
             desired.primary += model.azimuthSense * azimuthOffset
-            desired.secondary += altitudeOffset
+            // The altitude axis may count down (iOptron's counts from the zenith).
+            desired.secondary += model.altitudeSense * altitudeOffset
 
             let command = controller.rates(desired: desired, primaryRate: rates.0, secondaryRate: rates.1, current: current)
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }

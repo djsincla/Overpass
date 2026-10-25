@@ -52,18 +52,20 @@ final class Guider {
             let track = try app.settings.observer.track(object.target, at: timestamp + mount.timeOffset)
             guard let correction = calibration.axisCorrection(offset: (spot.x - camera.centre.x, spot.y - camera.centre.y),
                                                               altitude: track.position.altitude) else { return }
-            // Calibration is in primary-axis degrees; the tracker's azimuth offset is sky azimuth.
-            // They differ in sign when the azimuth axis counts anticlockwise.
+            // Calibration is in axis degrees; the tracker's offsets are sky azimuth and altitude.
+            // They differ in sign when an axis counts the other way (iOptron's altitude axis
+            // counts from the zenith, so it runs opposite to altitude).
             let sense = app.settings.alignment?.azimuthSense ?? 1
+            let altitudeSense = app.settings.alignment?.altitudeSense ?? 1
             let current = OpticalGuide.Update(timeOffset: mount.timeOffset,
                                               azimuthOffset: sense * mount.azimuthOffset,
-                                              altitudeOffset: mount.altitudeOffset)
+                                              altitudeOffset: altitudeSense * mount.altitudeOffset)
             let next = guide.update(current, correction: correction,
-                                    azimuthRate: sense * track.azimuthRate, altitudeRate: track.altitudeRate,
+                                    azimuthRate: sense * track.azimuthRate, altitudeRate: altitudeSense * track.altitudeRate,
                                     altitude: track.position.altitude)
             mount.timeOffset = next.timeOffset
             mount.azimuthOffset = sense * next.azimuthOffset
-            mount.altitudeOffset = next.altitudeOffset
+            mount.altitudeOffset = altitudeSense * next.altitudeOffset
             status = String(format: "Guiding · off by %.1f′ · time %+.2f s", errorArcmin ?? 0, next.timeOffset)
         } catch {
             status = "Guiding paused: \(error.localizedDescription)"
