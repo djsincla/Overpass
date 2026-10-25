@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.1.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.2.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -85,9 +85,11 @@ The app is one multiplatform target (iOS 17+, macOS 14+), signed with team HG979
 swift test
 ```
 
-126 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, and the conjunction geometry.
+133 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, and the satellite catalogue and search.
 
 ## Version history
+
+**0.2.0**, 25 October 2026. Smooth tracking speeds without the once-a-second step, a tracking update period from 0.05 to 2 s, native slews that respect how the HAZ46 counts azimuth across north, and satellite details in sortable columns from CelesTrak's catalogue and GCAT, with attribute search.
 
 **0.1.0**, 24 October 2026. First version: pass prediction and filtering, Passive, Step and Smooth tracking, the cable stop, star and mount alignment, the time bar, the pass calculator, conjunctions, camera guiding and night vision, tested on a HAZ46.
 
