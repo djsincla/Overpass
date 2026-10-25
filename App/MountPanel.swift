@@ -230,6 +230,10 @@ struct MountPanel: View {
             HStack {
                 Label("Alignment: \(alignmentSummary)", systemImage: "star.circle").font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                Button(mount.isCheckingAxes ? "Checking…" : "Check axes") { Task { await mount.checkAxes() } }
+                    .controlSize(.small)
+                    .disabled(mount.isCheckingAxes || mount.isTracking)
+                    .help("Nudges each axis a little and compares with the mount's own pointing, to learn which way the axes count and refit the alignment")
                 Button("Align…") { showingAlignment = true }.controlSize(.small)
             }
         } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {

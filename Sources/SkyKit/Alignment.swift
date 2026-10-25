@@ -41,14 +41,31 @@ public struct AlignmentModel: Sendable, Codable, Equatable {
     public var altitudeOffset: Double = 0
     /// +1 if the primary axis reading increases clockwise from above (north → east), −1 otherwise.
     public var azimuthSense: Double = 1
+    /// +1 if the secondary axis reading increases as the tube rises, −1 if it counts the other way.
+    public var altitudeSense: Double = 1
 
     public init() {}
+
+    enum CodingKeys: String, CodingKey {
+        case yaw, tiltNorth, tiltEast, altitudeOffset, azimuthSense, altitudeSense
+    }
+
+    /// Fields added later decode to their defaults, so saved alignments keep working.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        yaw = try c.decodeIfPresent(Double.self, forKey: .yaw) ?? 0
+        tiltNorth = try c.decodeIfPresent(Double.self, forKey: .tiltNorth) ?? 0
+        tiltEast = try c.decodeIfPresent(Double.self, forKey: .tiltEast) ?? 0
+        altitudeOffset = try c.decodeIfPresent(Double.self, forKey: .altitudeOffset) ?? 0
+        azimuthSense = try c.decodeIfPresent(Double.self, forKey: .azimuthSense) ?? 1
+        altitudeSense = try c.decodeIfPresent(Double.self, forKey: .altitudeSense) ?? 1
+    }
 
     var rotation: Mat3 { Mat3.rotX(tiltNorth) * Mat3.rotY(tiltEast) * Mat3.rotZ(yaw) }
 
     public func axes(for sky: Horizontal) -> AxisPosition {
         let m = (rotation * sky.unitVector).spherical
-        return AxisPosition(primary: wrap180(azimuthSense * m.longitude), secondary: m.latitude + altitudeOffset)
+        return AxisPosition(primary: wrap180(azimuthSense * m.longitude), secondary: altitudeSense * m.latitude + altitudeOffset)
     }
 
     /// The direction in the mount's own frame (after yaw and tilt), in degrees.
@@ -60,11 +77,11 @@ public struct AlignmentModel: Sendable, Codable, Equatable {
     /// Axis readings for a mount-frame direction. The azimuth is not wrapped, so turns are kept,
     /// and altitudes past 90° describe pointing over the top.
     public func axes(mountAzimuth: Double, mountAltitude: Double) -> AxisPosition {
-        AxisPosition(primary: azimuthSense * mountAzimuth, secondary: mountAltitude + altitudeOffset)
+        AxisPosition(primary: azimuthSense * mountAzimuth, secondary: altitudeSense * mountAltitude + altitudeOffset)
     }
 
     public func sky(for axes: AxisPosition) -> Horizontal {
-        let m = Vec3.unit(longitude: azimuthSense * axes.primary, latitude: axes.secondary - altitudeOffset)
+        let m = Vec3.unit(longitude: azimuthSense * axes.primary, latitude: altitudeSense * (axes.secondary - altitudeOffset))
         let s = (rotation.transposed * m).spherical
         return Horizontal(azimuth: s.longitude, altitude: s.latitude)
     }
@@ -88,15 +105,19 @@ public struct AlignmentModel: Sendable, Codable, Equatable {
     /// Fits a model to sightings. With one point the mount is assumed level and `azimuthSense`
     /// must be supplied; with two or more both senses are tried and the better plausible fit kept.
     /// Two points fit exactly (no error check); three or more give a meaningful `rms`.
-    public static func fit(_ points: [AlignmentPoint], azimuthSense: Double? = nil) -> AlignmentModel? {
+    /// The altitude axis's direction works the same way: given, or tried both ways with two or more points.
+    public static func fit(_ points: [AlignmentPoint], azimuthSense: Double? = nil, altitudeSense: Double? = nil) -> AlignmentModel? {
         guard let first = points.first else { return nil }
-        let senses: [Double] = azimuthSense.map { [$0] } ?? (points.count > 1 ? [1, -1] : [1])
+        let azimuthSenses: [Double] = azimuthSense.map { [$0] } ?? (points.count > 1 ? [1, -1] : [1])
+        let altitudeSenses: [Double] = altitudeSense.map { [$0] } ?? (points.count > 1 ? [1, -1] : [1])
+        let senses = azimuthSenses.flatMap { a in altitudeSenses.map { (a, $0) } }
         // With two points both senses fit exactly, but the wrong one needs an impossible tilt.
-        return senses.map { sense in
+        return senses.map { (sense, altSense) in
             var model = AlignmentModel()
             model.azimuthSense = sense
+            model.altitudeSense = altSense
             model.yaw = wrap180(sense * first.axes.primary - first.sky.azimuth)
-            model.altitudeOffset = first.axes.secondary - first.sky.altitude
+            model.altitudeOffset = first.axes.secondary - altSense * first.sky.altitude
             if points.count > 1 { model.refine(points) }
             return model
         }
@@ -187,9 +208,24 @@ extension AlignmentModel {
     /// One point, so the mount is taken as level. Which way the azimuth axis counts can't be
     /// told from one point; the sense needing the smaller zero offset is kept, since an aligned
     /// mount's axis zero sits near north.
-    public static func fromMount(sky: Horizontal, axes: AxisPosition) -> AlignmentModel? {
+    ///
+    /// Axis directions measured earlier (see `axisSenses`) are used when given; without them the
+    /// altitude axis is assumed to count upwards.
+    public static func fromMount(sky: Horizontal, axes: AxisPosition,
+                                 azimuthSense: Double? = nil, altitudeSense: Double? = nil) -> AlignmentModel? {
         let point = AlignmentPoint(targetName: "Mount", date: .now, sky: sky, axes: axes)
-        return [1.0, -1.0].compactMap { fit([point], azimuthSense: $0) }
+        let azimuthSenses = azimuthSense.map { [$0] } ?? [1.0, -1.0]
+        return azimuthSenses.compactMap { fit([point], azimuthSense: $0, altitudeSense: altitudeSense ?? 1) }
             .min { abs(wrap180($0.yaw)) < abs(wrap180($1.yaw)) }
+    }
+
+    /// Which way each axis counts, from two comparisons of the mount's own pointing with the raw
+    /// axes, before and after moving it. An axis that moved less than half a degree is left nil.
+    public static func axisSenses(_ a: AlignmentPoint, _ b: AlignmentPoint) -> (azimuth: Double?, altitude: Double?) {
+        let dAlt = b.sky.altitude - a.sky.altitude, dSecondary = b.axes.secondary - a.axes.secondary
+        let dAz = wrap180(b.sky.azimuth - a.sky.azimuth), dPrimary = wrap180(b.axes.primary - a.axes.primary)
+        let altitude: Double? = abs(dAlt) > 0.5 && abs(dSecondary) > 0.5 ? (dAlt * dSecondary > 0 ? 1 : -1) : nil
+        let azimuth: Double? = abs(dAz) > 0.5 && abs(dPrimary) > 0.5 ? (dAz * dPrimary > 0 ? 1 : -1) : nil
+        return (azimuth, altitude)
     }
 }

@@ -160,3 +160,34 @@ let zenithPass: [PassSample] = {
         #expect(AxisSlew.next(current: -179, goal: -200) == .crossWrap(direction: -1))
     }
 }
+
+@Suite struct AltitudeSenseTests {
+    /// A HAZ-like mount whose altitude axis counts down as the tube rises.
+    func reversed(_ sky: Horizontal) -> AxisPosition { AxisPosition(primary: wrap180(sky.azimuth + 2), secondary: 90 - sky.altitude) }
+
+    @Test func fitFindsAReversedAltitudeAxis() throws {
+        let skies = [Horizontal(azimuth: 30, altitude: 20), Horizontal(azimuth: 150, altitude: 60), Horizontal(azimuth: 260, altitude: 35)]
+        let points = skies.map { AlignmentPoint(targetName: "", date: .now, sky: $0, axes: reversed($0)) }
+        let model = try #require(AlignmentModel.fit(points))
+        #expect(model.altitudeSense == -1 && model.azimuthSense == 1)
+        #expect(model.rms(points) < 1e-6)
+        // Low on the horizon really is low, not straight up.
+        let horizon = model.sky(for: reversed(Horizontal(azimuth: 200, altitude: 0)))
+        #expect(abs(horizon.altitude) < 1e-6)
+    }
+
+    @Test func sensesFromTwoComparisons() {
+        let a = AlignmentPoint(targetName: "", date: .now, sky: Horizontal(azimuth: 100, altitude: 30),
+                               axes: AxisPosition(primary: 100, secondary: 60))
+        let b = AlignmentPoint(targetName: "", date: .now, sky: Horizontal(azimuth: 100, altitude: 35),
+                               axes: AxisPosition(primary: 100, secondary: 55))
+        let senses = AlignmentModel.axisSenses(a, b)
+        #expect(senses.altitude == -1 && senses.azimuth == nil)
+    }
+
+    @Test func oldSavedModelsStillDecode() throws {
+        let json = #"{"yaw":1.5,"tiltNorth":0,"tiltEast":0,"altitudeOffset":-0.2,"azimuthSense":1}"#
+        let model = try JSONDecoder().decode(AlignmentModel.self, from: Data(json.utf8))
+        #expect(model.altitudeSense == 1 && model.yaw == 1.5)
+    }
+}
