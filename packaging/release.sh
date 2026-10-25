@@ -47,7 +47,9 @@ step "Overpass ${version} (${build}), ${mode}"
 
 # Checks that are cheap to make before twenty minutes of building.
 if [[ "$mode" != "dry-run" ]]; then
-  [[ -z "$(git status --porcelain)" ]] || fail "the working tree has uncommitted changes; commit them so the release matches its tag"
+  # Any change to a tracked file, or a new file where it would be built into the app.
+  [[ -z "$(git status --porcelain --untracked-files=no)$(git status --porcelain -- App Sources Package.swift project.yml)" ]] \
+    || fail "there are uncommitted changes; commit them so the release matches its tag"
   [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || fail "releases are made from main"
   git fetch -q origin main --tags
   [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || fail "main isn't the same as origin/main; push or pull first"
