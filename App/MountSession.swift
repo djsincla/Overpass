@@ -30,6 +30,8 @@ struct TraceSample {
     let feedSecondary: Double
     let commandPrimary: Double
     let commandSecondary: Double
+    /// The reading looked like a glitch, so the planned speed was held instead of correcting.
+    var held = false
 
     var error: Double { (primaryError * primaryError + secondaryError * secondaryError).squareRoot() }
 }
@@ -214,6 +216,19 @@ final class MountSession {
         }
     }
 
+    /// Recent request-to-answer times, for timestamping positions.
+    private var exchangeTimes: [TimeInterval] = []
+
+    /// When a reported position was true: half a typical exchange after asking. Not half of
+    /// this exchange: every 5 s the HAZ answers ~15 ms late, and the position it reports was
+    /// taken before the delay, so a midpoint stamp made it look 10–20″ behind a fast satellite.
+    private func positionTime(asked: Date, answered: Date) -> Date {
+        exchangeTimes.append(answered.timeIntervalSince(asked))
+        if exchangeTimes.count > 25 { exchangeTimes.removeFirst() }
+        let typical = exchangeTimes.sorted()[exchangeTimes.count / 2]
+        return asked + typical / 2
+    }
+
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {
         if let normal {
@@ -223,7 +238,7 @@ final class MountSession {
         guard let special, var unwrapper else { return nil }
         let asked = Date.now
         let raw = try await special.positions()
-        skyPositionDate = asked + Date.now.timeIntervalSince(asked) / 2
+        skyPositionDate = positionTime(asked: asked, answered: .now)
         let current = AxisPosition(primary: unwrapper.update(raw: raw.primary), secondary: raw.secondary)
         self.unwrapper = unwrapper
         axes = current
@@ -565,7 +580,7 @@ final class MountSession {
         let asked = Date.now
         let p = try await normal.altAz()
         let h = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
-        skyPositionDate = asked + Date.now.timeIntervalSince(asked) / 2
+        skyPositionDate = positionTime(asked: asked, answered: .now)
         skyPosition = h
         return h
     }
@@ -604,6 +619,7 @@ final class MountSession {
             plan = nil
         }
         var mountSlews = true
+        var glitchesInARow = 0
 
         while !Task.isCancelled {
             let s = settings
@@ -667,17 +683,26 @@ final class MountSession {
             // The altitude axis may count down (iOptron's counts from the zenith).
             desired.secondary += model.altitudeSense * altitudeOffset
 
-            let command = controller.rates(desired: desired, primaryRate: rates.0, secondaryRate: rates.1, current: current)
+            // A lone reading far off the recent level is a glitch, not the mount: hold the planned
+            // speed for it rather than kicking the mount to "correct" it.
+            let error = max(abs(desired.primary - current.primary), abs(desired.secondary - current.secondary))
+            let recent = trace.suffix(20).map { max(abs($0.primaryError), abs($0.secondaryError)) }.sorted()
+            let typical = recent.isEmpty ? .infinity : recent[recent.count / 2]
+            let glitch = recent.count >= 10 && error > max(4 * typical, 8 / 3600) && error < 0.05 && glitchesInARow == 0
+            glitchesInARow = glitch ? glitchesInARow + 1 : 0
+            let command = glitch
+                ? (primary: rates.0, secondary: rates.1)
+                : controller.rates(desired: desired, primaryRate: rates.0, secondaryRate: rates.1, current: current)
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
-            record(current: current, desired: desired, feed: rates, command: command)
+            record(current: current, desired: desired, feed: rates, command: command, held: glitch)
             try await Task.sleep(for: .milliseconds(100))
         }
     }
 
     /// Adds one loop iteration to the trace, keeping the last minute.
     private func record(current: AxisPosition, desired: AxisPosition, feed: (Double, Double),
-                        command: (primary: Double, secondary: Double)) {
+                        command: (primary: Double, secondary: Double), held: Bool = false) {
         let now = Date.now
         let altitude = (settings.alignment ?? AlignmentModel()).sky(for: current).altitude
         trace.append(TraceSample(date: now, read: skyPositionDate ?? now,
@@ -686,7 +711,7 @@ final class MountSession {
                                  primaryError: (desired.primary - current.primary) * cos(altitude.radians),
                                  secondaryError: desired.secondary - current.secondary,
                                  feedPrimary: feed.0, feedSecondary: feed.1,
-                                 commandPrimary: command.primary, commandSecondary: command.secondary))
+                                 commandPrimary: command.primary, commandSecondary: command.secondary, held: held))
         lastLoop = now
         if let first = trace.first, now.timeIntervalSince(first.date) > 60 {
             trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > 60 }.count)
@@ -696,12 +721,12 @@ final class MountSession {
     /// The trace as CSV: times in seconds from the first sample, angles in degrees, errors in arc-seconds.
     var traceCSV: String {
         guard let start = trace.first?.date else { return "" }
-        var lines = ["t,read_t,loop_interval,primary,secondary,primary_error_arcsec,secondary_error_arcsec,feed_primary,feed_secondary,command_primary,command_secondary"]
+        var lines = ["t,read_t,loop_interval,primary,secondary,primary_error_arcsec,secondary_error_arcsec,feed_primary,feed_secondary,command_primary,command_secondary,held"]
         for s in trace {
-            lines.append(String(format: "%.3f,%.3f,%.3f,%.5f,%.5f,%.1f,%.1f,%.5f,%.5f,%.5f,%.5f",
+            lines.append(String(format: "%.3f,%.3f,%.3f,%.5f,%.5f,%.1f,%.1f,%.5f,%.5f,%.5f,%.5f,%d",
                                 s.date.timeIntervalSince(start), s.read.timeIntervalSince(start), s.loopInterval,
                                 s.primary, s.secondary, s.primaryError * 3600, s.secondaryError * 3600,
-                                s.feedPrimary, s.feedSecondary, s.commandPrimary, s.commandSecondary))
+                                s.feedPrimary, s.feedSecondary, s.commandPrimary, s.commandSecondary, s.held ? 1 : 0))
         }
         return lines.joined(separator: "\n") + "\n"
     }
