@@ -165,19 +165,28 @@ public struct MountPlanner: Sendable {
     }
 }
 
-/// Planning a Special-mode goto on the primary axis with the mount's own slew (`:T0#`), which
-/// takes a raw reading in ±180°. The way round it would choose for a long move, or across the
-/// ±180° wrap, isn't documented, so legs are kept short of both: under `maximumLeg`, and never
-/// across the wrap. The wrap itself is crossed slowly under rate control.
+/// Planning a Special-mode goto on the primary axis with the mount's own slew (`:T0#`).
+///
+/// Measured on the HAZ46 (2026-10-25): `:T0#` takes a position in the same frame as the reading,
+/// but treats ±180° as two ends rather than one point, so a target across the wrap is reached
+/// the long way round (nearly a full turn). It also accepts, but doesn't carry out, a slew to
+/// within a few degrees of ±180°. So slews stop `wrapMargin` short of the wrap; the wrap zone is
+/// crossed, or finished, under rate control. Legs are kept under `maximumLeg` as well.
 public enum AxisSlew {
+    /// −172.8° is the closest to the wrap the HAZ46 was seen to slew to.
+    public static let defaultWrapMargin = 8.0
+
     public enum Step: Equatable, Sendable {
         /// Slew to this raw reading, which is `unwrapped` on the continuous axis.
         case slew(raw: Double, unwrapped: Double)
-        /// At the wrap with further to go: drive across it at a set rate, in this direction (±1).
+        /// In the wrap zone with the goal across it: drive across under rate control, in this direction (±1).
         case crossWrap(direction: Double)
+        /// The goal is in the wrap zone, where the mount won't slew: finish under rate control.
+        case rateControl
     }
 
-    public static func next(current: Double, goal: Double, maximumLeg: Double = 170, wrapMargin: Double = 1) -> Step {
+    public static func next(current: Double, goal: Double, maximumLeg: Double = 170,
+                            wrapMargin: Double = defaultWrapMargin) -> Step {
         let diff = goal - current
         let direction: Double = diff < 0 ? -1 : 1
         let target = current + max(-maximumLeg, min(maximumLeg, diff))
@@ -185,10 +194,15 @@ public enum AxisSlew {
         let raw = target - turns
         let limit = 180 - wrapMargin
         if abs(raw) <= limit { return .slew(raw: raw, unwrapped: target) }
-        // The leg would pass the wrap: stop just short of it, or cross it if already there.
-        if abs(wrap180(current) - direction * limit) > wrapMargin / 2 {
+        // Ending in the zone but heading away from the end it's next to: the mount does that.
+        if abs(raw) < 180 && raw * direction < 0 { return .slew(raw: raw, unwrapped: target) }
+        // This leg runs into the wrap zone towards an end. Slew as far as the zone's edge first.
+        let here = wrap180(current)
+        if direction * (direction * limit - here) > 0.5 {
             return .slew(raw: direction * limit, unwrapped: direction * limit + turns)
         }
-        return .crossWrap(direction: direction)
+        // At or inside the zone: if the goal is on this side of the wrap, finish under rate
+        // control; otherwise drive across.
+        return abs(raw) < 180 && target == goal ? .rateControl : .crossWrap(direction: direction)
     }
 }

@@ -151,13 +151,24 @@ let zenithPass: [PassSample] = {
     }
 
     @Test func stopsShortOfTheWrapThenCrossesIt() {
-        // 150 → 200 passes raw +180: first to 179, then across under rate control, then on.
-        #expect(AxisSlew.next(current: 150, goal: 200) == .slew(raw: 179, unwrapped: 179))
+        // The mount won't slew within 8° of ±180°, and takes a target across it the long way.
+        #expect(AxisSlew.next(current: 150, goal: 200) == .slew(raw: 172, unwrapped: 172))
+        #expect(AxisSlew.next(current: 172, goal: 200) == .crossWrap(direction: 1))
         #expect(AxisSlew.next(current: 179, goal: 200) == .crossWrap(direction: 1))
+        // Across: slewing away from the wrap works.
         #expect(AxisSlew.next(current: 182, goal: 200) == .slew(raw: -160, unwrapped: 200))
         // And the other way.
-        #expect(AxisSlew.next(current: -150, goal: -200) == .slew(raw: -179, unwrapped: -179))
-        #expect(AxisSlew.next(current: -179, goal: -200) == .crossWrap(direction: -1))
+        #expect(AxisSlew.next(current: -150, goal: -200) == .slew(raw: -172, unwrapped: -172))
+        #expect(AxisSlew.next(current: -172, goal: -200) == .crossWrap(direction: -1))
+    }
+
+    @Test func goalInTheWrapZoneIsFinishedUnderRateControl() {
+        #expect(AxisSlew.next(current: 150, goal: 176) == .slew(raw: 172, unwrapped: 172))
+        #expect(AxisSlew.next(current: 172, goal: 176) == .rateControl)
+        // The slew the HAZ46 accepted but never made, in the 2026-10-25 test.
+        #expect(AxisSlew.next(current: -172.8, goal: -177) == .rateControl)
+        // Leaving the zone is an ordinary slew (−177.8° to −172.8° worked).
+        #expect(AxisSlew.next(current: -177.8, goal: -172.8) == .slew(raw: -172.8, unwrapped: -172.8))
     }
 }
 

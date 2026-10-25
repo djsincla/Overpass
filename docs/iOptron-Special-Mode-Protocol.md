@@ -62,6 +62,12 @@ Examples:
   - **P0 = azimuth − 180°** (zero facing south), increasing clockwise like azimuth.
   - **P1 = zenith distance** (zero with the tube vertical; +90° at the horizon), so it counts *down* as the tube rises.
 - After the mount has been in Special mode, the Normal-mode position (`:GAC#`) reads az 0, alt 0 until it's aligned again, so it can't be used to calibrate the Special-mode axes.
+- `:T0#` on a HAZ46 (measured 25 Oct 2026 with the app's slew test):
+  - The target is in the same frame as the `:P0#` reading: a slew from −177.77° to −172.77° moved +4.9°.
+  - It treats ±180° as two ends, not one point. A slew from −172.77° to +177° (10° the short way, across north on a HAZ) set off the long way round, nearly a full turn.
+  - It accepts a slew to within a few degrees of ±180° (reply `1`) and then doesn't move: −172.8° to −177° moved 0.0° in 15 s. Slewing away from ±180° from inside that zone works.
+  - Under rate control (`:M0#`/`:M2#`) the axis crosses ±180° without trouble and the reading simply wraps.
+  - So: keep `:T0#` targets at least 8° short of ±180°, and cross or finish inside that zone under rate control.
 
 # Normal mode (RS-232 Command Language V3.10, 2021-01-04): relevant parts
 

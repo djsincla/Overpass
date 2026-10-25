@@ -749,7 +749,8 @@ final class MountSession {
     /// can't be taken the wrong way round (see `AxisSlew`). Returns within about half a degree;
     /// callers settle the rest under rate control. If the mount refuses a slew, it returns
     /// early and rate control does the whole move.
-    /// Returns false if the mount refused its slew command.
+    /// Returns false if the mount refused its slew command, or the rest of the move has to be
+    /// made under rate control (a goal next to the ±180° wrap).
     @discardableResult
     private func slewAxes(_ special: MountClient, to goal: AxisPosition) async throws -> Bool {
         guard !nativeSlewWentWrongWay else { return false }
@@ -776,12 +777,29 @@ final class MountSession {
                     return false
                 }
             case .crossWrap(let direction):
-                // A few degrees under rate control carries it across the ±180° reading wrap.
-                let rate = direction * min(settings.maximumAzimuthRate, 2)
-                if wouldHitCableStop(current, primaryRate: rate) { throw MountSessionError.pastCableStop }
-                try await special.setSpeeds(primary: rate, secondary: 0)
-                try await Task.sleep(for: .seconds(1.5))
+                // The mount won't slew across ±180° (or near it), so drive across at full speed
+                // until clear of the zone on the far side, or at the goal.
+                let rate = direction * settings.maximumAzimuthRate
+                let limit = 180 - AxisSlew.defaultWrapMargin
+                let side = wrap180(current.primary) < 0 ? -1.0 : 1.0
+                while !Task.isCancelled {
+                    guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+                    guard let now = try await readPosition() else { break }
+                    let raw = wrap180(now.primary)
+                    if direction * (goal.primary - now.primary) < 0.5 { break }
+                    if raw * side < 0 && abs(raw) <= limit { break }
+                    if wouldHitCableStop(now, primaryRate: rate) {
+                        try await special.stop()
+                        throw MountSessionError.pastCableStop
+                    }
+                    try await special.setSpeeds(primary: rate, secondary: 0)
+                    try await Task.sleep(for: .milliseconds(100))
+                }
                 try await special.stop()
+            case .rateControl:
+                // The goal is next to ±180°, where the mount won't slew; the caller's rate
+                // control finishes the move.
+                return false
             }
         }
         return true
@@ -808,7 +826,8 @@ final class MountSession {
 
             // 2. Across the wrap, if the cable stop allows it there.
             let side: Double = r0 >= 0 ? 1 : -1
-            let before = side * 177, after = -side * 177
+            // The HAZ46 won't slew within 8° of ±180°, so the approach stops at 172°.
+            let before = side * 172, after = -side * 177
             let current = try await readPosition() ?? start
             let wrapGoal = current.primary + wrap180(after - wrap180(current.primary))
             let crossing = AxisPosition(primary: wrapGoal, secondary: current.secondary)
