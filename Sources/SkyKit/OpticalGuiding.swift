@@ -123,6 +123,12 @@ public struct CameraCalibration: Codable, Sendable, Equatable {
         abs(primaryX * secondaryY - primaryY * secondaryX) < 1e-6 * max(1, primaryX * primaryX + secondaryY * secondaryY)
     }
 
+    /// How far a fixed object's image moves, in pixels, when the axes move by these amounts (degrees).
+    public func imageShift(primary: Double, secondary: Double, altitude now: Double) -> (x: Double, y: Double) {
+        let scale = cos(now.radians) / max(cos(altitude.radians), 1e-3)
+        return (primaryX * scale * primary + secondaryX * secondary, primaryY * scale * primary + secondaryY * secondary)
+    }
+
     /// The axis moves (degrees) that would bring a spot at `offset` pixels from the centre to the centre.
     public func axisCorrection(offset: (x: Double, y: Double), altitude now: Double) -> (primary: Double, secondary: Double)? {
         // Azimuth steps foreshorten with cos(altitude) relative to when this was measured.

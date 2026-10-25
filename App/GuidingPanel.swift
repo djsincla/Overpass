@@ -6,28 +6,10 @@ struct GuidingPanel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        @Bindable var model = model
         @Bindable var guider = model.guider
         let camera = guider.camera
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Picker("Camera", selection: $model.settings.cameraDeviceID) {
-                    Text("Choose…").tag(String?.none)
-                    ForEach(camera.devices, id: \.id) { Text($0.name).tag(Optional($0.id)) }
-                }
-                .onAppear { camera.refreshDevices() }
-                Button { camera.refreshDevices() } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless)
-                    .help("Look for cameras again (an iPhone appears when it's nearby, locked and on the same Apple ID)")
-                    .accessibilityLabel("Refresh camera list")
-                if camera.isRunning {
-                    Button("Stop camera") { camera.stop() }
-                } else {
-                    Button("Start camera") { Task { await camera.start(deviceID: model.settings.cameraDeviceID) } }
-                }
-            }
-            if let error = camera.error { Text(error).font(.caption).foregroundStyle(.red) }
-
+            CameraControls()
             if camera.isRunning {
                 CameraPreview(camera: camera)
                     .frame(maxHeight: 240)
@@ -59,6 +41,35 @@ struct GuidingPanel: View {
             return "Fix the iPhone to the tube (3× or 5× lens), start the camera, centre a bright star, and calibrate. Then start Smooth tracking and turn on Guide."
         }
         return "Calibrated. Start Smooth tracking, then turn on Guide to keep the target centred."
+    }
+}
+
+/// Which camera, and starting and stopping it.
+struct CameraControls: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        let camera = model.guider.camera
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Picker("Camera", selection: $model.settings.cameraDeviceID) {
+                    Text("Choose…").tag(String?.none)
+                    ForEach(camera.devices, id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                }
+                .onAppear { camera.refreshDevices() }
+                Button { camera.refreshDevices() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .help("Look for cameras again (an iPhone appears when it's nearby, locked and on the same Apple ID)")
+                    .accessibilityLabel("Refresh camera list")
+                if camera.isRunning {
+                    Button("Stop camera") { camera.stop() }
+                } else {
+                    Button("Start camera") { Task { await camera.start(deviceID: model.settings.cameraDeviceID) } }
+                }
+            }
+            if let error = camera.error { Text(error).font(.caption).foregroundStyle(.red) }
+        }
     }
 }
 

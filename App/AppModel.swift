@@ -77,6 +77,9 @@ struct Settings: Codable, Equatable {
     /// Camera guiding: which camera, and how its image moves with the mount.
     var cameraDeviceID: String?
     var cameraCalibration: CameraCalibration?
+    /// Camera tracking's aim point, as fractions of the frame's width and height.
+    var cameraAimX: Double = 0.5
+    var cameraAimY: Double = 0.5
 
     var observer: Observer {
         Observer(latitude: latitude, longitude: longitude, height: heightMeters, refraction: refraction)
@@ -202,6 +205,7 @@ final class AppModel {
 
     let mount = MountSession()
     let guider = Guider()
+    let cameraTracker: CameraTracker
     let conjunctions = ConjunctionsModel()
 
     private var catalog: TLECatalog?
@@ -221,8 +225,10 @@ final class AppModel {
         } catch {
             message = "Couldn't open the TLE cache: \(error.localizedDescription)"
         }
+        cameraTracker = CameraTracker(camera: guider.camera)
         mount.app = self
         guider.app = self
+        cameraTracker.app = self
         conjunctions.app = self
     }
 

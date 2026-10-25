@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import CoreGraphics
 import Observation
@@ -5,7 +6,11 @@ import SkyKit
 
 /// One processed frame, handed from the capture queue to the main actor.
 struct FrameResult: @unchecked Sendable {
+    /// Only on frames the spot finder ran on (about ten a second); nil otherwise.
+    let spotChecked: Bool
     let spot: Spot?
+    /// The whole frame, when something wants every frame (camera tracking).
+    let frame: GrayFrame?
     let width: Int
     let height: Int
     let timestamp: Date
@@ -24,8 +29,14 @@ final class CameraFeed {
     /// Size of the frames the spot is measured in (after downsampling).
     private(set) var frameSize = (width: 0, height: 0)
     private(set) var error: String?
-    /// Called for every processed frame.
+    /// Called each time the spot finder runs, about ten times a second.
     var onFrame: ((Spot?, Date) -> Void)?
+    /// Called with every frame while `deliversFrames` is on.
+    var onImage: ((GrayFrame) -> Void)?
+    /// Hand over every frame, at the camera's full rate, for camera tracking.
+    var deliversFrames = false {
+        didSet { capture.setDeliversFrames(deliversFrames) }
+    }
 
     /// Owns the capture session; everything AVFoundation happens on its queue.
     private let capture = CaptureController()
@@ -66,10 +77,13 @@ final class CameraFeed {
     }
 
     private func receive(_ result: FrameResult) {
-        spot = result.spot
-        frameSize = (result.width, result.height)
+        if frameSize != (result.width, result.height) { frameSize = (result.width, result.height) }
         if let image = result.preview { preview = image }
-        onFrame?(result.spot, result.timestamp)
+        if let frame = result.frame { onImage?(frame) }
+        if result.spotChecked {
+            spot = result.spot
+            onFrame?(result.spot, result.timestamp)
+        }
     }
 
     var centre: (x: Double, y: Double) { (Double(frameSize.width - 1) / 2, Double(frameSize.height - 1) / 2) }
@@ -81,14 +95,20 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
     var handler: (@Sendable (FrameResult) -> Void)?
     private let session = AVCaptureSession()
     private let detector = SpotDetector()
-    private var count = 0
-    private var lastProcessed = Date.distantPast
+    private var lastSpotCheck = Date.distantPast
+    private var lastPreview = Date.distantPast
+    private var deliversFrames = false
+
+    func setDeliversFrames(_ on: Bool) {
+        queue.async { self.deliversFrames = on }
+    }
 
     static func availableDevices() -> [(id: String, name: String)] {
         #if os(macOS)
         let types: [AVCaptureDevice.DeviceType] = [.continuityCamera, .external, .builtInWideAngleCamera]
         #else
-        let types: [AVCaptureDevice.DeviceType] = [.builtInTelephotoCamera, .builtInWideAngleCamera]
+        // External covers a USB webcam plugged into an iPad.
+        let types: [AVCaptureDevice.DeviceType] = [.external, .builtInTelephotoCamera, .builtInWideAngleCamera]
         #endif
         return AVCaptureDevice.DiscoverySession(deviceTypes: types, mediaType: .video, position: .unspecified)
             .devices.map { ($0.uniqueID, $0.localizedName) }
@@ -128,11 +148,10 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // About 10 corrections a second is plenty, and leaves headroom on slower Macs.
+        // About 10 spot checks a second is plenty for guiding; camera tracking takes every frame.
         let now = Date()
-        guard now.timeIntervalSince(lastProcessed) >= 0.09,
-              let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        lastProcessed = now
+        let checksSpot = now.timeIntervalSince(lastSpotCheck) >= 0.09
+        guard checksSpot || deliversFrames, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         // When the light arrived, not when the frame reached us: Continuity Camera adds ~0.1–0.2 s.
         let captured = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -145,20 +164,35 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
         let width = CVPixelBufferGetWidthOfPlane(buffer, 0), height = CVPixelBufferGetHeightOfPlane(buffer, 0)
         let rowBytes = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
 
-        // Keep it under ~960 pixels wide; a bright spot survives taking every n-th pixel.
+        // Keep it under ~960 pixels wide. Scaling averages neighbouring pixels, so a faint point
+        // keeps its light; taking every n-th pixel could skip it entirely.
         let step = max(1, (width + 959) / 960)
         let w = width / step, h = height / step
         var pixels = [UInt8](repeating: 0, count: w * h)
-        let source = base.assumingMemoryBound(to: UInt8.self)
-        for y in 0..<h {
-            let row = source + y * step * rowBytes
-            for x in 0..<w { pixels[y * w + x] = row[x * step] }
+        pixels.withUnsafeMutableBytes { raw in
+            guard let out = raw.baseAddress else { return }
+            if step == 1 {
+                for y in 0..<h { memcpy(out + y * w, base + y * rowBytes, w) }
+            } else {
+                var source = vImage_Buffer(data: base, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: rowBytes)
+                var destination = vImage_Buffer(data: out, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w)
+                vImageScale_Planar8(&source, &destination, nil, vImage_Flags(kvImageNoFlags))
+            }
         }
-        let spot = detector.find(in: GrayFrame(width: w, height: h, pixels: pixels, timestamp: timestamp))
-
-        count += 1
-        let preview = count % 3 == 0 ? Self.image(pixels, w, h) : nil
-        handler?(FrameResult(spot: spot, width: w, height: h, timestamp: timestamp, preview: preview))
+        let frame = GrayFrame(width: w, height: h, pixels: pixels, timestamp: timestamp)
+        var spot: Spot?
+        if checksSpot {
+            lastSpotCheck = now
+            spot = detector.find(in: frame)
+        }
+        // About 15 previews a second: smooth enough to click on something moving.
+        var preview: CGImage?
+        if now.timeIntervalSince(lastPreview) >= 1.0 / 15 {
+            lastPreview = now
+            preview = Self.image(pixels, w, h)
+        }
+        handler?(FrameResult(spotChecked: checksSpot, spot: spot, frame: deliversFrames ? frame : nil,
+                             width: w, height: h, timestamp: timestamp, preview: preview))
     }
 
     static func image(_ pixels: [UInt8], _ width: Int, _ height: Int) -> CGImage? {

@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 /// Connection, manual moves, tracking and fine tuning, kept compact so it fits without scrolling.
 struct MountPanel: View {
     @Environment(AppModel.self) private var model
+    /// The camera tracking screen has its own camera view.
+    var showsGuiding = true
     @State private var confirmingSun = false
     @State private var showingAlignment = false
 
@@ -26,7 +28,7 @@ struct MountPanel: View {
                         alignment
                     }
                 }
-                if mount.kind?.isSpecialMode == true {
+                if showsGuiding, mount.kind?.isSpecialMode == true {
                     Card(title: "Camera guiding", systemImage: "camera.viewfinder") { GuidingPanel() }
                 }
             }

@@ -23,6 +23,8 @@ struct ContentView: View {
                 .tabItem { Label("Objects", systemImage: "checklist") }
             ConjunctionsView()
                 .tabItem { Label("Conjunctions", systemImage: "moon.stars") }
+            CameraTrackView()
+                .tabItem { Label("Camera", systemImage: "camera.viewfinder") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
