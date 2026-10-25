@@ -73,6 +73,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
         PRODUCT_NAME: Overpass
         # The version: bump MARKETING_VERSION per release, CURRENT_PROJECT_VERSION per build.
+        # Notarisation needs the hardened runtime for Developer ID builds.
+        ENABLE_HARDENED_RUNTIME: YES
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: NO
