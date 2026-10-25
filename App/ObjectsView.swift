@@ -9,8 +9,9 @@ struct ObjectsView: View {
     @State private var search = ""
     @State private var selectedOnly = false
     @State private var maxAgeDays: Double = 0
-    @AppStorage("objects.satelliteSort") private var satelliteSort = SatelliteSort.name
-    @AppStorage("objects.sortReversed") private var sortReversed = false
+    /// Each source's column sort, saved between launches.
+    @AppStorage("objects.columnSorts") private var savedSorts = Data()
+    @State private var listWidth: CGFloat = 900
     @State private var addingURL = false
     @State private var importing = false
     @State private var confirmingSun = false
@@ -30,17 +31,6 @@ struct ObjectsView: View {
                         Text("Under 1 day").tag(1.0)
                         Text("Under 3 days").tag(3.0)
                         Text("Under 7 days").tag(7.0)
-                    }
-                    HStack {
-                        Picker("Sort satellites by", selection: $satelliteSort) {
-                            ForEach(SatelliteSort.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                        Button { sortReversed.toggle() } label: {
-                            Image(systemName: sortReversed ? "arrow.up" : "arrow.down")
-                        }
-                        .buttonStyle(.borderless)
-                        .help(sortReversed ? "Reversed: \(satelliteSort.reversedOrder)" : satelliteSort.order)
-                        .accessibilityLabel(sortReversed ? "Sorted \(satelliteSort.reversedOrder)" : "Sorted \(satelliteSort.order)")
                     }
                 } footer: {
                     Text("\(model.selected.count) selected. Passes are predicted for selected satellites; selected objects are marked on the sky.\n\nSearch matches names, numbers, owners and launch dates, and compares attributes: launched>2020, period<100, perigee>500, inc>50, rcs>10, span>20, size=large, owner=PRC, type=debris.")
@@ -81,6 +71,7 @@ struct ObjectsView: View {
                 }
 
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
             .navigationTitle("Objects")
             .searchable(text: $search, prompt: "Name, number, or launched>2020, period<100…")
             .refreshable { await model.refreshDue() }
@@ -120,14 +111,17 @@ struct ObjectsView: View {
     // MARK: Sections
 
     private func sourceSection(_ group: SourceGroup) -> some View {
-        let shown = sortedSatellites(group.satellites.filter { visible(.satellite($0)) })
+        let sort = sortBinding(group.id)
+        let shown = sort.wrappedValue.sorted(group.satellites.filter { visible(.satellite($0)) }) { model.info(.satellite($0)) }
+        let columns = SatelliteColumn.fitting(listWidth)
         let limit = search.isEmpty ? 300 : 2000
         // Big sources (Starlink, all active) start closed so they don't swamp the list.
         let open = isOpen(group.id, byDefault: group.satellites.count <= 300)
         return Section {
             if open {
+                SatelliteColumnHeader(columns: columns, sort: sort)
                 ForEach(shown.prefix(limit), id: \.noradID) { sat in
-                    selectRow(.satellite(sat), age: sat.elementAge())
+                    satelliteRow(sat, columns: columns)
                 }
                 if shown.count > limit {
                     Text("\(shown.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
@@ -139,6 +133,19 @@ struct ObjectsView: View {
                              clearFilters: clearFilters)
             }
         }
+    }
+
+    private func satelliteRow(_ sat: SatelliteTarget, columns: [SatelliteColumn]) -> some View {
+        let object = SkyObject.satellite(sat)
+        let on = model.isSelected(object.id)
+        return Button {
+            if on { recentlyUnselected.insert(object.id) }
+            model.toggle(object.id)
+        } label: {
+            SatelliteColumnRow(satellite: sat, info: model.info(object), columns: columns, selected: on)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func selectRow(_ object: SkyObject, detail: String? = nil, age: TimeInterval? = nil) -> some View {
@@ -153,7 +160,6 @@ struct ObjectsView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(object.name)
                     if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                    if case .satellite(let sat) = object { SatelliteDetails(noradID: sat.noradID, info: model.info(object)) }
                 }
                 Spacer()
                 if let age { ElementAge(seconds: age) }
@@ -166,63 +172,15 @@ struct ObjectsView: View {
 
     // MARK: Filtering
 
-    enum SatelliteSort: String, CaseIterable, Identifiable {
-        case name = "Name", number = "Catalogue number", launched = "Launch date", period = "Period",
-             perigee = "Perigee", apogee = "Apogee", inclination = "Inclination",
-             radarSize = "Radar size", physicalSize = "Physical size"
-        var id: Self { self }
-
-        /// The natural order: biggest and newest first, otherwise smallest first.
-        var descending: Bool { [.launched, .radarSize, .physicalSize].contains(self) }
-        var order: String {
-            switch self {
-            case .name: "A to Z"
-            case .number: "lowest first"
-            case .launched: "newest first"
-            case .radarSize, .physicalSize: "largest first"
-            default: "lowest first"
-            }
+    private func sortBinding(_ groupID: String) -> Binding<ColumnSort> {
+        Binding {
+            let sorts = (try? JSONDecoder().decode([String: ColumnSort].self, from: savedSorts)) ?? [:]
+            return sorts[groupID] ?? ColumnSort()
+        } set: { sort in
+            var sorts = (try? JSONDecoder().decode([String: ColumnSort].self, from: savedSorts)) ?? [:]
+            sorts[groupID] = sort
+            savedSorts = (try? JSONEncoder().encode(sorts)) ?? savedSorts
         }
-        var reversedOrder: String {
-            switch self {
-            case .name: "Z to A"
-            case .launched: "oldest first"
-            case .radarSize, .physicalSize: "smallest first"
-            default: "highest first"
-            }
-        }
-
-        func value(_ sat: SatelliteTarget, _ info: SatelliteInfo?) -> Double? {
-            switch self {
-            case .name: nil
-            case .number: Double(SatelliteCatalogInfo.key(sat.noradID))
-            case .launched: info?.launchYear
-            case .period: info?.period
-            case .perigee: info?.perigee
-            case .apogee: info?.apogee
-            case .inclination: info?.inclination
-            case .radarSize: info?.radarCrossSection
-            case .physicalSize: info?.largestDimension
-            }
-        }
-    }
-
-    /// Satellites with nothing published for the chosen attribute go last, by name.
-    private func sortedSatellites(_ satellites: [SatelliteTarget]) -> [SatelliteTarget] {
-        if satelliteSort == .name {
-            let byName = satellites.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-            return sortReversed ? byName.reversed() : byName
-        }
-        let descending = satelliteSort.descending != sortReversed
-        let keyed = satellites.map { ($0, satelliteSort.value($0, model.info(.satellite($0)))) }
-        return keyed.sorted { a, b in
-            switch (a.1, b.1) {
-            case let (x?, y?) where x != y: return descending ? x > y : x < y
-            case (_?, nil): return true
-            case (nil, _?): return false
-            default: return a.0.name.localizedStandardCompare(b.0.name) == .orderedAscending
-            }
-        }.map(\.0)
     }
 
     private func clearFilters() {
@@ -394,48 +352,9 @@ enum RadarSize {
     }
 }
 
-/// A satellite's catalogue entry in two lines:
-/// "#25544 · 1998-067A · Payload · ISS · launched 20 Nov 1998"
-/// "92.96 min · 415 × 424 km · 51.6° · 12.6 × 4.2 m, span 23.9 m · RCS 399 m² · Large".
-struct SatelliteDetails: View {
-    let noradID: String
-    let info: SatelliteInfo?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(identity)
-            if let info, !orbitAndSize(info).isEmpty { Text(orbitAndSize(info)) }
-        }
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
-    }
-
-    private var identity: String {
-        var parts = ["#\(noradID)"]
-        if let info {
-            parts += [info.cosparID, info.objectTypeName, info.owner].compactMap { $0 }
-            if let date = info.launchDate.flatMap(Self.parseDate) {
-                parts.append("launched \(date.formatted(.dateTime.day().month(.abbreviated).year()))")
-            }
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func orbitAndSize(_ info: SatelliteInfo) -> String {
-        var parts: [String] = []
-        if let period = info.period { parts.append(String(format: "%.1f min", period)) }
-        if let perigee = info.perigee, let apogee = info.apogee {
-            parts.append(abs(apogee - perigee) < 1 ? "\(Int(perigee)) km" : "\(Int(perigee)) × \(Int(apogee)) km")
-        }
-        if let inclination = info.inclination { parts.append(String(format: "%.1f°", inclination)) }
-        if let size = Self.dimensions(info) { parts.append(size) }
-        if let rcs = info.radarCrossSection { parts.append("RCS \(RadarSize.format(rcs))") }
-        if let size = info.sizeClass { parts.append(size.name) }
-        return parts.joined(separator: " · ")
-    }
-
+enum SatelliteDimensions {
     /// "12.6 × 4.2 m, span 23.9 m"; the span only when it's wider than the body.
-    static func dimensions(_ info: SatelliteInfo) -> String? {
+    static func text(_ info: SatelliteInfo) -> String? {
         let body = [info.length, info.diameter].compactMap { $0 }
         guard !body.isEmpty || info.span != nil else { return nil }
         func metres(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(0...1))) }
@@ -446,10 +365,6 @@ struct SatelliteDetails: View {
             text += " m"
         }
         return text
-    }
-
-    private static func parseDate(_ text: String) -> Date? {
-        try? Date(text + "T12:00:00Z", strategy: .iso8601)
     }
 }
 

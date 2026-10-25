@@ -470,7 +470,7 @@ struct Brightness: View {
                 let lit = (try? s.isSunlit(at: AstroTime(date))) == true
                 let info = model.info(object)
                 let size = info?.radarCrossSection.map { "RCS \(RadarSize.format($0))" }
-                    ?? info.flatMap(SatelliteDetails.dimensions)
+                    ?? info.flatMap(SatelliteDimensions.text)
                 Text([lit ? "sunlit" : "eclipsed", size].compactMap { $0 }.joined(separator: " · "))
             }
         }
