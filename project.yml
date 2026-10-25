@@ -51,6 +51,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Overpass
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         NSLocationWhenInUseUsageDescription: >-
           Overpass uses your location to work out where satellites, the Sun, Moon
@@ -70,5 +72,8 @@ targets:
         "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphone*]": AppIconRed
         PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
         PRODUCT_NAME: Overpass
+        # The version: bump MARKETING_VERSION per release, CURRENT_PROJECT_VERSION per build.
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"

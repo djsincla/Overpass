@@ -3,6 +3,14 @@ import SkyKit
 import SwiftUI
 
 struct SettingsView: View {
+    /// "0.1.0 (1)", from the bundle (set in project.yml).
+    static var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
+
     @Environment(AppModel.self) private var model
     @State private var advice: [CableStopAdvisor.Option] = []
     #if os(macOS)
@@ -78,6 +86,10 @@ struct SettingsView: View {
                     Text("Mount")
                 } footer: {
                     Text("Over the top tilts the tube past the zenith; check it clears the mount and tripod first. Speeds are assumptions until measured on your HAZ46. \"On target\" is about half your field of view.")
+                }
+
+                Section("About") {
+                    LabeledContent("Version", value: Self.version)
                 }
             }
             .formStyle(.grouped)
