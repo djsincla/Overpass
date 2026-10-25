@@ -1,9 +1,42 @@
 import SkyKit
 import SwiftUI
 
+/// Passes of objects flying together (a space station's modules and docked ships, each with
+/// its own TLE), shown as one row.
+struct PassGroup: Identifiable {
+    let lead: SatellitePass
+    let others: [SatellitePass]
+    var id: String { lead.id }
+
+    /// Groups passes that rise and set within 10 s of each other and peak within 1°, keeping the
+    /// order. A pass in `preferring` (the target or the highlighted one) leads its group.
+    static func docked(_ passes: [SatellitePass], preferring: [String] = []) -> [PassGroup] {
+        var groups: [[SatellitePass]] = []
+        for pass in passes {
+            if let i = groups.firstIndex(where: { together($0[0], pass) }) {
+                groups[i].append(pass)
+            } else {
+                groups.append([pass])
+            }
+        }
+        return groups.map { group in
+            let lead = group.first { preferring.contains($0.id) } ?? group[0]
+            return PassGroup(lead: lead, others: group.filter { $0.id != lead.id })
+        }
+    }
+
+    static func together(_ a: SatellitePass, _ b: SatellitePass) -> Bool {
+        abs(a.start.date.timeIntervalSince(b.start.date)) < 10 && abs(a.end.date.timeIntervalSince(b.end.date)) < 10
+            && abs(a.maxAltitude - b.maxAltitude) < 1
+            && abs(wrap180(a.culmination.position.azimuth - b.culmination.position.azimuth)) < 2
+    }
+}
+
 struct PassRow: View {
     @Environment(AppModel.self) private var model
     let pass: SatellitePass
+    /// Others flying with it (docked modules), named on the "+N" chip.
+    var docked: [String] = []
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -17,6 +50,10 @@ struct PassRow: View {
                         RiseCountdown(start: pass.start.date, end: pass.end.date, now: now)
                         if pass.isVisible { Chip(text: "Visible", systemImage: "eye.fill", tint: Theme.focus) }
                         if pass.isEclipsed { Chip(text: "Eclipsed", systemImage: "moon.fill", tint: Theme.eclipsed) }
+                        if !docked.isEmpty {
+                            Chip(text: "+\(docked.count) docked", systemImage: "link", tint: Theme.sunlit)
+                                .help("Flying together: " + docked.joined(separator: ", "))
+                        }
                     }
                 }
                 Spacer(minLength: 6)

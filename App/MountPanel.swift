@@ -413,7 +413,7 @@ struct ControlPad: View {
                         .labelsHidden().fixedSize()
                     } else {
                         Picker("Speed", selection: $mount.jogSpeed) {
-                            ForEach([0.01, 0.05, 0.2, 1, 3, 6], id: \.self) { Text("\($0, format: .number)°/s").tag($0) }
+                            ForEach([0.01, 0.05, 0.2, 0.5, 1, 3, 6], id: \.self) { Text("\($0, format: .number)°/s").tag($0) }
                         }
                         .labelsHidden().fixedSize()
                     }

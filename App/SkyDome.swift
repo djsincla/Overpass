@@ -140,9 +140,11 @@ struct SkyDome: View {
             context.fill(half, with: .color(.cyan))
             context.stroke(marker, with: .color(.white), lineWidth: 1.5)
             let label = b.sunlit ? "lit" : "shadow"
+            // Above the marker when it's close to the start, whose time sits above the start ring.
+            let nearStart = distance(p, g.point(pass.start.position)) < 40
             context.draw(Text("\(label) \(b.date.formatted(date: .omitted, time: .shortened))")
                             .font(.caption2).foregroundStyle(.white.opacity(0.85)),
-                         at: CGPoint(x: p.x, y: p.y + 14))
+                         at: CGPoint(x: p.x + (nearStart ? -34 : 0), y: p.y + (nearStart ? -14 : 14)))
         }
 
         // Where the mount will lose the target, cutting round the zenith.
@@ -172,10 +174,29 @@ struct SkyDome: View {
                      at: CGPoint(x: peak.x + 14, y: peak.y))
     }
 
-    private func drawLiveObjects(_ context: inout GraphicsContext, _ g: DomeGeometry) {
+    /// Objects drawn as one: within a few pixels of each other, like the modules of a space
+    /// station. The highlighted or target object, if any, leads the group.
+    private func clusters(_ g: DomeGeometry) -> [(lead: LiveObject, others: [LiveObject])] {
+        var groups: [[LiveObject]] = []
         for object in liveObjects {
             let p = g.point(object.position)
-            let highlighted = object.id == highlightedObjectID
+            if let i = groups.firstIndex(where: { distance(g.point($0[0].position), p) < 6 }) {
+                groups[i].append(object)
+            } else {
+                groups.append([object])
+            }
+        }
+        return groups.map { group in
+            let lead = group.first { $0.id == highlightedObjectID } ?? group.first { $0.id == targetObjectID } ?? group[0]
+            return (lead, group.filter { $0.id != lead.id })
+        }
+    }
+
+    private func drawLiveObjects(_ context: inout GraphicsContext, _ g: DomeGeometry) {
+        for (object, others) in clusters(g) {
+            let p = g.point(object.position)
+            let ids = [object.id] + others.map(\.id)
+            let highlighted = highlightedObjectID.map(ids.contains) ?? false
             let color: Color = object.sunlit ? .yellow : .gray
             var diamond = Path()
             diamond.move(to: CGPoint(x: p.x, y: p.y - 5))
@@ -188,11 +209,12 @@ struct SkyDome: View {
                 context.stroke(Path(ellipseIn: CGRect(x: p.x - 11, y: p.y - 11, width: 22, height: 22)),
                                with: .color(.yellow), lineWidth: 2)
             }
-            if object.id == targetObjectID {
+            if targetObjectID.map(ids.contains) ?? false {
                 context.stroke(Path(ellipseIn: CGRect(x: p.x - 16, y: p.y - 16, width: 32, height: 32)),
                                with: .color(.green), style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
             }
-            context.draw(Text(object.name).font(highlighted ? .caption.bold() : .caption2).foregroundStyle(color),
+            let label = others.isEmpty ? object.name : "\(object.name) +\(others.count)"
+            context.draw(Text(label).font(highlighted ? .caption.bold() : .caption2).foregroundStyle(color),
                          at: CGPoint(x: p.x, y: p.y + 14))
         }
     }

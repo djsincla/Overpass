@@ -151,10 +151,12 @@ struct PassesList: View {
             // Passes still to come at the time the bar is set to; refreshed as time moves on.
             TimelineView(.periodic(from: .now, by: 5)) { context in
             let date = model.viewDate(context.date)
-            List(model.passes.filter { $0.end.date > date }) { pass in
+            let lead = [model.targetPassID, model.highlightedPass(at: date)?.id].compactMap { $0 }
+            List(PassGroup.docked(model.passes.filter { $0.end.date > date }, preferring: lead)) { group in
+                let pass = group.lead
                 HStack {
                     // Clicking a pass only refocuses the dome on it. It never moves the mount.
-                    Button { model.highlight(pass: pass) } label: { PassRow(pass: pass) }
+                    Button { model.highlight(pass: pass) } label: { PassRow(pass: pass, docked: group.others.map(\.name)) }
                         .buttonStyle(.plain)
                     if model.targetPassID == pass.id {
                         Image(systemName: "scope").foregroundStyle(Theme.target).accessibilityLabel("Tracking target")
