@@ -177,6 +177,8 @@ final class AppModel {
     private(set) var groups: [SourceGroup] = []
     private(set) var satellites: [SatelliteTarget] = []
     private var satelliteByID: [String: SatelliteTarget] = [:]
+    /// Radar cross-sections (m²) by catalogue number, from CelesTrak's SATCAT.
+    private(set) var radarCrossSections: [String: Double] = [:]
     private(set) var passes: [SatellitePass] = []
     private(set) var isPredicting = false
     private(set) var isRefreshing = false
@@ -207,6 +209,8 @@ final class AppModel {
         } catch {
             message = "Couldn't open the TLE cache: \(error.localizedDescription)"
         }
+        radarCrossSections = (try? JSONDecoder().decode([String: Double].self,
+                                                         from: Data(contentsOf: Self.radarCrossSectionFile))) ?? [:]
         mount.app = self
         guider.app = self
         conjunctions.app = self
@@ -217,6 +221,7 @@ final class AppModel {
         schedulePrediction()
         await refreshDue()
         conjunctions.startWatching()
+        await refreshRadarCrossSections()
     }
 
     // MARK: Objects and selection
@@ -346,6 +351,28 @@ final class AppModel {
             if v.isUp { return v.rise ?? .distantPast }
             return v.rise ?? .distantFuture
         }
+    }
+
+    /// Published radar cross-section in m², a rough guide to size and brightness.
+    func radarCrossSection(_ object: SkyObject) -> Double? {
+        guard case .satellite(let s) = object else { return nil }
+        return radarCrossSections[RadarCrossSection.key(s.noradID)]
+    }
+
+    private static let radarCrossSectionFile = storage.appending(path: "radar-cross-sections.json")
+
+    /// Weekly: the values rarely change, and the catalogue is a 7 MB download.
+    private func refreshRadarCrossSections() async {
+        let file = Self.radarCrossSectionFile
+        let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let modified, Date.now.timeIntervalSince(modified) < 7 * 86_400, !radarCrossSections.isEmpty { return }
+        guard let (data, response) = try? await URLSession.shared.data(from: RadarCrossSection.catalogURL),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+        let parsed = await Task.detached { RadarCrossSection.parse(String(decoding: data, as: UTF8.self)) }.value
+        guard !parsed.isEmpty else { return }
+        radarCrossSections = parsed
+        try? FileManager.default.createDirectory(at: Self.storage, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(parsed).write(to: file)
     }
 
     func magnitude(_ object: SkyObject, at date: Date) -> Double? {

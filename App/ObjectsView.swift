@@ -9,6 +9,7 @@ struct ObjectsView: View {
     @State private var search = ""
     @State private var selectedOnly = false
     @State private var maxAgeDays: Double = 0
+    @AppStorage("objects.satelliteSort") private var satelliteSort = SatelliteSort.name
     @State private var addingURL = false
     @State private var importing = false
     @State private var confirmingSun = false
@@ -28,6 +29,9 @@ struct ObjectsView: View {
                         Text("Under 1 day").tag(1.0)
                         Text("Under 3 days").tag(3.0)
                         Text("Under 7 days").tag(7.0)
+                    }
+                    Picker("Sort satellites by", selection: $satelliteSort) {
+                        ForEach(SatelliteSort.allCases) { Text($0.rawValue).tag($0) }
                     }
                 } footer: {
                     Text("\(model.selected.count) selected. Passes are predicted for selected satellites; selected objects are marked on the sky.")
@@ -107,14 +111,15 @@ struct ObjectsView: View {
     // MARK: Sections
 
     private func sourceSection(_ group: SourceGroup) -> some View {
-        let shown = group.satellites.filter { visible(.satellite($0)) }
+        let shown = sortedSatellites(group.satellites.filter { visible(.satellite($0)) })
         let limit = search.isEmpty ? 300 : 2000
         // Big sources (Starlink, all active) start closed so they don't swamp the list.
         let open = isOpen(group.id, byDefault: group.satellites.count <= 300)
         return Section {
             if open {
                 ForEach(shown.prefix(limit), id: \.noradID) { sat in
-                    selectRow(.satellite(sat), detail: "#\(sat.noradID)", age: sat.elementAge())
+                    let rcs = model.radarCrossSection(.satellite(sat)).map { " · RCS \(RadarSize.format($0))" } ?? ""
+                    selectRow(.satellite(sat), detail: "#\(sat.noradID)\(rcs)", age: sat.elementAge())
                 }
                 if shown.count > limit {
                     Text("\(shown.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
@@ -151,6 +156,22 @@ struct ObjectsView: View {
     }
 
     // MARK: Filtering
+
+    enum SatelliteSort: String, CaseIterable, Identifiable {
+        case name = "Name", radarSize = "Radar size"
+        var id: Self { self }
+    }
+
+    /// Radar size puts the largest first, and those with none published last, by name.
+    private func sortedSatellites(_ satellites: [SatelliteTarget]) -> [SatelliteTarget] {
+        switch satelliteSort {
+        case .name:
+            return satellites
+        case .radarSize:
+            let keyed = satellites.map { ($0, model.radarCrossSection(.satellite($0)) ?? -1) }
+            return keyed.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.name < $1.0.name }.map(\.0)
+        }
+    }
 
     private func clearFilters() {
         selectedOnly = false
@@ -304,6 +325,14 @@ extension SourceHeader {
         var selection = model.selected
         if on { selection.formUnion(ids) } else { selection.subtract(ids) }
         model.selected = selection
+    }
+}
+
+/// Radar cross-section, as published: "399 m²", "28 m²", "0.12 m²".
+enum RadarSize {
+    static func format(_ squareMetres: Double) -> String {
+        let digits = squareMetres >= 10 ? 0 : squareMetres >= 1 ? 1 : 2
+        return "\(squareMetres.formatted(.number.precision(.fractionLength(digits)))) m²"
     }
 }
 
