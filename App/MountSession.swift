@@ -93,6 +93,8 @@ final class MountSession {
     private var special: MountClient?
     private var tcp: TCPTransport?
     private var unwrapper: AxisUnwrapper?
+    /// The USB (or relay) line Special mode runs over, for Normal-mode commands on the way out.
+    private var specialTransport: MountTransport?
     /// Set when a `:T0`/`:T1` slew headed away from its target; rate control does moves after that.
     private var nativeSlewWentWrongWay = false
     private var pollTask: Task<Void, Never>?
@@ -150,6 +152,7 @@ final class MountSession {
                 transport = relay
                 #endif
                 let client = MountClient(transport: transport)
+                specialTransport = transport
                 if s.captureMountAlignment {
                     identity = try await captureMountAlignment(client, transport)
                 } else {
@@ -175,7 +178,13 @@ final class MountSession {
         pollTask?.cancel()
         pollTask = nil
         if let special, settings.leaveSpecialModeOnDisconnect {
-            _ = try? await special.exitSpecialMode()
+            // Where the tube points, from the Special-mode axes, before leaving: Normal mode
+            // comes back reading az 0, alt 0, so tell it.
+            var pointing: Horizontal?
+            if settings.alignment != nil, (try? await readPosition()) != nil { pointing = skyPosition }
+            if (try? await special.exitSpecialMode()) != nil, let pointing, let transport = specialTransport {
+                await syncNormalMode(to: pointing, over: transport)
+            }
         }
         await closeTransport()
         state = .disconnected
@@ -190,7 +199,23 @@ final class MountSession {
         tcp = nil
         normal = nil
         special = nil
+        specialTransport = nil
         unwrapper = nil
+    }
+
+    /// After leaving Special mode: set the mount's time and place, then sync its Normal-mode
+    /// position to where the tube actually points, so the hand controller and WiFi carry on
+    /// from there instead of from az 0, alt 0.
+    private func syncNormalMode(to pointing: Horizontal, over transport: MountTransport) async {
+        let s = settings
+        let normal = NormalModeClient(transport: transport)
+        do {
+            try await normal.configure(latitude: s.latitude, longitude: s.longitude)
+            try await normal.sync(altitude: pointing.altitude, azimuth: pointing.azimuth)
+            status = String(format: "Left Special mode; the mount now knows it points at az %.2f°, alt %.2f°", pointing.azimuth, pointing.altitude)
+        } catch {
+            status = "Left Special mode, but couldn't set the mount's position: \(describe(error))"
+        }
     }
 
     /// Keeps the position readout current while nothing else is talking to the mount.
