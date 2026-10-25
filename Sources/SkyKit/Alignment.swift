@@ -86,6 +86,28 @@ public struct AlignmentModel: Sendable, Codable, Equatable {
         return Horizontal(azimuth: s.longitude, altitude: s.latitude)
     }
 
+    /// The same model with its azimuth and altitude zeros moved so `axes` read `sky`: a sync on
+    /// one centred object. Tilts from a star alignment are kept.
+    public func synced(axes: AxisPosition, to sky: Horizontal) -> AlignmentModel {
+        var m = self
+        func error(_ model: AlignmentModel) -> Double { angularSeparation(model.sky(for: axes).unitVector, sky.unitVector) }
+        // Each step tries both signs, so it doesn't depend on which way the axes count.
+        for _ in 0..<8 {
+            let here = m.sky(for: axes)
+            let dAz = wrap180(sky.azimuth - here.azimuth), dAlt = sky.altitude - here.altitude
+            if abs(dAz) < 1e-9 && abs(dAlt) < 1e-9 { break }
+            var a = m, b = m
+            a.yaw += dAz
+            b.yaw -= dAz
+            m = error(a) < error(b) ? a : b
+            var c = m, d = m
+            c.altitudeOffset += dAlt
+            d.altitudeOffset -= dAlt
+            m = error(c) < error(d) ? c : d
+        }
+        return m
+    }
+
     /// Angular error of each point under this model, in degrees.
     public func residuals(_ points: [AlignmentPoint]) -> [Double] {
         points.map { angularSeparation(sky(for: $0.axes).unitVector, $0.sky.unitVector) }

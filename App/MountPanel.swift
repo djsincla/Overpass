@@ -234,26 +234,31 @@ struct MountPanel: View {
 
     private var showsAlignment: Bool {
         if model.mount.kind?.isSpecialMode == true { return true }
-        guard let target = model.targetObject else { return false }
-        return !target.isSatellite && !model.mount.isTracking
+        return model.targetObject != nil && !model.mount.isTracking
     }
 
     @ViewBuilder
     private var alignment: some View {
         let mount = model.mount
-        if mount.kind?.isSpecialMode == true {
-            HStack {
+        let target = model.targetObject
+        let canSync = target != nil && !mount.isTracking && mount.state == .connected
+        HStack {
+            if mount.kind?.isSpecialMode == true {
                 Label("Alignment: \(alignmentSummary)", systemImage: "star.circle").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Align…") { showingAlignment = true }.controlSize(.small)
+            } else if let target {
+                Text("Centre \(target.name), then sync.").font(.caption).foregroundStyle(.secondary)
             }
-
-        } else if let target = model.targetObject, !target.isSatellite, !mount.isTracking {
-            HStack {
-                Text("Centre \(target.name), then sync to improve the mount's pointing.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Sync") { Task { await mount.sync(on: target) } }.controlSize(.small)
+            Spacer()
+            if let target {
+                Button("Sync") { Task { await mount.sync(on: target) } }
+                    .controlSize(.small)
+                    .disabled(!canSync || (mount.kind?.isSpecialMode == true && model.settings.alignment == nil))
+                    .help(mount.kind?.isSpecialMode == true
+                          ? "\(target.name) is centred: shift Overpass's alignment so the scope reads it. Nothing is sent to the mount."
+                          : "\(target.name) is centred: tell the mount (:CM#), then read its position back to check.")
+            }
+            if mount.kind?.isSpecialMode == true {
+                Button("Align…") { showingAlignment = true }.controlSize(.small)
             }
         }
     }

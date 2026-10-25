@@ -220,3 +220,19 @@ let zenithPass: [PassSample] = {
         #expect(abs(model.axes(for: Horizontal(azimuth: 180, altitude: 10)).primary) < 1e-6)
     }
 }
+
+@Suite struct SyncTests {
+    @Test func syncMovesTheZerosOnly() {
+        var model = AlignmentModel.iOptronSpecialMode
+        model.tiltNorth = 0.3
+        let axes = AxisPosition(primary: 21.95, secondary: 70.79)
+        let target = Horizontal(azimuth: 203.4, altitude: 18.1)
+        let synced = model.synced(axes: axes, to: target)
+        #expect(angularSeparation(synced.sky(for: axes).unitVector, target.unitVector) < 1e-4)
+        #expect(synced.tiltNorth == 0.3 && synced.azimuthSense == model.azimuthSense && synced.altitudeSense == model.altitudeSense)
+        // Somewhere else on the sky, the same shift.
+        let other = AxisPosition(primary: -100, secondary: 40)
+        let before = model.sky(for: other), after = synced.sky(for: other)
+        #expect(abs(wrap180(after.azimuth - before.azimuth) - 1.45) < 0.2)
+    }
+}

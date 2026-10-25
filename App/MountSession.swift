@@ -1032,16 +1032,60 @@ final class MountSession {
 
     // MARK: Alignment
 
-    /// Normal mode: tell the mount the object is centred, so its own model improves.
+    /// `object` is centred: make the position read it. Special mode moves the zeros of Overpass's
+    /// alignment (nothing is sent to the mount, whose own sync commands aren't understood yet).
+    /// Normal mode syncs the mount (`:CM#`) and reads the position back, since a sync there once
+    /// doubled the position instead of setting it.
     func sync(on object: SkyObject) async {
-        guard let normal else { return }
+        let observer = settings.observer
         do {
-            let h = try settings.observer.look(at: object.target, AstroTime(.now))
-            try await normal.sync(altitude: h.altitude, azimuth: h.azimuth)
-            status = "Synced on \(object.name)"
+            if special != nil {
+                guard let model = settings.alignment, let current = try await readPosition() else {
+                    status = "Align first, or turn on the mount's own alignment"
+                    return
+                }
+                let sky = try observer.look(at: object.target, AstroTime(skyPositionDate ?? .now))
+                let shift = angularSeparation(model.sky(for: current).unitVector, sky.unitVector)
+                let synced = model.synced(axes: current, to: sky)
+                app?.settings.alignment = synced
+                unwrapper = AxisUnwrapper(raw: wrap180(current.primary), model: synced, limits: settings.limits)
+                recordHeld = false
+                remember(sky, now: true)
+                _ = try? await readPosition()
+                log(String(format: "Sync on %@ (Special mode): P0 %+.4f° P1 %+.4f° = ", object.name, current.primary, current.secondary)
+                    + describe(sky) + String(format: ", moved the alignment %.3f°", shift))
+                status = String(format: "Synced on %@: the alignment moved %@", object.name, Self.arc(shift))
+            } else if let normal {
+                await holdStill(normal: normal)
+                let before = try await normal.altAz()
+                let sky = try observer.look(at: object.target, AstroTime(.now))
+                try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
+                let after = try await normal.altAz()
+                let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
+                let off = angularSeparation(reads.unitVector, sky.unitVector)
+                log(String(format: "Sync on %@ (Normal mode): :GAC# az %.3f° alt %.3f° → sent ", object.name, before.azimuth, before.altitude)
+                    + describe(sky) + " → reads " + describe(reads))
+                if off < 0.1 {
+                    recordHeld = false
+                    remember(sky, now: true)
+                    status = "Synced on \(object.name)"
+                } else {
+                    status = String(format: "Synced on %@, but the mount now reads %@, %.2f° from it. In the mount log.",
+                                    object.name, describe(reads), off)
+                }
+                _ = try? await currentAltAz(normal)
+            }
         } catch {
             status = describe(error)
         }
+    }
+
+    /// "12″", "3′ 20″", "1.25°".
+    static func arc(_ degrees: Double) -> String {
+        let seconds = degrees * 3600
+        if seconds < 60 { return String(format: "%.0f″", seconds) }
+        if degrees < 1 { return String(format: "%d′ %02d″", Int(seconds) / 60, Int(seconds) % 60) }
+        return String(format: "%.2f°", degrees)
     }
 
     /// Special mode: record that `object` is centred right now.
