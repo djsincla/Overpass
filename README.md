@@ -4,7 +4,7 @@
 
 <p align="center">Version 0.1.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
-<p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a></p>
+<p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
 For the longest time I have been running Heavenscape SkyTrack on a Windows laptop to drive my iOptron strain-wave mounts. It works, but it meant keeping a Windows machine alive for one job, and that machine was always the one that wanted an update on a clear night. Overpass is the native macOS and iOS replacement: it predicts satellite passes from TLEs, tracks satellites, the Sun, the Moon, planets and bright stars, and drives a HAZ or HAE mount over WiFi or USB.
 
@@ -59,6 +59,10 @@ Sun, Moon and planet positions follow Meeus's *Astronomical Algorithms* and are 
 ## Status
 
 Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode and Smooth tracking at about 2″. Not yet tested on hardware: the iOS build, the USB relay, camera guiding, the route around the cable stop, and the fix for the 5 second timing glitch, which I ran out of battery before trying.
+
+## Installing
+
+Download `Overpass-0.1.0.dmg` from the [latest release](https://github.com/djsincla/Overpass/releases/latest), open it and drag Overpass to Applications. It is signed with my Developer ID and notarised by Apple, and needs macOS 14 or later. There is no iPhone or iPad build to download yet; those need TestFlight.
 
 ## Building
 
