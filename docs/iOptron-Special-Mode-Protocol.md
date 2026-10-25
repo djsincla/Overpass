@@ -58,28 +58,38 @@ Examples:
 - Sign and 7 digits allow up to 9,999,999 → about 27.7°/s; the real limit is set by the mount.
 - The `1` response has **no** trailing `#`, so read exactly one byte.
 - With P0+P1+M0+M1 at about 30 ms each, the HAE (no P2/M2) gets about an 8 Hz control loop; the HAZ (with P2/M2) gets about 16 Hz.
-- What the axis zero points mean is **not** stated by iOptron. Measured on a HAZ46 (24 Oct 2026, pointed at the Moon at az 121.9°, alt 51.5°, reading P0 −58.77°, P1 +39.04°):
-  - **P0 = azimuth − 180°** (zero facing south), increasing clockwise like azimuth.
-  - **P1 = zenith distance** (zero with the tube vertical; +90° at the horizon), so it counts *down* as the tube rises.
-- After the mount has been in Special mode, the Normal-mode position (`:GAC#`) reads az 0, alt 0 until it's aligned again, so it can't be used to calibrate the Special-mode axes.
-- Syncing after a mode switch (25 Oct 2026): after leaving Special mode at az 201.95°, alt 19.21°, a Normal-mode `:Sas`/`:Sz` + `:CM#` sync to that same position left the mount reading az 43.91°, alt 38.44°, which is exactly double. So the position wasn't really lost, and `:CM#` on the HAZ46 behaves as an offset added to a position the mount still holds rather than setting it. Overpass no longer syncs automatically on mode switches; it logs what the mount reads, compares it with its own record, and has a no-motion "Test mode switching" in Settings to measure what a switch does.
-- Mode switches keep the position (measured later on 25 Oct 2026, mount log): leaving Special mode at az 181.868°, alt 42.327°, Normal mode reported a placeholder (az 180°, alt 90°; az 0, alt 0 another time) for several seconds, then az 181.868°, alt 42.327°. Entering Special mode from there, P0/P1 matched exactly. So nothing needs syncing after a switch; wait for Normal mode to report a real position (Overpass waits up to 20 s), and never sync during the placeholder, which is how the doubling happened.
-- `:T0#` on a HAZ46 (measured 25 Oct 2026 with the app's slew test):
-  - The target is in the same frame as the `:P0#` reading: a slew from −177.77° to −172.77° moved +4.9°.
-  - It treats ±180° as two ends, not one point. A slew from −172.77° to +177° (10° the short way, across north on a HAZ) set off the long way round, nearly a full turn.
-  - It accepts a slew to within a few degrees of ±180° (reply `1`) and then doesn't move: −172.8° to −177° moved 0.0° in 15 s. Slewing away from ±180° from inside that zone works.
-  - Under rate control (`:M0#`/`:M2#`) the axis crosses ±180° without trouble and the reading simply wraps.
-  - So: keep `:T0#` targets at least 8° short of ±180°, and cross or finish inside that zone under rate control.
 
-# Normal mode (RS-232 Command Language V3.10, 2021-01-04): relevant parts
+## HAZ46 quirks, measured
 
-Source: https://www.ioptron.com/v/ASCOM/RS-232_Command_Language2014V310.pdf. The document lists CEM/GEM mounts only; HAZ/HAE behaviour still needs confirming. Normal mode is available over WiFi and USB.
+Everything here was measured on one HAZ46 (MountInfo 0052 / 8052) over USB, with Overpass's mount log, slew test and traces, between 24 and 25 October 2026. None of it is in iOptron's documents. The HAE is untested; run Overpass's "Test the mount's slew" and "Test mode switching" on one before trusting any of this there.
 
-- Position: `:GAC#` → `sTTTTTTTTTTTTTTTTT#` (altitude, sign + 8 digits; then azimuth, 9 digits; 0.01″). `:GEP#` gives RA/Dec.
-- Alt-az goto: `:SasTTTTTTTT#` (altitude), `:SzTTTTTTTTT#` (azimuth), then `:MSS#` → `1` accepted / `0` below the altitude limit or past mechanical limits. **Tracking stops after an `:MSS#` slew.**
-- RA/Dec goto: `:SRATTTTTTTTT#`, `:SdsTTTTTTTT#`, `:MS1#`. **Sidereal tracking starts automatically after `:MS1#`.**
-- Tracking rate: `:RT0#` sidereal, `:RT1#` lunar, `:RT2#` solar, `:RT3#` King, `:RT4#` custom (`:RRnnnnn#`, 0.1000–1.9000× sidereal, **RA axis only**). `:ST0#`/`:ST1#` turn tracking off/on.
-- Variable speed: `:SRn#` sets **one** arrow-button speed for both axes (1=1×, 2=2×, 3=8×, 4=16×, 5=64×, 6=128×, 7=256×, 8=512×, 9=max sidereal). Move with `:mn#`/`:ms#` (Dec/alt) and `:me#`/`:mw#` (RA/az) until `:qD#`/`:qR#`/`:Q#`.
-- Sync: `:CM#` to the last `:Sas`/`:Sz` (alt-az) or `:SRA`/`:Sd` coordinates.
-- Time/site: `:SUT…#` (ms since J2000), `:SGsMMM#`, `:SDS0#`/`:SDS1#`, `:SLOsTTTTTTTT#`, `:SLAsTTTTTTTT#`.
-- **No commands read, add to or select from the hand controller's object database.**
+**Axes in Special mode**
+- **P0 = azimuth − 180°**: zero faces south, and it increases clockwise like azimuth. Measured on the Moon at az 121.9°, alt 51.5°, reading P0 −58.77°, P1 +39.04°.
+- **P1 = zenith distance**: zero with the tube vertical, +90° at the horizon, so it counts down as the tube rises.
+- The P0 reading wraps at ±180°, which on a HAZ is due north.
+
+**Switching modes (`:ZZZ#`)**
+- The mode survives power cycles, and WiFi doesn't answer while the mount is in Special mode.
+- After `:ZZZ#` the mount is silent for about a second; ask `:MountInfo#` again until it answers in the new mode, and never toggle twice.
+- The mount keeps its position through a switch, in both directions. Entering Special mode, P0/P1 match the Normal-mode position exactly.
+- Leaving Special mode, Normal mode (`:GAC#`) reports a **placeholder** for several seconds: az 0, alt 0 one time, az 180°, alt 90° another. Then it reports the real position again. In one case it was back within 12 s; Overpass waits up to 20 s.
+- Normal mode can be tracking sidereal by itself. Stop it (`:ST0#`, `:Q#`) and wait until the readings settle before switching, or the position carried across is already stale.
+
+**Syncing**
+- A Normal-mode alt-az sync (`:Sas`/`:Sz` + `:CM#`) sent during the placeholder is **added** to the position the mount kept. Leaving Special mode at az 201.95°, alt 19.21° and syncing to that same position left the mount reading az 43.91°, alt 38.44°, exactly double. So never sync after a switch; there is nothing to fix.
+- Whether `:CM#` sets or adds once the real position is back is not yet measured. Overpass reads the position back after every sync and reports a mismatch.
+- `:S0#`/`:S1#` (Special-mode axis sync) has not been measured. Overpass's Special-mode sync moves its own alignment zeros instead, and "Set position" reads the axes back to check the mount took the values as positions.
+
+**`:T0#` slews on the azimuth axis**
+- The target is in the same frame as the `:P0#` reading: a slew from −177.77° to −172.77° moved +4.9°.
+- It treats +180° and −180° as two separate ends. A slew from −172.77° to +177°, 10° the short way across north, set off the long way round, nearly a full turn, and would have wound the cables.
+- It accepts a slew to within a few degrees of ±180° (reply `1`) and then doesn't move: −172.8° to −177° moved 0.0° in 15 s. Slewing away from ±180° from inside that zone works.
+- Under rate control (`:M0#`/`:M2#`) the axis crosses ±180° without trouble, and the reading wraps.
+- So Overpass keeps `:T0#` targets at least 8° short of ±180°, crosses north under rate control at full speed, and finishes any goal inside that zone under rate control. Any native slew that starts heading away from its target is stopped within about a second.
+
+**Timing and tracking**
+- One Smooth-tracking update (`:P2#` plus `:M2…#`) takes about 45 ms at 115,200 baud, nearly all of it waiting for the mount to answer, so 0.05 s is about as fast as updates can go.
+- Every 5 s or so, one position reply comes about 15 ms late. Timestamping positions at a typical exchange delay, and holding the planned speed through a lone outlier, removed the 10–20″ spikes this caused.
+- Settled Smooth tracking has a median error of about 2–3″, which is the mount's own reading noise.
+- On the Mac, the USB adapter is a Prolific PL2303G and appears as `/dev/cu.PL2303G-USBtoUART210`.
+
