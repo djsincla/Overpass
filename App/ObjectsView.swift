@@ -120,7 +120,8 @@ struct ObjectsView: View {
             }
         } header: {
             DisclosureHeader(open: open, toggle: { flip(group.id) }) {
-                SourceHeader(group: group, shown: shown.count)
+                SourceHeader(group: group, shown: shown, filtered: shown.count < group.satellites.count,
+                             clearFilters: clearFilters)
             }
         }
     }
@@ -148,6 +149,12 @@ struct ObjectsView: View {
     }
 
     // MARK: Filtering
+
+    private func clearFilters() {
+        selectedOnly = false
+        maxAgeDays = 0
+        search = ""
+    }
 
     private func visible(_ object: SkyObject) -> Bool {
         if selectedOnly && !model.isSelected(object.id) && !recentlyUnselected.contains(object.id) { return false }
@@ -238,7 +245,10 @@ struct SourceRow: View {
 struct SourceHeader: View {
     @Environment(AppModel.self) private var model
     let group: SourceGroup
-    let shown: Int
+    /// The source's satellites that pass the filters (search, selected only, TLE age).
+    let shown: [SatelliteTarget]
+    let filtered: Bool
+    let clearFilters: () -> Void
 
     var body: some View {
         HStack {
@@ -249,7 +259,12 @@ struct SourceHeader: View {
                         Text(error).foregroundStyle(.red)
                     } else if let when = group.status?.lastRefreshed {
                         let age = group.medianAge.map { String(format: " · median TLE %.1f d", $0 / 86_400) } ?? ""
-                        Text("\(shown) of \(group.satellites.count) · updated \(when, style: .relative) ago\(age)")
+                        let selectedCount = group.satellites.filter { model.isSelected("sat:\($0.noradID)") }.count
+                        Text("\(selectedCount) of \(group.satellites.count) selected · updated \(when, style: .relative) ago\(age)")
+                        if filtered {
+                            Text("Showing \(shown.count): the rest are hidden by the filters above")
+                                .foregroundStyle(Theme.setting)
+                        }
                     } else {
                         Text("Not downloaded yet")
                     }
@@ -257,11 +272,34 @@ struct SourceHeader: View {
                 .font(.caption2).textCase(nil).lineLimit(2)
             }
             Spacer()
+            Menu {
+                Button(filtered ? "Select the \(shown.count) shown" : "Select all \(shown.count)") { select(shown, true) }
+                Button(filtered ? "Deselect the \(shown.count) shown" : "Deselect all") { select(shown, false) }
+                if filtered {
+                    Divider()
+                    Button("Show all \(group.satellites.count)") { clearFilters() }
+                }
+            } label: {
+                Image(systemName: "checklist")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Select satellites in \(group.source.name)")
             Button { Task { await model.refresh(group.id) } } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .accessibilityLabel("Refresh \(group.source.name)")
         }
+    }
+}
+
+extension SourceHeader {
+    /// One assignment, so the change triggers a single prediction run.
+    private func select(_ satellites: [SatelliteTarget], _ on: Bool) {
+        let ids = satellites.map { "sat:\($0.noradID)" }
+        var selection = model.selected
+        if on { selection.formUnion(ids) } else { selection.subtract(ids) }
+        model.selected = selection
     }
 }
 
