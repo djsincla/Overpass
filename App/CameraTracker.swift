@@ -152,10 +152,12 @@ final class CameraTracker {
         if tracker.state == .lost, !wasLost { message = "Lost it. Click it again to pick it up." }
     }
 
-    /// Zoomed in, the view follows the object, or sits on the aim point when nothing is picked.
+    /// Zoomed in, the view stays on the aim point. Following the object made the whole picture
+    /// jump whenever the box hopped, with the mount still; once the mount follows, the object
+    /// sits on the aim point anyway.
     private func centreZoom(_ frame: GrayFrame) {
         guard camera.zoom > 1, frame.width > 1, frame.height > 1 else { return }
-        let p = tracker.map { (x: $0.x, y: $0.y) } ?? aimPoint
+        let p = aimPoint
         let centre = (x: p.x / Double(frame.width - 1), y: p.y / Double(frame.height - 1))
         if hypot(centre.x - camera.zoomCentre.x, centre.y - camera.zoomCentre.y) > 0.002 { camera.zoomCentre = centre }
     }

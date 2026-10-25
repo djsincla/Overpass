@@ -115,7 +115,7 @@ struct CameraTrackScreen: View {
         .padding(4)
         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         .environment(\.colorScheme, .dark)
-        .help("Digital zoom: crops the camera's full-resolution picture around the target, or the aim point (pinch to zoom too)")
+        .help("Digital zoom: crops the camera's full-resolution picture around the aim point (pinch to zoom too)")
     }
 
     private var hint: String {
