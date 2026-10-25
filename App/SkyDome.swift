@@ -2,7 +2,8 @@ import SkyKit
 import SwiftUI
 
 /// The whole sky as seen looking up: zenith in the centre, horizon at the edge, north at the top
-/// and east on the left (as on a star chart held overhead).
+/// and east on the left (as on a star chart held overhead). It can be spun (drag, or rotate on a
+/// trackpad) and flipped east–west, to match how you're facing or a camera's view.
 struct SkyDome: View {
     let observer: Observer
     let date: Date
@@ -22,10 +23,17 @@ struct SkyDome: View {
     var menu: ((String) -> AnyView)?
     /// The object under the pointer, so a right-click acts on it.
     @State private var hoveredID: String?
+    /// The azimuth at the top, degrees; shared by every dome and kept between launches.
+    @AppStorage("dome.rotation") private var rotation = 0.0
+    /// East on the right instead of the left.
+    @AppStorage("dome.flipped") private var flipped = false
+    /// Rotation and pointer angle when a drag began.
+    @State private var dragStart: (rotation: Double, angle: Double)?
+    @State private var twistStart: Double?
 
     var body: some View {
         GeometryReader { proxy in
-            let geometry = DomeGeometry(size: proxy.size)
+            let geometry = DomeGeometry(size: proxy.size, rotation: rotation, flipped: flipped)
             Canvas { context, _ in
                 drawBackground(&context, geometry)
                 if let az = cableStopAzimuth { drawCableStop(&context, geometry, az) }
@@ -47,6 +55,9 @@ struct SkyDome: View {
             .gesture(SpatialTapGesture().onEnded { tap in
                 if let id = nearest(to: tap.location, geometry) { onTapObject?(id) }
             })
+            .simultaneousGesture(spin(geometry))
+            .simultaneousGesture(twist)
+            .overlay(alignment: .topTrailing) { controls }
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location):
@@ -66,6 +77,79 @@ struct SkyDome: View {
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+
+    // MARK: Spinning and flipping
+
+    /// Dragging turns the sky about the zenith, keeping the point under the pointer under it.
+    private func spin(_ g: DomeGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { drag in
+                let angle = atan2(drag.location.y - g.center.y, drag.location.x - g.center.x) * 180 / .pi
+                if dragStart == nil {
+                    let start = atan2(drag.startLocation.y - g.center.y, drag.startLocation.x - g.center.x) * 180 / .pi
+                    dragStart = (rotation, Double(start))
+                }
+                guard let dragStart else { return }
+                // On screen, azimuth runs anticlockwise (east left) or clockwise when flipped.
+                let turn = Double(angle) - dragStart.angle
+                rotation = normalized(dragStart.rotation + (flipped ? -turn : turn))
+            }
+            .onEnded { _ in
+                dragStart = nil
+                rotation = snapped(rotation)
+            }
+    }
+
+    /// Two-finger rotation on a trackpad.
+    private var twist: some Gesture {
+        RotateGesture()
+            .onChanged { value in
+                if twistStart == nil { twistStart = rotation }
+                let turn = value.rotation.degrees
+                rotation = normalized((twistStart ?? rotation) + (flipped ? -turn : turn))
+            }
+            .onEnded { _ in
+                twistStart = nil
+                rotation = snapped(rotation)
+            }
+    }
+
+    private func normalized(_ degrees: Double) -> Double {
+        let d = degrees.truncatingRemainder(dividingBy: 360)
+        return d < 0 ? d + 360 : d
+    }
+
+    /// Within 3° of N, E, S or W, settle on it.
+    private func snapped(_ degrees: Double) -> Double {
+        let nearest = (degrees / 90).rounded() * 90
+        return abs(degrees - nearest) < 3 ? normalized(nearest) : degrees
+    }
+
+    private var controls: some View {
+        HStack(spacing: 6) {
+            if rotation != 0 {
+                Button { withAnimation(.easeInOut(duration: 0.3)) { rotation = 0 } } label: {
+                    Label("\(compassName(rotation)) up", systemImage: "location.north.line")
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Put north back at the top")
+                .accessibilityLabel("Reset rotation, \(Int(rotation.rounded())) degrees at the top")
+            }
+            Button { flipped.toggle() } label: {
+                Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+            }
+            .help(flipped ? "East on the left again (looking up)" : "Flip east and west (as seen from above, or through a mirror diagonal)")
+            .accessibilityLabel(flipped ? "Unflip east and west" : "Flip east and west")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(8)
+    }
+
+    private func compassName(_ azimuth: Double) -> String {
+        let names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+        return names[Int((azimuth / 22.5).rounded()) % 16] + " \(Int(azimuth.rounded()))°"
+    }
 
     /// Everything drawn that can be clicked: selected objects, and the stars, Sun, Moon and
     /// planets above the horizon. Selected ones come first, so they win a tie.
@@ -301,22 +385,28 @@ struct SkyDome: View {
     }
 }
 
-/// Maps azimuth/altitude to the dome: linear in zenith distance.
+/// Maps azimuth/altitude to the dome: linear in zenith distance, with `rotation` (the azimuth
+/// at the top) and an optional east–west flip.
 struct DomeGeometry {
     let center: CGPoint
     let radius: CGFloat
+    var rotation: Double = 0
+    var flipped = false
 
-    init(size: CGSize) {
+    init(size: CGSize, rotation: Double = 0, flipped: Bool = false) {
         center = CGPoint(x: size.width / 2, y: size.height / 2)
         // Room outside the horizon for the N/E/S/W labels.
         radius = min(size.width, size.height) / 2 - 30
+        self.rotation = rotation
+        self.flipped = flipped
     }
 
     func point(azimuth: Double, altitude: Double) -> CGPoint {
         let r = radius * (90 - altitude) / 90
-        let az = azimuth * .pi / 180
-        // North up, east left.
-        return CGPoint(x: center.x - r * sin(az), y: center.y - r * cos(az))
+        let az = (azimuth - rotation) * .pi / 180
+        // `rotation` at the top; east to its left, or to its right when flipped.
+        let x = r * sin(az)
+        return CGPoint(x: flipped ? center.x + x : center.x - x, y: center.y - r * cos(az))
     }
 
     func point(_ h: Horizontal) -> CGPoint { point(azimuth: h.azimuth, altitude: max(h.altitude, 0)) }

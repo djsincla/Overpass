@@ -197,7 +197,9 @@ final class MountSession {
                     let pointing = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
                     remember(pointing, now: true)
                     log(String(format: "USB Normal connect, leaving Special mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary) + describe(pointing))
+                    await holdStill(special: special)
                     _ = try await special.exitSpecialMode()
+                    await holdStill(normal: client)
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await checkNormalPosition(client)
                     id = try await client.identify()
@@ -239,7 +241,9 @@ final class MountSession {
             if let raw = try? await special.positions() {
                 log(String(format: "Disconnect: P0 %+.4f° P1 %+.4f°", raw.primary, raw.secondary) + (pointing.map { " = " + describe($0) } ?? ""))
             }
+            await holdStill(special: special)
             if (try? await special.exitSpecialMode()) != nil, let transport = usbTransport {
+                await holdStill(normal: NormalModeClient(transport: transport))
                 // No sync: on the HAZ46 a :CM# sync here added the position a second time
                 // (25 Oct 2026). Just record what Normal mode reports.
                 if let p = try? await NormalModeClient(transport: transport).altAz() {
@@ -1090,9 +1094,12 @@ final class MountSession {
             return identity
         }
 
-        let reading = try? await NormalModeClient(transport: transport).altAz()
+        let normal = NormalModeClient(transport: transport)
+        await holdStill(normal: normal)
+        let reading = try? await normal.altAz()
         if let reading { log(String(format: "Entering Special mode: :GAC# az %.3f° alt %.3f°", reading.azimuth, reading.altitude)) }
         let identity = try await client.enterSpecialMode()
+        await holdStill(special: client)
         // No sync: until the mount's sync commands are understood, only compare and report.
         if let raw = try? await client.positions() {
             let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
@@ -1107,6 +1114,34 @@ final class MountSession {
             }
         }
         return identity
+    }
+
+    /// Before and after a mode switch: nothing moving and no tracking, so the position carried
+    /// across is the one read. Special mode: speeds to zero. Normal mode: tracking off (it can
+    /// start sidereal tracking by itself) and any slew stopped. Then wait until two readings
+    /// a quarter of a second apart agree, for up to 5 s.
+    private func holdStill(special: MountClient? = nil, normal: NormalModeClient? = nil) async {
+        if let special { try? await special.stop() }
+        if let normal {
+            try? await normal.setTracking(false)
+            try? await normal.stop()
+        }
+        var last: (Double, Double)?
+        let deadline = Date.now + 5
+        while Date.now < deadline {
+            let now: (Double, Double)?
+            if let special, let p = try? await special.positions() {
+                now = (p.primary, p.secondary)
+            } else if let normal, let p = try? await normal.altAz() {
+                now = (p.azimuth, p.altitude)
+            } else {
+                now = nil
+            }
+            if let now, let last, abs(wrap180(now.0 - last.0)) < 0.001, abs(now.1 - last.1) < 0.001 { return }
+            last = now
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        log("Still moving after 5 s before a mode switch")
     }
 
     // MARK: Setting the position
@@ -1155,9 +1190,11 @@ final class MountSession {
                  + describe(model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))))
         }
         do {
+            await holdStill(special: special)
             axesLine("Special mode", try await special.positions())
             _ = try await special.exitSpecialMode()
             let normal = NormalModeClient(transport: transport)
+            await holdStill(normal: normal)
             let started = Date.now
             for wait in [0.0, 1, 3, 6] {
                 let delay = wait - Date.now.timeIntervalSince(started)
@@ -1165,7 +1202,9 @@ final class MountSession {
                 let p = try await normal.altAz()
                 note(String(format: "Normal mode after %.0f s: :GAC# az %.3f° alt %.3f°", Date.now.timeIntervalSince(started), p.azimuth, p.altitude))
             }
+            await holdStill(normal: normal)
             _ = try await special.enterSpecialMode()
+            await holdStill(special: special)
             let back = Date.now
             for wait in [0.0, 2] {
                 let delay = wait - Date.now.timeIntervalSince(back)
