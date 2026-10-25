@@ -63,8 +63,10 @@ final class MountSession {
     /// What's being tracked, for the camera guider.
     private(set) var trackingObject: SkyObject?
     private(set) var trackingMode: TrackingMode?
-    /// The last minute of the Smooth tracking loop, for diagnosing jumps and lag.
+    /// The last few minutes of the Smooth tracking loop, for diagnosing jumps and lag.
     private(set) var trace: [TraceSample] = []
+    /// How much of the trace is kept, seconds: long enough for a whole pass.
+    nonisolated static let traceSpan: TimeInterval = 240
     private var lastLoop: Date?
     var isTracking: Bool { trackingTask != nil }
     /// The mode chosen in the tracking card; WiFi offers Passive or Step, USB is always Smooth.
@@ -700,7 +702,7 @@ final class MountSession {
         }
     }
 
-    /// Adds one loop iteration to the trace, keeping the last minute.
+    /// Adds one loop iteration to the trace, keeping the last `traceSpan` seconds.
     private func record(current: AxisPosition, desired: AxisPosition, feed: (Double, Double),
                         command: (primary: Double, secondary: Double), held: Bool = false) {
         let now = Date.now
@@ -713,8 +715,8 @@ final class MountSession {
                                  feedPrimary: feed.0, feedSecondary: feed.1,
                                  commandPrimary: command.primary, commandSecondary: command.secondary, held: held))
         lastLoop = now
-        if let first = trace.first, now.timeIntervalSince(first.date) > 60 {
-            trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > 60 }.count)
+        if let first = trace.first, now.timeIntervalSince(first.date) > Self.traceSpan {
+            trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > Self.traceSpan }.count)
         }
     }
 

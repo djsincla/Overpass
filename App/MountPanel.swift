@@ -288,14 +288,15 @@ struct MountPanel: View {
     }
 }
 
-/// The last minute of Smooth tracking: the error over time (log scale, 1″ to 1°), with any
-/// stalls of the loop marked, and the raw numbers to export.
+/// Smooth tracking: the last minute's error over time (log scale, 1″ to 1°), with any
+/// stalls of the loop marked, and the whole trace (a few minutes) to export.
 struct TraceView: View {
     @Environment(AppModel.self) private var model
     @State private var exporting = false
 
     var body: some View {
-        let trace = model.mount.trace
+        let all = model.mount.trace
+        let trace = all.last.map { last in all.filter { last.date.timeIntervalSince($0.date) <= 60 } } ?? []
         let gaps = trace.map(\.loopInterval)
         let errors = trace.map { $0.error * 3600 }.sorted()
         let median = errors.isEmpty ? 0 : errors[errors.count / 2]
@@ -307,7 +308,7 @@ struct TraceView: View {
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 Button { exporting = true } label: { Image(systemName: "square.and.arrow.down") }
                     .buttonStyle(.borderless)
-                    .help("Save the last minute of tracking as CSV")
+                    .help("Save the last \(Int(MountSession.traceSpan / 60)) minutes of tracking as CSV")
                     .accessibilityLabel("Export trace")
             }
             Canvas { context, size in
