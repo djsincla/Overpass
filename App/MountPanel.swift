@@ -56,6 +56,19 @@ struct MountPanel: View {
                 StatusDot(color: stateColor)
                 Text(stateText).font(.callout.weight(.medium)).lineLimit(1)
                 Spacer(minLength: 4)
+                if connected, mount.kind?.usesUSB == true {
+                    let special = mount.kind?.isSpecialMode == true
+                    Button {
+                        Task { await mount.switchMode() }
+                    } label: {
+                        Label(special ? "Normal mode" : "Special mode", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .controlSize(.small)
+                    .disabled(mount.isSwitchingMode)
+                    .help(special
+                          ? "Switch the mount to Normal mode (Passive and Step tracking) without disconnecting. Tracking stops first."
+                          : "Switch the mount to Special mode (Smooth tracking) without disconnecting. Tracking stops first.")
+                }
                 if connected {
                     Button { Task { await mount.disconnect() } } label: { Image(systemName: "power") }
                         .buttonStyle(.borderless)

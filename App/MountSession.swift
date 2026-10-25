@@ -200,6 +200,7 @@ final class MountSession {
                     await holdStill(special: special)
                     _ = try await special.exitSpecialMode()
                     await holdStill(normal: client)
+                    await waitForNormalPosition(client)
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await checkNormalPosition(client)
                     id = try await client.identify()
@@ -1117,7 +1118,9 @@ final class MountSession {
     /// convention (`AlignmentModel.iOptronSpecialMode`: P0 azimuth − 180°, P1 from the zenith);
     /// otherwise the star alignment, so either way the axes and the model agree.
     private func enterSpecialMode(_ client: MountClient, _ transport: MountTransport) async throws -> MountIdentity {
-        if settings.captureMountAlignment || settings.alignment == nil, let app {
+        // The convention replaces a star alignment, but not itself: a sync on it (which moves
+        // its zeros) is kept across switches and reconnects.
+        if settings.alignment == nil || (settings.captureMountAlignment && !settings.alignmentFromMount), let app {
             app.settings.alignment = .iOptronSpecialMode
             app.settings.alignmentRMS = nil
             app.settings.alignmentStars = 0
@@ -1188,6 +1191,87 @@ final class MountSession {
         log("Still moving after 5 s before a mode switch")
     }
 
+    /// Just after leaving Special mode, Normal mode reports a placeholder (az 0 alt 0, or az 180
+    /// alt 90) for several seconds before the real position, which the mount kept. Waits up to
+    /// 20 s for the real one. A sync during the placeholder is added to the kept position.
+    @discardableResult
+    private func waitForNormalPosition(_ normal: NormalModeClient) async -> Horizontal? {
+        let started = Date.now
+        while Date.now.timeIntervalSince(started) < 20 {
+            if let p = try? await normal.altAz() {
+                let placeholder = (abs(p.azimuth) < 1e-6 && abs(p.altitude) < 1e-6)
+                    || (abs(p.azimuth - 180) < 1e-6 && abs(p.altitude - 90) < 1e-6)
+                if !placeholder {
+                    log(String(format: "Normal mode position after %.1f s: az %.3f° alt %.3f°", Date.now.timeIntervalSince(started), p.azimuth, p.altitude))
+                    return Horizontal(azimuth: p.azimuth, altitude: p.altitude)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        log("Normal mode still reported a placeholder position after 20 s")
+        return nil
+    }
+
+    // MARK: Switching modes over USB
+
+    private(set) var isSwitchingMode = false
+
+    /// Over USB: Special mode to Normal mode or back, without disconnecting. Tracking stops and
+    /// the mount is still before the switch, and the session carries on in the new mode.
+    func switchMode() async {
+        guard state == .connected, let transport = usbTransport, let current = kind else { return }
+        await stopAll()
+        isSwitchingMode = true
+        pollTask?.cancel()
+        pollTask = nil
+        defer {
+            isSwitchingMode = false
+            startPolling()
+        }
+        do {
+            if current.isSpecialMode, let special {
+                status = "Switching to Normal mode…"
+                await holdStill(special: special)
+                if let raw = try? await special.positions() {
+                    let model = settings.alignment ?? .iOptronSpecialMode
+                    log(String(format: "Switching to Normal mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary)
+                        + describe(model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))))
+                }
+                _ = try await special.exitSpecialMode()
+                let normal = NormalModeClient(transport: transport)
+                await holdStill(normal: normal)
+                status = "Waiting for the mount's position…"
+                await waitForNormalPosition(normal)
+                try await normal.configure(latitude: settings.latitude, longitude: settings.longitude)
+                await checkNormalPosition(normal)
+                self.special = nil
+                unwrapper = nil
+                self.normal = normal
+                identity = try await normal.identify()
+                kind = .usbNormal
+                app?.settings.connection = .usbNormal
+                if status.hasPrefix("Switching") || status.hasPrefix("Waiting") { status = "Normal mode" }
+            } else if let normal {
+                status = "Switching to Special mode…"
+                let client = MountClient(transport: transport)
+                identity = try await enterSpecialMode(client, transport)
+                let raw = try await client.positions()
+                unwrapper = AxisUnwrapper(raw: raw.primary, model: settings.alignment ?? .iOptronSpecialMode, limits: settings.limits)
+                nativeSlewWentWrongWay = false
+                _ = normal
+                self.normal = nil
+                self.special = client
+                kind = .usb
+                app?.settings.connection = .usb
+                if status.hasPrefix("Switching") { status = "Special mode" }
+            }
+            _ = try? await readPosition()
+        } catch {
+            status = "Couldn't switch modes: \(describe(error))"
+            log("Mode switch failed: \(describe(error))")
+        }
+    }
+
     // MARK: Setting the position
 
     /// Special mode: sets the axes so the scope reads `pointing` (`:S0`/`:S1`), then reads them
@@ -1240,7 +1324,7 @@ final class MountSession {
             let normal = NormalModeClient(transport: transport)
             await holdStill(normal: normal)
             let started = Date.now
-            for wait in [0.0, 1, 3, 6] {
+            for wait in [0.0, 1, 3, 6, 10, 15] {
                 let delay = wait - Date.now.timeIntervalSince(started)
                 if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
                 let p = try await normal.altAz()
