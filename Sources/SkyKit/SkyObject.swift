@@ -103,18 +103,41 @@ public enum StepTracking {
 // MARK: Smooth tracking (special mode)
 
 extension MountPlan {
-    /// Interpolated axis positions and rates (degrees, degrees per second) at `date`.
+    /// Axis positions and rates (degrees, degrees per second) at `date`, on a cubic through the
+    /// samples. The rate changes smoothly from moment to moment; straight lines between samples
+    /// would hold it constant for each sample interval and step it at every sample, which near
+    /// the top of a pass means a jolt every second.
     public func target(at date: Date) -> (axes: AxisPosition, primaryRate: Double, secondaryRate: Double)? {
         guard let first = samples.first, let last = samples.last, date >= first.date, date <= last.date else { return nil }
-        let i = samples.lastIndex { $0.date <= date } ?? 0
-        let a = samples[i], b = samples[min(i + 1, samples.count - 1)]
+        // The last sample at or before `date` (binary search).
+        var lo = 0, hi = samples.count - 1
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if samples[mid].date <= date { lo = mid } else { hi = mid - 1 }
+        }
+        let i = min(lo, samples.count - 2)
+        guard i >= 0 else { return (first.axes, 0, 0) }
+        let a = samples[i], b = samples[i + 1]
         let dt = b.date.timeIntervalSince(a.date)
         guard dt > 0 else { return (a.axes, 0, 0) }
-        let f = date.timeIntervalSince(a.date) / dt
-        let pr = (b.axes.primary - a.axes.primary) / dt
-        let sr = (b.axes.secondary - a.axes.secondary) / dt
-        return (AxisPosition(primary: a.axes.primary + f * (b.axes.primary - a.axes.primary),
-                             secondary: a.axes.secondary + f * (b.axes.secondary - a.axes.secondary)), pr, sr)
+        let u = min(max(date.timeIntervalSince(a.date) / dt, 0), 1)
+
+        func slope(_ k: Int, _ axis: KeyPath<AxisPosition, Double>) -> Double {
+            let before = samples[max(k - 1, 0)], after = samples[min(k + 1, samples.count - 1)]
+            let span = after.date.timeIntervalSince(before.date)
+            return span > 0 ? (after.axes[keyPath: axis] - before.axes[keyPath: axis]) / span : 0
+        }
+        // Cubic Hermite: positions at both ends, slopes from the neighbouring samples.
+        func hermite(_ axis: KeyPath<AxisPosition, Double>) -> (value: Double, rate: Double) {
+            let p0 = a.axes[keyPath: axis], p1 = b.axes[keyPath: axis]
+            let m0 = slope(i, axis) * dt, m1 = slope(i + 1, axis) * dt
+            let u2 = u * u, u3 = u2 * u
+            let value = (2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * p1 + (u3 - u2) * m1
+            let derivative = (6 * u2 - 6 * u) * p0 + (3 * u2 - 4 * u + 1) * m0 + (-6 * u2 + 6 * u) * p1 + (3 * u2 - 2 * u) * m1
+            return (value, derivative / dt)
+        }
+        let p = hermite(\.primary), s = hermite(\.secondary)
+        return (AxisPosition(primary: p.value, secondary: s.value), p.rate, s.rate)
     }
 }
 

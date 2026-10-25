@@ -554,6 +554,9 @@ final class MountSession {
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
 
+    /// Smooth tracking loop period, seconds.
+    private static let trackingPeriod = 0.1
+
     /// The HAZ46 goes to about 6°/s at its top speed; slightly under, so the quiet wait errs long.
     private static let estimatedSlewRate = 5.0
 
@@ -627,6 +630,7 @@ final class MountSession {
         var glitchesInARow = 0
 
         while !Task.isCancelled {
+            let loopStart = Date.now
             let s = settings
             // Position is compared at the moment the axes were read; only the feed-forward
             // rate looks ahead, to when the speed command takes effect. Aiming the position
@@ -656,7 +660,8 @@ final class MountSession {
                     desired = target.axes
                     let ahead = plan.target(at: t + latency) ?? target
                     rates = (ahead.primaryRate, ahead.secondaryRate)
-                    controller.maximumCorrection = 2
+                    // Far off with no mount slew to catch up with: catch up at full speed.
+                    controller.maximumCorrection = gap > 2 ? max(s.maximumAzimuthRate, s.maximumAltitudeRate) : 2
                     status = "Tracking"
                 } else {
                     // Before the pass: get to the start of the plan at full speed, then hold.
@@ -701,7 +706,9 @@ final class MountSession {
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
             record(current: current, desired: desired, feed: rates, command: command, held: glitch)
-            try await Task.sleep(for: .milliseconds(100))
+            // Ten updates a second; reading the axes and setting the speeds take part of that.
+            let rest = Self.trackingPeriod - Date.now.timeIntervalSince(loopStart)
+            if rest > 0.005 { try await Task.sleep(for: .seconds(rest)) }
         }
     }
 

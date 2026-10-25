@@ -81,11 +81,30 @@ import Testing
     @Test func planInterpolates() throws {
         let plan = try #require(MountPlanner().plan(lowPass(startAzimuth: 120)))
         let t0 = plan.samples[10].date
+        // Passes through the samples, between them stays close to the straight line.
+        let at = try #require(plan.target(at: t0))
+        #expect(abs(at.axes.primary - plan.samples[10].axes.primary) < 1e-9)
         let mid = try #require(plan.target(at: t0 + 0.5))
         let a = plan.samples[10].axes, b = plan.samples[11].axes
-        #expect(abs(mid.axes.primary - (a.primary + b.primary) / 2) < 1e-9)
-        #expect(abs(mid.primaryRate - (b.primary - a.primary)) < 1e-9)
+        #expect(abs(mid.axes.primary - (a.primary + b.primary) / 2) < 0.01)
+        #expect(abs(mid.primaryRate - (b.primary - a.primary)) < 0.01)
         #expect(plan.target(at: t0 - 3600) == nil)
+    }
+
+    /// The rate doesn't step at the samples (the once-a-second jolt), and a curving path is
+    /// followed more closely than by straight lines between samples.
+    @Test func planRateIsSmooth() throws {
+        let start = Date(timeIntervalSince1970: 0)
+        let truth = { (t: Double) in 0.02 * t * t * t }  // degrees; the rate grows like the top of a pass
+        let samples = (0...20).map { k in
+            PlannedSample(date: start + Double(k), axes: AxisPosition(primary: truth(Double(k)), secondary: 0), error: 0)
+        }
+        let plan = MountPlan(orientation: .normal, samples: samples, maximumError: 0, secondsOffTarget: 0)
+        let before = try #require(plan.target(at: start + 9.999)), after = try #require(plan.target(at: start + 10.001))
+        #expect(abs(after.primaryRate - before.primaryRate) < 0.01)
+        let mid = try #require(plan.target(at: start + 10.5))
+        #expect(abs(mid.axes.primary - truth(10.5)) < 0.01)
+        #expect(abs(mid.primaryRate - 0.06 * 10.5 * 10.5) < 0.05)
     }
 
     @Test func controllerFeedsForwardAndCorrects() {
