@@ -297,7 +297,8 @@ struct PointingError: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { context in
-            if let error = error(at: context.date) {
+            // Compare with the target at the moment the position was read, not now.
+            if let error = error(at: model.mount.skyPositionDate ?? context.date) {
                 content(error)
             }
         }

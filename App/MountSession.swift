@@ -29,7 +29,12 @@ final class MountSession {
     private(set) var kind: ConnectionKind?
     private(set) var identity: MountIdentity?
     /// Where the scope points, for the dome.
-    private(set) var skyPosition: Horizontal?
+    private(set) var skyPosition: Horizontal? {
+        didSet { if skyPosition == nil { skyPositionDate = nil } }
+    }
+    /// When `skyPosition` was true: the middle of the exchange that read it. A moving target
+    /// has to be compared at this moment, not when the screen redraws.
+    private(set) var skyPositionDate: Date?
     /// Raw axes (Special mode), primary unwrapped.
     private(set) var axes: AxisPosition?
     private(set) var status = ""
@@ -186,12 +191,13 @@ final class MountSession {
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {
         if let normal {
-            let p = try await normal.altAz()
-            skyPosition = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
+            _ = try await currentAltAz(normal)
             return nil
         }
         guard let special, var unwrapper else { return nil }
+        let asked = Date.now
         let raw = try await special.positions()
+        skyPositionDate = asked + Date.now.timeIntervalSince(asked) / 2
         let current = AxisPosition(primary: unwrapper.update(raw: raw.primary), secondary: raw.secondary)
         self.unwrapper = unwrapper
         axes = current
@@ -525,8 +531,10 @@ final class MountSession {
     }
 
     private func currentAltAz(_ normal: NormalModeClient) async throws -> Horizontal {
+        let asked = Date.now
         let p = try await normal.altAz()
         let h = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
+        skyPositionDate = asked + Date.now.timeIntervalSince(asked) / 2
         skyPosition = h
         return h
     }
