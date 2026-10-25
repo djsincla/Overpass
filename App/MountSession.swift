@@ -72,7 +72,7 @@ final class MountSession {
     /// The mode chosen in the tracking card; WiFi offers Passive or Step, USB is always Smooth.
     var preferredMode = TrackingMode.step
     /// What tracking will actually use with this connection.
-    var effectiveMode: TrackingMode { kind == .usb ? .smooth : preferredMode }
+    var effectiveMode: TrackingMode { kind?.isSpecialMode == true ? .smooth : preferredMode }
 
     // Fine tuning, applied live by Step and Smooth tracking.
     /// Seconds added to "now": positive aims further along the track (fixes along-track TLE error).
@@ -93,8 +93,9 @@ final class MountSession {
     private var special: MountClient?
     private var tcp: TCPTransport?
     private var unwrapper: AxisUnwrapper?
-    /// The USB (or relay) line Special mode runs over, for Normal-mode commands on the way out.
-    private var specialTransport: MountTransport?
+    /// The USB line (or, on iPhone and iPad, the relay), for Normal-mode commands on the way out
+    /// of Special mode.
+    private var usbTransport: MountTransport?
     /// Set when a `:T0`/`:T1` slew headed away from its target; rate control does moves after that.
     private var nativeSlewWentWrongWay = false
     private var pollTask: Task<Void, Never>?
@@ -112,7 +113,7 @@ final class MountSession {
 
     var availableModes: [TrackingMode] {
         switch kind {
-        case .wifi: [.passive, .step]
+        case .wifi, .usbNormal: [.passive, .step]
         case .usb: [.smooth]
         case nil: []
         }
@@ -140,19 +141,28 @@ final class MountSession {
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
                 normal = client
                 identity = id
+            case .usbNormal:
+                let transport = try await openUSB(s)
+                let client = NormalModeClient(transport: transport)
+                var id = try await client.identify()
+                if id.isSpecialMode {
+                    // Chosen Normal mode, so leave Special mode, carrying the position across.
+                    status = "Leaving Special mode…"
+                    let special = MountClient(transport: transport)
+                    let raw = try await special.positions()
+                    let model = s.alignment ?? .iOptronSpecialMode
+                    let pointing = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
+                    _ = try await special.exitSpecialMode()
+                    await syncNormalMode(to: pointing, over: transport)
+                    id = try await client.identify()
+                } else {
+                    try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                }
+                normal = client
+                identity = id
             case .usb:
-                let transport: MountTransport
-                #if os(macOS)
-                guard !s.serialPath.isEmpty else { throw MountSessionError.noSerialPort }
-                transport = try SerialTransport(path: s.serialPath)
-                #else
-                let relay = TCPTransport(host: s.relayHost, port: UInt16(s.relayPort), timeout: 3)
-                try await relay.open()
-                tcp = relay
-                transport = relay
-                #endif
+                let transport = try await openUSB(s)
                 let client = MountClient(transport: transport)
-                specialTransport = transport
                 if s.captureMountAlignment {
                     identity = try await captureMountAlignment(client, transport)
                 } else {
@@ -182,7 +192,7 @@ final class MountSession {
             // comes back reading az 0, alt 0, so tell it.
             var pointing: Horizontal?
             if settings.alignment != nil, (try? await readPosition()) != nil { pointing = skyPosition }
-            if (try? await special.exitSpecialMode()) != nil, let pointing, let transport = specialTransport {
+            if (try? await special.exitSpecialMode()) != nil, let pointing, let transport = usbTransport {
                 await syncNormalMode(to: pointing, over: transport)
             }
         }
@@ -199,8 +209,22 @@ final class MountSession {
         tcp = nil
         normal = nil
         special = nil
-        specialTransport = nil
+        usbTransport = nil
         unwrapper = nil
+    }
+
+    /// The mount's USB port, or on iPhone and iPad the relay plugged into it.
+    private func openUSB(_ s: Settings) async throws -> MountTransport {
+        #if os(macOS)
+        guard !s.serialPath.isEmpty else { throw MountSessionError.noSerialPort }
+        let transport = try SerialTransport(path: s.serialPath)
+        #else
+        let transport = TCPTransport(host: s.relayHost, port: UInt16(s.relayPort), timeout: 3)
+        try await transport.open()
+        tcp = transport
+        #endif
+        usbTransport = transport
+        return transport
     }
 
     /// After leaving Special mode: set the mount's time and place, then sync its Normal-mode

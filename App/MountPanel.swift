@@ -26,7 +26,7 @@ struct MountPanel: View {
                         alignment
                     }
                 }
-                if mount.kind == .usb {
+                if mount.kind?.isSpecialMode == true {
                     Card(title: "Camera guiding", systemImage: "camera.viewfinder") { GuidingPanel() }
                 }
             }
@@ -124,7 +124,7 @@ struct MountPanel: View {
                 } else {
                     Chip(text: "Smooth", systemImage: "waveform.path", tint: Theme.accent).help(modeExplanation)
                 }
-                if mount.preferredMode == .step && mount.kind == .wifi {
+                if mount.preferredMode == .step && mount.kind?.isSpecialMode == false {
                     Stepper(value: $model.settings.stepInterval, in: 0.5...10, step: 0.5) {
                         Text("every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
                             .font(.callout.monospacedDigit())
@@ -186,7 +186,7 @@ struct MountPanel: View {
                             Label("To start \(Int(point.position.azimuth))° \(compass(point.position.azimuth)) · \(Int(point.position.altitude))°",
                                   systemImage: "arrow.uturn.forward")
                         }
-                        .disabled(mount.isPreparing || (mount.kind == .usb && model.settings.alignment == nil))
+                        .disabled(mount.isPreparing || (mount.kind?.isSpecialMode == true && model.settings.alignment == nil))
                         .help("Slew at full speed to where the pass first reaches the start elevation, and wait there")
                     } else {
                         Text("Past its start point").font(.caption).foregroundStyle(.secondary)
@@ -199,7 +199,7 @@ struct MountPanel: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.scope)
-                } else if mount.kind == .usb && model.settings.alignment == nil {
+                } else if mount.kind?.isSpecialMode == true && model.settings.alignment == nil {
                     // Special mode reports raw axis angles: nothing to aim with until stars tie them to the sky.
                     Button { showingAlignment = true } label: {
                         Label("Align first…", systemImage: "star.circle")
@@ -233,7 +233,7 @@ struct MountPanel: View {
     }
 
     private var showsAlignment: Bool {
-        if model.mount.kind == .usb { return true }
+        if model.mount.kind?.isSpecialMode == true { return true }
         guard let target = model.targetObject else { return false }
         return !target.isSatellite && !model.mount.isTracking
     }
@@ -241,7 +241,7 @@ struct MountPanel: View {
     @ViewBuilder
     private var alignment: some View {
         let mount = model.mount
-        if mount.kind == .usb {
+        if mount.kind?.isSpecialMode == true {
             HStack {
                 Label("Alignment: \(alignmentSummary)", systemImage: "star.circle").font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -268,9 +268,9 @@ struct MountPanel: View {
     }
 
     private var modeExplanation: String {
-        switch (model.mount.kind, model.mount.preferredMode) {
-        case (.wifi, .passive): "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
-        case (.wifi, _): "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
+        switch (model.mount.kind?.isSpecialMode, model.mount.preferredMode) {
+        case (false, .passive): "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
+        case (false, _): "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
         default: "Smooth: varies both axis speeds continuously. Best for imaging satellites."
         }
     }
@@ -452,7 +452,7 @@ struct ControlPad: View {
 
     var body: some View {
         @Bindable var mount = model.mount
-        let wifi = mount.kind == .wifi
+        let wifi = mount.kind?.isSpecialMode == false
         HStack(alignment: .center, spacing: 16) {
             Grid(horizontalSpacing: 4, verticalSpacing: 4) {
                 GridRow {

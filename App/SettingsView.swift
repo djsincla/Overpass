@@ -131,7 +131,7 @@ struct SettingsView: View {
                     TextField("Port", value: $model.settings.wifiPort, format: .number.grouping(.never))
                         .multilineTextAlignment(.trailing)
                 }
-            case .usb:
+            case .usb, .usbNormal:
                 #if os(macOS)
                 HStack {
                     Picker("USB port", selection: $model.settings.serialPath) {
@@ -151,20 +151,22 @@ struct SettingsView: View {
                         .multilineTextAlignment(.trailing)
                 }
                 #endif
-                Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
-                Toggle("Use the mount's own alignment", isOn: $model.settings.captureMountAlignment)
-                    .help("When connecting, read where the mount thinks it's pointing before switching to Special mode, so Smooth tracking works without a star alignment")
-                Button(testingSlew ? "Testing the mount's slew…" : "Test the mount's slew") {
-                    testingSlew = true
-                    Task {
-                        slewTest = await model.mount.testNativeSlew()
-                        testingSlew = false
+                if model.settings.connection.isSpecialMode {
+                    Toggle("Leave Special mode when disconnecting", isOn: $model.settings.leaveSpecialModeOnDisconnect)
+                    Toggle("Use the mount's own alignment", isOn: $model.settings.captureMountAlignment)
+                        .help("When connecting, read where the mount thinks it's pointing before switching to Special mode, so Smooth tracking works without a star alignment")
+                    Button(testingSlew ? "Testing the mount's slew…" : "Test the mount's slew") {
+                        testingSlew = true
+                        Task {
+                            slewTest = await model.mount.testNativeSlew()
+                            testingSlew = false
+                        }
                     }
-                }
-                .disabled(testingSlew || model.mount.kind != .usb || model.mount.state != .connected)
-                .help("Moves the azimuth axis about 25°, including across north, to learn how the mount's own slew counts position. Stand by the mount.")
-                if let slewTest {
-                    Text(slewTest).font(.caption.monospacedDigit()).textSelection(.enabled)
+                    .disabled(testingSlew || model.mount.kind != .usb || model.mount.state != .connected)
+                    .help("Moves the azimuth axis about 25°, including across north, to learn how the mount's own slew counts position. Stand by the mount.")
+                    if let slewTest {
+                        Text(slewTest).font(.caption.monospacedDigit()).textSelection(.enabled)
+                    }
                 }
             }
         } header: {
@@ -173,6 +175,8 @@ struct SettingsView: View {
             switch model.settings.connection {
             case .wifi:
                 Text("Normal mode over the mount's WiFi: Passive and Step tracking. Join the mount's WiFi network first. 10.10.100.254:8899 is iOptron's usual address; check your manual.")
+            case .usbNormal:
+                Text("Normal mode over the mount's USB port: Passive and Step tracking, as over WiFi. If the mount is in Special mode it leaves it, and its position is carried across.")
             case .usb:
                 #if os(macOS)
                 Text("Special mode over the mount's USB port: Smooth tracking, after star alignment. Special mode stays on through power cycles, and WiFi won't work while it's on.")

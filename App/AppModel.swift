@@ -6,9 +6,15 @@ import SkyKit
 enum ConnectionKind: String, Codable, CaseIterable, Identifiable {
     /// The mount's own WiFi: the normal command set. Passive and Step tracking.
     case wifi = "WiFi (Normal mode)"
+    /// The mount's USB port with the normal command set: Passive and Step tracking, as over WiFi.
+    case usbNormal = "USB (Normal mode)"
     /// The mount's USB port: Special mode. Smooth tracking. On iPhone/iPad, via a TCP relay.
     case usb = "USB (Special mode)"
     var id: Self { self }
+
+    /// Special mode (Smooth tracking, axis positions) rather than the normal command set.
+    var isSpecialMode: Bool { self == .usb }
+    var usesUSB: Bool { self != .wifi }
 }
 
 /// Everything the user can set, saved between launches.
@@ -309,9 +315,9 @@ final class AppModel {
     /// Whether `object` can be tracked now, with this connection and mode.
     func canTrack(_ object: SkyObject?) -> Bool {
         guard let object, mount.state == .connected else { return false }
-        switch (mount.kind, mount.effectiveMode) {
-        case (.wifi, .passive): return object.passiveTracking != nil
-        case (.usb, _): return settings.alignment != nil
+        switch (mount.kind?.isSpecialMode, mount.effectiveMode) {
+        case (false, .passive): return object.passiveTracking != nil
+        case (true, _): return settings.alignment != nil
         default: return true
         }
     }
