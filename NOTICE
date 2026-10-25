@@ -5,3 +5,8 @@ Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This product uses SatelliteKit (https://github.com/gavineadie/SatelliteKit),
 Copyright (c) 2018-25 Gavin Eadie, under the MIT License.
+
+Satellite catalogue data (launch, orbit, radar cross-section) is downloaded at run time from
+CelesTrak (https://celestrak.org). Physical dimensions are downloaded at run time from
+Jonathan McDowell's General Catalog of Artificial Space Objects
+(https://planet4589.org/space/gcat), licensed under CC BY 4.0.

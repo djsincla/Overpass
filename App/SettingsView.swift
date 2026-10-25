@@ -88,7 +88,7 @@ struct SettingsView: View {
                     Text("Over the top tilts the tube past the zenith; check it clears the mount and tripod first. Speeds are assumptions until measured on your HAZ46. \"On target\" is about half your field of view.")
                 }
 
-                Section("About") {
+                Section {
                     LabeledContent("Version", value: Self.version)
                     Link(destination: URL(string: "https://djsincla.github.io/Overpass/")!) {
                         Label("Website", systemImage: "globe")
@@ -99,6 +99,10 @@ struct SettingsView: View {
                     Link(destination: URL(string: "https://github.com/djsincla/Overpass/blob/main/LICENSE")!) {
                         Label("Apache License 2.0", systemImage: "doc.text")
                     }
+                } header: {
+                    Text("About")
+                } footer: {
+                    Text("Orbital elements and the satellite catalogue (launch, orbit, radar cross-section) come from CelesTrak. Physical dimensions come from Jonathan McDowell's General Catalog of Artificial Space Objects (planet4589.org/space/gcat), under CC BY 4.0.")
                 }
             }
             .formStyle(.grouped)

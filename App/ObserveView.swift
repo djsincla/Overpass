@@ -313,11 +313,13 @@ struct SelectedObjectsList: View {
             let keyed = objects.map { ($0, model.riseTime($0, at: date)) }
             return keyed.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.name < $1.0.name }.map(\.0)
         case .brightness:
-            // Known magnitudes first, then satellites by radar size (largest first), then the rest.
+            // Known magnitudes first, then satellites by radar size, then by physical size
+            // (largest first), then the rest.
             let keyed = objects.map { o -> (SkyObject, Int, Double) in
                 if let m = model.magnitude(o, at: date) { return (o, 0, m) }
                 if let rcs = model.radarCrossSection(o) { return (o, 1, -rcs) }
-                return (o, 2, 0)
+                if let size = model.info(o)?.largestDimension { return (o, 2, -size) }
+                return (o, 3, 0)
             }
             return keyed.sorted { ($0.1, $0.2) != ($1.1, $1.2) ? ($0.1, $0.2) < ($1.1, $1.2) : $0.0.name < $1.0.name }.map(\.0)
         }
@@ -453,7 +455,7 @@ struct ElevationNow: View {
 }
 
 /// Apparent magnitude: smaller is brighter. Satellites need a standard magnitude, which TLEs
-/// don't include, so for them this says whether they're lit and gives the radar size as a guide.
+/// don't include, so for them this says whether they're lit and gives the radar or physical size as a guide.
 struct Brightness: View {
     @Environment(AppModel.self) private var model
     let object: SkyObject
@@ -466,7 +468,9 @@ struct Brightness: View {
                     .accessibilityLabel("Magnitude \(m.formatted(.number.precision(.fractionLength(1))))")
             } else if case .satellite(let s) = object {
                 let lit = (try? s.isSunlit(at: AstroTime(date))) == true
-                let size = model.radarCrossSection(object).map { "RCS \(RadarSize.format($0))" }
+                let info = model.info(object)
+                let size = info?.radarCrossSection.map { "RCS \(RadarSize.format($0))" }
+                    ?? info.flatMap(SatelliteDetails.dimensions)
                 Text([lit ? "sunlit" : "eclipsed", size].compactMap { $0 }.joined(separator: " · "))
             }
         }

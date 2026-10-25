@@ -177,8 +177,8 @@ final class AppModel {
     private(set) var groups: [SourceGroup] = []
     private(set) var satellites: [SatelliteTarget] = []
     private var satelliteByID: [String: SatelliteTarget] = [:]
-    /// Radar cross-sections (m²) by catalogue number, from CelesTrak's SATCAT.
-    private(set) var radarCrossSections: [String: Double] = [:]
+    /// Launch, orbit, radar and physical size by catalogue number (CelesTrak SATCAT and GCAT).
+    private(set) var satelliteInfo: [String: SatelliteInfo] = [:]
     private(set) var passes: [SatellitePass] = []
     private(set) var isPredicting = false
     private(set) var isRefreshing = false
@@ -209,19 +209,17 @@ final class AppModel {
         } catch {
             message = "Couldn't open the TLE cache: \(error.localizedDescription)"
         }
-        radarCrossSections = (try? JSONDecoder().decode([String: Double].self,
-                                                         from: Data(contentsOf: Self.radarCrossSectionFile))) ?? [:]
         mount.app = self
         guider.app = self
         conjunctions.app = self
     }
 
     func start() async {
+        Task { await loadSatelliteInfo() }
         await reloadFromCatalog()
         schedulePrediction()
         await refreshDue()
         conjunctions.startWatching()
-        await refreshRadarCrossSections()
     }
 
     // MARK: Objects and selection
@@ -353,26 +351,44 @@ final class AppModel {
         }
     }
 
-    /// Published radar cross-section in m², a rough guide to size and brightness.
-    func radarCrossSection(_ object: SkyObject) -> Double? {
+    func info(_ object: SkyObject) -> SatelliteInfo? {
         guard case .satellite(let s) = object else { return nil }
-        return radarCrossSections[RadarCrossSection.key(s.noradID)]
+        return satelliteInfo[SatelliteCatalogInfo.key(s.noradID)]
     }
 
-    private static let radarCrossSectionFile = storage.appending(path: "radar-cross-sections.json")
+    /// Published radar cross-section in m², a rough guide to size and brightness.
+    func radarCrossSection(_ object: SkyObject) -> Double? { info(object)?.radarCrossSection }
 
-    /// Weekly: the values rarely change, and the catalogue is a 7 MB download.
-    private func refreshRadarCrossSections() async {
-        let file = Self.radarCrossSectionFile
+    private static let satelliteInfoFile = storage.appending(path: "satellite-info.json")
+
+    /// The saved copy first, then a fresh one weekly: the catalogues are 7 and 19 MB, and what's
+    /// shown from them rarely changes.
+    private func loadSatelliteInfo() async {
+        let file = Self.satelliteInfoFile
+        let saved = await Task.detached {
+            try? JSONDecoder().decode([String: SatelliteInfo].self, from: Data(contentsOf: file))
+        }.value
+        if let saved { satelliteInfo = saved }
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        if let modified, Date.now.timeIntervalSince(modified) < 7 * 86_400, !radarCrossSections.isEmpty { return }
-        guard let (data, response) = try? await URLSession.shared.data(from: RadarCrossSection.catalogURL),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return }
-        let parsed = await Task.detached { RadarCrossSection.parse(String(decoding: data, as: UTF8.self)) }.value
-        guard !parsed.isEmpty else { return }
-        radarCrossSections = parsed
-        try? FileManager.default.createDirectory(at: Self.storage, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(parsed).write(to: file)
+        if let modified, Date.now.timeIntervalSince(modified) < 7 * 86_400, saved != nil { return }
+
+        func download(_ url: URL) async -> Data? {
+            guard let (data, response) = try? await URLSession.shared.data(from: url),
+                  (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            return data
+        }
+        guard let satcat = await download(SatelliteCatalogInfo.celesTrakURL) else { return }
+        let gcat = await download(SatelliteCatalogInfo.gcatURL)
+        let fresh = await Task.detached { () -> [String: SatelliteInfo] in
+            var info = SatelliteCatalogInfo.parseCelesTrak(String(decoding: satcat, as: UTF8.self))
+            if let gcat { SatelliteCatalogInfo.addGCAT(String(decoding: gcat, as: UTF8.self), to: &info) }
+            if !info.isEmpty {
+                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? JSONEncoder().encode(info).write(to: file)
+            }
+            return info
+        }.value
+        if !fresh.isEmpty { satelliteInfo = fresh }
     }
 
     func magnitude(_ object: SkyObject, at date: Date) -> Double? {
