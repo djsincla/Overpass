@@ -554,6 +554,10 @@ final class MountSession {
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
 
+    /// Update period while moving into position (waiting at the start, catching up, crossing
+    /// north); the faster setting is only for tracking on target.
+    private static let positioningPeriod = 0.25
+
     /// The HAZ46 goes to about 6°/s at its top speed; slightly under, so the quiet wait errs long.
     private static let estimatedSlewRate = 5.0
 
@@ -629,9 +633,8 @@ final class MountSession {
         while !Task.isCancelled {
             let loopStart = Date.now
             let s = settings
-            // A correction acts for a whole period: 1.5 × error per second over 2 s would
-            // overshoot and grow, so keep gain × period under about 0.7.
-            controller.gain = min(1.5, 0.7 / s.trackingPeriod)
+            // The chosen update period is for tracking on target; moving into position doesn't need it.
+            var period = Self.positioningPeriod
             // Position is compared at the moment the axes were read; only the feed-forward
             // rate looks ahead, to when the speed command takes effect. Aiming the position
             // ahead as well held the scope ~50 ms in front of the satellite (tens of arc-seconds).
@@ -660,7 +663,8 @@ final class MountSession {
                     desired = target.axes
                     // The speed is held until the next update: use the satellite's speed over that
                     // interval (its middle), which at long periods matters more than the latency.
-                    let ahead = plan.target(at: t + latency + s.trackingPeriod / 2) ?? target
+                    period = gap > 2 ? Self.positioningPeriod : s.trackingPeriod
+                    let ahead = plan.target(at: t + latency + period / 2) ?? target
                     rates = (ahead.primaryRate, ahead.secondaryRate)
                     // Far off with no mount slew to catch up with: catch up at full speed.
                     controller.maximumCorrection = gap > 2 ? max(s.maximumAzimuthRate, s.maximumAltitudeRate) : 2
@@ -689,11 +693,17 @@ final class MountSession {
                 desired = a
                 rates = (b.primary - a.primary, b.secondary - a.secondary)
                 controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
+                let gap = max(abs(a.primary - current.primary), abs(a.secondary - current.secondary))
+                period = gap > 2 ? Self.positioningPeriod : s.trackingPeriod
                 status = "Tracking"
             }
             desired.primary += model.azimuthSense * azimuthOffset
             // The altitude axis may count down (iOptron's counts from the zenith).
             desired.secondary += model.altitudeSense * altitudeOffset
+
+            // A correction acts for a whole period: 1.5 × error per second over 2 s would
+            // overshoot and grow, so keep gain × period under about 0.7.
+            controller.gain = min(1.5, 0.7 / period)
 
             // A lone reading far off the recent level is a glitch, not the mount: hold the planned
             // speed for it rather than kicking the mount to "correct" it.
@@ -709,7 +719,7 @@ final class MountSession {
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
             record(current: current, desired: desired, feed: rates, command: command, held: glitch)
             // Reading the axes and setting the speeds take part of each period.
-            let rest = s.trackingPeriod - Date.now.timeIntervalSince(loopStart)
+            let rest = period - Date.now.timeIntervalSince(loopStart)
             if rest > 0.005 { try await Task.sleep(for: .seconds(rest)) }
         }
     }
@@ -782,8 +792,13 @@ final class MountSession {
                 let rate = direction * settings.maximumAzimuthRate
                 let limit = 180 - AxisSlew.defaultWrapMargin
                 let side = wrap180(current.primary) < 0 ? -1.0 : 1.0
+                if wouldHitCableStop(current, primaryRate: rate) { throw MountSessionError.pastCableStop }
+                // One speed command, then position checks only (cheap, and close enough apart
+                // at full speed to stop short of the cable).
+                try await special.setSpeeds(primary: rate, secondary: 0)
                 while !Task.isCancelled {
                     guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+                    try await Task.sleep(for: .milliseconds(100))
                     guard let now = try await readPosition() else { break }
                     let raw = wrap180(now.primary)
                     if direction * (goal.primary - now.primary) < 0.5 { break }
@@ -792,8 +807,6 @@ final class MountSession {
                         try await special.stop()
                         throw MountSessionError.pastCableStop
                     }
-                    try await special.setSpeeds(primary: rate, secondary: 0)
-                    try await Task.sleep(for: .milliseconds(100))
                 }
                 try await special.stop()
             case .rateControl:
