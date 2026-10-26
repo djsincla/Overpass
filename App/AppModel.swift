@@ -28,10 +28,10 @@ struct Settings: Codable, Equatable {
     var minimumAltitude: Double = 0
     var darkSkySunAltitude: Double = -6
 
-    var cableStopAzimuth: Double = 0
-    /// The mount doesn't move until the cable stop has been set for it: a new install's
-    /// default (north) once sent the mount round the wrong way.
-    var cableStopConfirmed = false
+    /// The azimuth the mount never turns through: the pole, north here and south in the
+    /// southern hemisphere. The HAZ46's own goto never turns through north, so its cable wrap
+    /// sets this, not a setting.
+    var cableStopAzimuth: Double { latitude < 0 ? 180 : 0 }
     var cableMargin: Double = 5
     /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
     /// pointing down from a hillside, as long as the tube clears the tripod.
@@ -230,12 +230,7 @@ final class AppModel {
     static let storage = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Overpass")
 
     init() {
-        var settings = Self.load("settings", default: Settings())
-        // From before the confirmation existed: a cable stop moved off the default was set on purpose.
-        if !settings.cableStopConfirmed, settings.cableStopAzimuth != Settings().cableStopAzimuth {
-            settings.cableStopConfirmed = true
-        }
-        self.settings = settings
+        settings = Self.load("settings", default: Settings())
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
         do {
@@ -341,7 +336,7 @@ final class AppModel {
 
     /// Whether `object` can be tracked now, with this connection and mode.
     func canTrack(_ object: SkyObject?) -> Bool {
-        guard let object, mount.state == .connected, settings.cableStopConfirmed else { return false }
+        guard let object, mount.state == .connected else { return false }
         switch (mount.kind?.isSpecialMode, mount.effectiveMode) {
         case (false, .passive): return object.passiveTracking != nil
         case (true, _): return settings.alignment != nil
@@ -684,8 +679,8 @@ final class AppModel {
         imported.redAppIcon = mine.redAppIcon
         imported.tracksLog = mine.tracksLog
         settings = imported
-        return String(format: "Imported: cable stop %.0f° (margin %.0f°), location %.3f°, %.3f°.",
-                      imported.cableStopAzimuth, imported.cableMargin, imported.latitude, imported.longitude)
+        return String(format: "Imported: location %.3f°, %.3f°, cable margin %.0f°.",
+                      imported.latitude, imported.longitude, imported.cableMargin)
     }
 
     static func load<T: Codable>(_ key: String, default value: T) -> T {

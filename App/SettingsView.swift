@@ -13,7 +13,6 @@ struct SettingsView: View {
     }
 
     @Environment(AppModel.self) private var model
-    @State private var advice: [CableStopAdvisor.Option] = []
     @State private var slewTest: String?
     @State private var testingSlew = false
     @State private var modeTest: String?
@@ -67,27 +66,12 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    if !model.settings.cableStopConfirmed {
-                        Label("The mount won't move until its cable stop is set. Set the azimuth, then confirm it.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Button("The cable stop is at \(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))") {
-                            model.settings.cableStopConfirmed = true
-                        }
-                    }
-                    LabeledSlider("Cable stop azimuth", value: $model.settings.cableStopAzimuth, in: 0...355, step: 5, unit: "°")
+                    LabeledContent("Cable stop", value: "\(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))")
                     LabeledSlider("Margin", value: $model.settings.cableMargin, in: 0...20, step: 1, unit: "°")
-                    Button("Suggest a cable stop from upcoming passes") { advice = suggest() }
-                        .disabled(model.passes.isEmpty)
-                    ForEach(advice.prefix(3), id: \.azimuth) { option in
-                        Button("\(Int(option.azimuth))° \(compass(option.azimuth)) — blocks \(option.blockedPasses) of \(model.passes.count)") {
-                            model.settings.cableStopAzimuth = option.azimuth
-                        }
-                    }
                 } header: {
                     Text("Cable stop")
                 } footer: {
-                    Text("The mount never rotates through this azimuth, so cables can't wind up. Set the cables neutral with the scope pointing the opposite way.")
+                    Text("The mount never turns through the pole: north here, south in the southern hemisphere. Its own goto works this way, so Overpass does the same. Set the cables neutral with the scope pointing the opposite way.")
                 }
 
                 Section {
@@ -270,10 +254,6 @@ struct SettingsView: View {
                 #endif
             }
         }
-    }
-
-    func suggest() -> [CableStopAdvisor.Option] {
-        CableStopAdvisor.rank(model.passes, limits: model.settings.limits)
     }
 
     func numberField(_ title: String, _ value: Binding<Double>) -> some View {
