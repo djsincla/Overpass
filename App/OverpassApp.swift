@@ -38,6 +38,7 @@ struct OverpassApp: App {
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView {
@@ -64,6 +65,24 @@ struct ContentView: View {
             #endif
             await model.start()
         }
+        #if os(iOS)
+        // iOS drops the mount's connection when the phone locks or the app goes to the
+        // background, and the mount carries on with its last command. Stay awake while
+        // connected, and stop the mount on the way out.
+        .onChange(of: model.mount.state == .connected, initial: true) { _, connected in
+            UIApplication.shared.isIdleTimerDisabled = connected
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background, model.mount.state == .connected {
+                // A few seconds' grace from iOS to get the stop out.
+                let grace = UIApplication.shared.beginBackgroundTask()
+                Task {
+                    await model.mount.stopAll()
+                    UIApplication.shared.endBackgroundTask(grace)
+                }
+            }
+        }
+        #endif
     }
 }
 
