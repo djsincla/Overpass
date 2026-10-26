@@ -917,6 +917,10 @@ final class MountSession {
         guard let special else { throw MountSessionError.needsUSB }
         var controller = RateController(limits: settings.limits)
         var moving = false
+        // The error at the start of a stretch where it hasn't been shrinking. Something fixed in
+        // the picture (the camera's text, a hot pixel, a mark on the lens) keeps the same offset
+        // however far the mount turns, so following it would run the mount away.
+        var stuck: (date: Date, error: Double)?
         while !Task.isCancelled {
             let loopStart = Date.now
             let s = settings
@@ -957,6 +961,22 @@ final class MountSession {
             let atLimit = (rising && altitude >= s.limits.maximumAltitudeAxis) || (!rising && altitude <= s.limits.minimumAltitudeAxis)
             if atLimit { command.secondary = 0 }
             if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
+
+            let cosAltitude = cos(model.sky(for: current).altitude.radians)
+            let error = hypot((estimate.position.primary - current.primary) * cosAltitude,
+                              atLimit ? 0 : estimate.position.secondary - current.secondary)
+            if error < 0.1 {
+                stuck = nil
+            } else if let start = stuck, error > 0.7 * start.error {
+                if read.timeIntervalSince(start.date) > 8 {
+                    try await special.stop()
+                    status = "Stopped: the mount turned but the object stayed as far from the aim point. "
+                        + "It may be fixed in the picture (the camera's text, a mark on the lens), or the calibration may be off."
+                    return
+                }
+            } else {
+                stuck = (read, error)
+            }
 
             try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
             moving = true
@@ -1290,6 +1310,8 @@ final class MountSession {
 
         if try await client.identify().isSpecialMode {
             // Already in Special mode, so no switch has reset the axes. Check them against the record.
+            // It may still be moving at the last speeds set, if Overpass quit or crashed mid-track.
+            try? await client.stop()
             let identity = try await client.identify()
             if let known = knownPointing, let raw = try? await client.positions() {
                 let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))

@@ -3,6 +3,9 @@ import SwiftUI
 @main
 struct OverpassApp: App {
     @State private var model = AppModel()
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor private var delegate: AppDelegate
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -31,9 +34,33 @@ struct ContentView: View {
         .tint(Theme.accent)
         .modifier(Appearance(dark: model.settings.alwaysDark || model.settings.redMode))
         .modifier(NightVision(enabled: model.settings.redMode))
-        .task { await model.start() }
+        .task {
+            #if os(macOS)
+            AppDelegate.model = model
+            #endif
+            await model.start()
+        }
     }
 }
+
+#if os(macOS)
+/// Stops the mount on quit. In Special mode it keeps turning at the last speeds it was given
+/// until told otherwise, so quitting mid-track would leave it running.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    @MainActor static weak var model: AppModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            guard let mount = Self.model?.mount, mount.state == .connected else { return .terminateNow }
+            Task {
+                await mount.stopAll()
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        }
+    }
+}
+#endif
 
 /// Dark, or whatever the system uses. On macOS, SwiftUI's preferredColorScheme doesn't let go
 /// once it has forced dark (the window stays dark after switching back to nil), so set the
