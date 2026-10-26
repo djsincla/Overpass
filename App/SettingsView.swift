@@ -143,6 +143,17 @@ struct SettingsView: View {
                     if case .success(let url) = result { importResult = model.importSettings(from: url) }
                 }
 
+                Section {
+                    ShareLink(item: MountSession.logFile) {
+                        Label("Share the mount log", systemImage: "doc.text")
+                    }
+                    .disabled(!FileManager.default.fileExists(atPath: MountSession.logFile.path))
+                } header: {
+                    Text("Reporting a problem")
+                } footer: {
+                    Text("Email AB6A@arrl.net with the mount log, the settings file, the time it went wrong (UTC if you can) and what you were tracking. The log has every connect, mode switch, goto, step and stop, with what the mount read back.")
+                }
+
                 #if os(iOS)
                 Section {
                     AboutRows()
