@@ -50,6 +50,8 @@ struct ContentView: View {
             CameraTrackView()
                 .tabItem { Label("Camera", systemImage: "camera.viewfinder") }
             #if os(iOS)
+            LookUpView()
+                .tabItem { Label("Look up", systemImage: "binoculars") }
             // On the Mac, Settings is in the app menu (⌘,).
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
