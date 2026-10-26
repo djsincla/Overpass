@@ -489,14 +489,17 @@ final class MountSession {
     }
 
     private func cancelTracking() async {
-        prepareTask?.cancel()
+        let tasks = [prepareTask, trackingTask].compactMap { $0 }
         prepareTask = nil
-        trackingTask?.cancel()
         trackingTask = nil
         trackingName = nil
         trackingObject = nil
         trackingMode = nil
         tracksCamera = false
+        for task in tasks { task.cancel() }
+        // Wait for the loops to end. One partway through a step would otherwise send its speeds
+        // after the stop that follows, and the mount would pause and carry on.
+        for task in tasks { await task.value }
     }
 
     // MARK: Tracking
