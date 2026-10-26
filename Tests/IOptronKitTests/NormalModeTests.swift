@@ -75,6 +75,16 @@ import Testing
         #expect(transport.written == [":GLS#", ":GLS#"])
     }
 
+    @Test func parsesSite() async throws {
+        // Longitude −120.5°, latitude 35.25° (+90° offset), GPS fix.
+        let reply = "-43380000" + "45090000" + "210511" + "#"
+        let client = NormalModeClient(transport: ScriptedTransport(replies: [reply]))
+        let site = try await client.site()
+        #expect(abs(site.longitude + 120.5) < 1e-9)
+        #expect(abs(site.latitude - 35.25) < 1e-9)
+        #expect(site.hasFix)
+    }
+
     @Test func maximumSlewSpeedIsClamped() {
         #expect(NormalCommand.setMaximumSlewSpeed(9).wire == ":MSR9#")
         #expect(NormalCommand.setMaximumSlewSpeed(12).wire == ":MSR9#")

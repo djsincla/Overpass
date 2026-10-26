@@ -122,6 +122,16 @@ public enum NormalModeError: Error, Equatable {
     case notNormalMode(String)
 }
 
+/// The mount's own idea of where it is.
+public struct MountSite: Equatable, Sendable {
+    public var latitude: Double
+    public var longitude: Double
+    /// 0 no GPS, 1 GPS without a fix yet, 2 GPS fix.
+    public var gps: Int
+
+    public var hasFix: Bool { gps == 2 }
+}
+
 /// Drives the mount with the normal command language.
 public actor NormalModeClient {
     private let transport: MountTransport
@@ -202,13 +212,26 @@ public actor NormalModeClient {
     /// The `:GLS#` system status digit: 0 stopped, 1 tracking, 2 slewing, 3 guiding,
     /// 4 meridian flip, 5 tracking (PEC), 6 parked, 7 stopped at home.
     public func systemStatus() async throws -> Int {
+        try await status().system
+    }
+
+    /// Where the mount thinks it is, from `:GLS#`: its GPS position when it has a fix, otherwise
+    /// what was last set in it.
+    public func site() async throws -> MountSite {
+        let status = try await status()
+        return MountSite(latitude: status.latitude, longitude: status.longitude, gps: status.gps)
+    }
+
+    private func status() async throws -> (longitude: Double, latitude: Double, gps: Int, system: Int) {
         let reply = try await send(.getStatus)
-        // Sign, 8 longitude digits, 8 latitude digits, then GPS, system, rate, speed, time source, hemisphere.
+        // Sign, 8 longitude digits, 8 latitude digits (+90°), then GPS, system, rate, speed, time source, hemisphere.
         let body = Array(reply.dropLast())
-        guard reply.hasSuffix("#"), body.count == 23, let digit = Int(String(body[18])) else {
+        guard reply.hasSuffix("#"), body.count == 23, let sign = body.first, sign == "+" || sign == "-",
+              let longitude = Int(String(body[1..<9])), let latitude = Int(String(body[9..<17])),
+              let gps = Int(String(body[17])), let system = Int(String(body[18])) else {
             throw ReplyError.malformed(reply)
         }
-        return digit
+        return (Centiarcsec.toDegrees(sign == "-" ? -longitude : longitude), Centiarcsec.toDegrees(latitude) - 90, gps, system)
     }
 
     public func isSlewing() async throws -> Bool { try await systemStatus() == 2 }
