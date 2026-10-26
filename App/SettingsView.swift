@@ -111,6 +111,8 @@ struct SettingsView: View {
                     LabeledSlider("On target within", value: Binding(get: { model.settings.pointingTolerance * 60 },
                                                                      set: { model.settings.pointingTolerance = $0 / 60 }),
                                   in: 1...60, step: 1, unit: "′")
+                    Toggle("Keep a tracking log to export", isOn: $model.settings.tracksLog)
+                        .help("For debugging: keeps the last \(Int(MountSession.traceSpan / 60)) minutes of tracking and adds an export button to the tracking chart, to save it as CSV")
                 } header: {
                     Text("Mount")
                 } footer: {

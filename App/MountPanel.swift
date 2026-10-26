@@ -330,13 +330,15 @@ struct TraceView: View {
                 Spacer()
                 Text(String(format: "median %.0f″ · worst %.0f″ · longest loop %.2f s", median, errors.last ?? 0, gaps.max() ?? 0))
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                Button {
-                    csv = CSVFile(text: model.mount.traceCSV)
-                    exporting = true
-                } label: { Image(systemName: "square.and.arrow.down") }
-                    .buttonStyle(.borderless)
-                    .help("Save the last \(Int(MountSession.traceSpan / 60)) minutes of tracking as CSV")
-                    .accessibilityLabel("Export trace")
+                if model.settings.tracksLog {
+                    Button {
+                        csv = CSVFile(text: model.mount.traceCSV)
+                        exporting = true
+                    } label: { Image(systemName: "square.and.arrow.down") }
+                        .buttonStyle(.borderless)
+                        .help("Save the last \(Int(MountSession.traceSpan / 60)) minutes of tracking as CSV")
+                        .accessibilityLabel("Export trace")
+                }
             }
             Canvas { context, size in
                 guard let last = trace.last?.date else { return }

@@ -1013,7 +1013,7 @@ final class MountSession {
         if status != text { status = text }
     }
 
-    /// Adds one loop iteration to the trace, keeping the last `traceSpan` seconds.
+    /// Adds one loop iteration to the trace, keeping the last minute (`traceSpan` when logging).
     private func record(current: AxisPosition, desired: AxisPosition, feed: (Double, Double),
                         command: (primary: Double, secondary: Double), held: Bool = false) {
         let now = Date.now
@@ -1026,8 +1026,10 @@ final class MountSession {
                                  feedPrimary: feed.0, feedSecondary: feed.1,
                                  commandPrimary: command.primary, commandSecondary: command.secondary, held: held))
         lastLoop = now
-        if let first = trace.first, now.timeIntervalSince(first.date) > Self.traceSpan {
-            trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > Self.traceSpan }.count)
+        // The chart shows a minute; the longer log is only kept for exporting while debugging.
+        let span = settings.tracksLog ? Self.traceSpan : 60
+        if let first = trace.first, now.timeIntervalSince(first.date) > span {
+            trace.removeFirst(trace.prefix { now.timeIntervalSince($0.date) > span }.count)
         }
     }
 

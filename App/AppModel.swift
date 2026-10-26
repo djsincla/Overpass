@@ -64,6 +64,8 @@ struct Settings: Codable, Equatable {
     var countdownSounds = true
     /// A WWV hour tone a minute before tracking starts.
     var minuteWarningSound = true
+    /// For debugging: keep minutes of tracking samples and offer them as CSV.
+    var tracksLog = false
 
     var stepInterval: Double = 2
     /// Normal mode (WiFi or USB): the shortest time between commands, for position polling and
