@@ -198,11 +198,12 @@ struct ObserveView: View {
             let pass = model.highlightedPass(at: date)
             SkyDome(observer: model.settings.observer, date: date, pass: pass,
                     plan: pass.flatMap(model.plan(for:)), tolerance: model.settings.pointingTolerance,
-                    cableStopAzimuth: model.settings.cableStopAzimuth,
+                    cableStopAzimuth: model.mount.effectiveCableStop,
                     liveObjects: model.liveObjects(at: date),
                     highlightedObjectID: model.highlightedObject?.id,
                     targetObjectID: model.targetObjectID,
                     scopePosition: model.mount.skyPosition,
+                    slewTarget: model.mount.slewTarget,
                     onTapObject: { model.highlight(objectID: $0) },
                     menu: { AnyView(domeMenu($0)) })
         }
