@@ -75,6 +75,10 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphone*]": AppIconRed
         PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
+        # iPhone and iPad use the App ID registered for TestFlight. The Mac keeps its own, so its
+        # sandbox (settings, alignment, TLEs) stays where it is.
+        "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]": com.dwaynesinclair.overpass
+        "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphonesimulator*]": com.dwaynesinclair.overpass
         PRODUCT_NAME: Overpass
         # Notarisation needs the hardened runtime for Developer ID builds.
         ENABLE_HARDENED_RUNTIME: YES
