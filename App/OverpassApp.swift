@@ -52,8 +52,11 @@ struct ContentView: View {
                 .tabItem { Label("Objects", systemImage: "checklist") }
             ConjunctionsView()
                 .tabItem { Label("Conjunctions", systemImage: "moon.stars") }
+            #if os(macOS)
+            // Camera tracking needs the mount in Special mode over USB; off on iPhone and iPad for now.
             CameraTrackView()
                 .tabItem { Label("Camera", systemImage: "camera.viewfinder") }
+            #endif
             #if os(iOS)
             // On the Mac, Settings is in the app menu (⌘,).
             SettingsView()
