@@ -232,7 +232,6 @@ final class MountSession {
             }
             kind = s.connection
             state = .connected
-            if let moveBlocker { status = moveBlocker }
             startPolling()
         } catch {
             state = .failed(describe(error))
@@ -396,22 +395,9 @@ final class MountSession {
         if mountAzimuth < lo || mountAzimuth > lo + 360 { throw MountSessionError.pastCableStop }
     }
 
-    /// Why the mount can't move yet, or nil. Every move checks this first.
-    var moveBlocker: String? {
-        settings.cableStopConfirmed ? nil : "Set the cable stop in Settings before moving the mount"
-    }
-
-    /// True, with the reason in the status, when moves are blocked.
-    private func blocksMove() -> Bool {
-        guard let moveBlocker else { return false }
-        status = moveBlocker
-        return true
-    }
-
     // MARK: Manual moves
 
     func jog(_ direction: JogDirection, pressed: Bool) async {
-        if pressed, blocksMove() { return }
         if pressed { await cancelTracking() }
         do {
             if let normal {
@@ -451,7 +437,6 @@ final class MountSession {
     /// Fine tune. While Step or Smooth tracking, shifts the tracking offsets; otherwise makes a
     /// short, slow move of about `arcminutes` (the mount's own tracking carries on in Passive).
     func nudge(_ direction: JogDirection, arcminutes: Double) async {
-        if blocksMove() { return }
         let degrees = arcminutes / 60
         if trackingMode == .step || trackingMode == .smooth {
             switch direction {
@@ -562,7 +547,6 @@ final class MountSession {
 
     private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
                                _ run: @escaping @MainActor () async throws -> Void) async {
-        if blocksMove() { return }
         await stopAll()
         trackingName = name
         trackingObject = object
@@ -604,7 +588,6 @@ final class MountSession {
 
     /// Moves the mount to where the pass will first reach the start elevation, and holds there.
     func moveToStart(of pass: SatellitePass) async {
-        if blocksMove() { return }
         await stopAll()
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
@@ -734,10 +717,10 @@ final class MountSession {
         var waitingAtRise = false
         let crossing = pass.flatMap(northCrossing(of:))
         if let crossing, let pass {
-            log("\(pass.name) crosses north at \(crossing.formatted(date: .omitted, time: .standard)); the mount goes the long way round there")
+            log("\(pass.name) crosses the cable stop at \(crossing.formatted(date: .omitted, time: .standard)); the mount goes the long way round there")
         }
         func crossingNote() -> String {
-            crossing.map { " · goes the long way round at \($0.formatted(date: .omitted, time: .shortened)), where it crosses north" } ?? ""
+            crossing.map { " · goes the long way round at \($0.formatted(date: .omitted, time: .shortened)), where it crosses the cable stop" } ?? ""
         }
         func aimPoint(after seconds: TimeInterval) throws -> Horizontal {
             var h = try StepTracking.aim(at: object.target, observer: settings.observer, now: skyNow + timeOffset, lead: seconds)
@@ -771,19 +754,19 @@ final class MountSession {
             } else {
                 // Read at the end of the last step; good enough to tell which way round to go.
                 let here = if let skyPosition { skyPosition } else { try await currentAltAz(normal) }
-                if Self.turnsLongWay(from: here, to: aim) {
+                if Self.turnsLongWay(from: here, to: aim, stop: s.cableStopAzimuth) {
                     // The mount's goto won't turn through north, so it goes the long way round.
                     // Let it, aimed at where the satellite will be when it gets there.
                     var ahead = aim
                     for _ in 0..<3 {
-                        ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead))
+                        ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth))
                     }
-                    if let pass, skyNow + Self.slewTime(from: here, to: ahead) > pass.end.date {
+                    if let pass, skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) > pass.end.date {
                         status = "Pass over before the mount could get round"
                         return
                     }
                     log("Going the long way round to " + describe(ahead) + " from " + describe(here))
-                    status = "Going the long way round (the mount won't turn through north)…"
+                    status = "Going the long way round (the mount won't turn through the cable stop)…"
                     try await goto(normal, to: ahead, from: here)
                     continue
                 }
@@ -805,24 +788,19 @@ final class MountSession {
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
 
-    /// Where Normal mode's gotos can't turn through: north.
-    static let normalModeStop = 0.0
-
-    /// The azimuth the mount can't turn through as connected: north in Normal mode, the cable
-    /// stop in Special mode (where Overpass drives the axes itself).
-    var effectiveCableStop: Double {
-        kind?.isSpecialMode == false ? Self.normalModeStop : settings.cableStopAzimuth
-    }
+    /// The azimuth the mount can't turn through, in either mode.
+    var effectiveCableStop: Double { settings.cableStopAzimuth }
 
     /// While a Normal-mode goto runs: where it's headed. The position isn't read mid-slew (the
     /// mount hesitates at any command), so this is what the sky shows meanwhile.
     private(set) var slewTarget: Horizontal?
 
-    /// When `pass` crosses north above the start elevation, if it does: there the mount's goto
-    /// goes the long way round.
+    /// When `pass` crosses the cable stop above the start elevation, if it does: there the
+    /// mount's goto goes the long way round.
     func northCrossing(of pass: SatellitePass) -> Date? {
+        let stop = settings.cableStopAzimuth
         let track = pass.track.filter { $0.position.altitude >= startAltitude }
-        for (a, b) in zip(track, track.dropFirst()) where abs(b.position.azimuth - a.position.azimuth) > 180 {
+        for (a, b) in zip(track, track.dropFirst()) where Self.turnsLongWay(from: a.position, to: b.position, stop: stop) {
             return b.date
         }
         return nil
@@ -838,13 +816,14 @@ final class MountSession {
     /// The HAZ46's own goto never turns through north (az 0°): asked for 283° to 19°, it went
     /// most of the way round the other way (26 Oct 2026). That is its cable wrap, so Normal mode
     /// leaves the route to it and only allows for the time it takes.
-    static func turnsLongWay(from: Horizontal, to: Horizontal) -> Bool {
-        abs(to.azimuth - from.azimuth) > 180
+    static func turnsLongWay(from: Horizontal, to: Horizontal, stop: Double) -> Bool {
+        abs(CableRoute.offset(to.azimuth, stop: stop) - CableRoute.offset(from.azimuth, stop: stop)) > 180
     }
 
     /// How long a goto takes the way the mount goes, plus time to speed up and slow down.
-    static func slewTime(from: Horizontal, to: Horizontal) -> TimeInterval {
-        max(abs(to.azimuth - from.azimuth), abs(to.altitude - from.altitude)) / estimatedSlewRate + 2
+    static func slewTime(from: Horizontal, to: Horizontal, stop: Double) -> TimeInterval {
+        let turn = abs(CableRoute.offset(to.azimuth, stop: stop) - CableRoute.offset(from.azimuth, stop: stop))
+        return max(turn, abs(to.altitude - from.altitude)) / estimatedSlewRate + 2
     }
 
     /// A normal-mode goto at full speed. The mount picks the way round.
@@ -876,7 +855,7 @@ final class MountSession {
         slewTarget = target
         defer { slewTarget = nil }
         try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
-        try await Task.sleep(for: .seconds(Self.slewTime(from: start, to: target)))
+        try await Task.sleep(for: .seconds(Self.slewTime(from: start, to: target, stop: settings.cableStopAzimuth)))
         let deadline = Date.now + 180
         while try await normal.isSlewing() {
             guard Date.now < deadline else {
@@ -1192,7 +1171,6 @@ final class MountSession {
     /// round as if ±180° were two ends). Every move is watched and stopped if it goes more than 2°
     /// the wrong way. Returns a report.
     func testNativeSlew() async -> String {
-        if let moveBlocker { return moveBlocker }
         guard let special else { return "Connect over USB (Special mode) first." }
         await stopAll()
         var report: [String] = []
@@ -1294,7 +1272,6 @@ final class MountSession {
 
     /// Runs both axes at these speeds (degrees per second) until told otherwise.
     func moveAxes(primary: Double, secondary: Double) async throws {
-        guard moveBlocker == nil else { throw MountSessionError.cableStopNotSet }
         guard let special else { throw MountSessionError.needsUSB }
         try await special.setSpeeds(primary: primary, secondary: secondary)
     }
@@ -1639,7 +1616,6 @@ final class MountSession {
     /// position at each step, to see what a mode change does to it. Returns a report; every
     /// line also goes to the mount log.
     func testModeSwitching() async -> String {
-        if let moveBlocker { return moveBlocker }
         guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
         await stopAll()
         pollTask?.cancel()
@@ -1737,7 +1713,6 @@ final class MountSession {
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
-    case cableStopNotSet
 
     var message: String {
         switch self {
@@ -1745,7 +1720,6 @@ enum MountSessionError: Error {
         case .noSerialPort: "Choose the mount's USB port in Settings."
         case .needsWiFi: "Passive and Step tracking need the WiFi connection."
         case .needsUSB: "Smooth tracking needs the USB connection (Special mode)."
-        case .cableStopNotSet: "Set the cable stop in Settings before moving the mount."
         case .notAligned: "Align on at least two stars first."
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
         case .untrackablePass: "This pass crosses the cable stop or exceeds the altitude limits."
