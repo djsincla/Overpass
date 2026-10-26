@@ -226,7 +226,12 @@ final class MountSession {
                 identity = try await enterSpecialMode(client, transport)
                 let raw = try await client.positions()
                 let s = settings
-                unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
+                if let wound = UserDefaults.standard.object(forKey: Self.windKey) as? Double {
+                    unwrapper = AxisUnwrapper(raw: raw.primary, near: wound)
+                    log(String(format: "Connected past north from last time: primary %.2f", unwrapper?.unwrapped ?? wound))
+                } else {
+                    unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
+                }
                 nativeSlewWentWrongWay = false
                 special = client
             }
@@ -301,7 +306,7 @@ final class MountSession {
         pollTask = Task {
             var failures = 0
             while !Task.isCancelled {
-                if trackingTask == nil && prepareTask == nil {
+                if trackingTask == nil && prepareTask == nil && unwindTask == nil {
                     do {
                         _ = try await readPosition()
                         failures = 0
@@ -391,6 +396,7 @@ final class MountSession {
         let model = settings.alignment ?? AlignmentModel()
         skyPosition = model.sky(for: current)
         if settings.alignment != nil, !recordHeld, let skyPosition { remember(skyPosition) }
+        rememberWind(current)
         try checkCableRange(current)
         return current
     }
@@ -400,8 +406,9 @@ final class MountSession {
         let s = settings
         let model = s.alignment ?? AlignmentModel()
         let mountAzimuth = model.azimuthSense * current.primary
-        let lo = s.cableStopAzimuth + model.yaw
-        if mountAzimuth < lo || mountAzimuth > lo + 360 { throw MountSessionError.pastCableStop }
+        let extra = s.tracksPastNorth ? s.overtravel : 0
+        let lo = s.cableStopAzimuth + model.yaw - extra
+        if mountAzimuth < lo || mountAzimuth > lo + 360 + 2 * extra { throw MountSessionError.pastCableStop }
     }
 
     // MARK: Manual moves
@@ -495,12 +502,17 @@ final class MountSession {
         let model = s.alignment ?? AlignmentModel()
         let mountAzimuth = model.azimuthSense * axes.primary
         let direction = model.azimuthSense * primaryRate
-        let lo = s.cableStopAzimuth + model.yaw + s.cableMargin, hi = lo + 360 - 2 * s.cableMargin
-        return (direction > 0 && mountAzimuth >= hi) || (direction < 0 && mountAzimuth <= lo)
+        let range = isTracking ? trackingCableRange : cableRange
+        return (direction > 0 && mountAzimuth >= range.upperBound) || (direction < 0 && mountAzimuth <= range.lowerBound)
     }
 
-    /// Stops everything: tracking, slews and jogs.
-    func stopAll() async {
+    /// Stops everything: tracking, slews and jogs. Past north (Special mode), the mount then
+    /// unwinds, unless `unwinding` is false or it was unwinding already (Stop stops that too).
+    func stopAll(unwinding: Bool = true) async {
+        let wasUnwinding = unwindTask != nil
+        unwindTask?.cancel()
+        await unwindTask?.value
+        unwindTask = nil
         if let trackingName { log("Stop pressed while tracking \(trackingName)") } else if prepareTask != nil { log("Stop pressed while moving to the start point") }
         // Stop at once, then again once the loops have ended: waiting first let a goto finish
         // over slow WiFi, and a loop partway through a step can still send one more command.
@@ -515,6 +527,12 @@ final class MountSession {
         try? await normal?.stop()
         try? await special?.stop()
         status = "Stopped"
+        if unwinding, !wasUnwinding, pastNorth != nil {
+            _ = try? await readPosition()
+            unwind()
+        } else if pastNorth != nil {
+            status = String(format: "Stopped %.0f° past north. Unwind before tracking again.", pastNorth ?? 0)
+        }
     }
 
     private func cancelTracking() async {
@@ -556,7 +574,7 @@ final class MountSession {
 
     private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
                                _ run: @escaping @MainActor () async throws -> Void) async {
-        await stopAll()
+        await stopAll(unwinding: false)
         trackingName = name
         trackingObject = object
         trackingMode = mode
@@ -582,6 +600,8 @@ final class MountSession {
                 trackingObject = nil
                 trackingMode = nil
                 tracksCamera = false
+                // Ended by itself (pass over, or stopped at the overtravel limit): unwind.
+                if pastNorth != nil { unwind() }
             }
         }
     }
@@ -597,7 +617,7 @@ final class MountSession {
 
     /// Moves the mount to where the pass will first reach the start elevation, and holds there.
     func moveToStart(of pass: SatellitePass) async {
-        await stopAll()
+        await stopAll(unwinding: false)
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
             return
@@ -843,6 +863,82 @@ final class MountSession {
         return lo...(lo + 360 - 2 * settings.cableMargin)
     }
 
+    /// While tracking: the cable range, plus the overtravel past north when that's on.
+    private var trackingCableRange: ClosedRange<Double> {
+        let extra = settings.tracksPastNorth ? settings.overtravel : 0
+        return (cableRange.lowerBound - extra)...(cableRange.upperBound + extra)
+    }
+
+    // MARK: Overtravel (Special mode)
+
+    /// How far past north the mount is, in degrees, or nil inside the cable range.
+    var pastNorth: Double? {
+        guard special != nil, let axes else { return nil }
+        let m = (settings.alignment ?? AlignmentModel()).azimuthSense * axes.primary
+        let range = cableRange
+        if m > range.upperBound { return m - range.upperBound + settings.cableMargin }
+        if m < range.lowerBound { return range.lowerBound - m + settings.cableMargin }
+        return nil
+    }
+
+    private var unwindTask: Task<Void, Never>?
+    var isUnwinding: Bool { unwindTask != nil }
+    private static let windKey = "specialModeWoundPrimary"
+
+    /// Starts turning back inside the cable range, if the mount is past north.
+    func unwind() {
+        guard pastNorth != nil, unwindTask == nil, !isTracking else { return }
+        unwindTask = Task {
+            await runUnwind()
+            unwindTask = nil
+        }
+    }
+
+    /// Back the short way to just inside the cable range, keeping the altitude.
+    private func runUnwind() async {
+        guard let special, let current = axes, let past = pastNorth else { return }
+        let model = settings.alignment ?? AlignmentModel()
+        let range = cableRange
+        let m = model.azimuthSense * current.primary
+        let goalM = m > range.upperBound ? range.upperBound - 2 : range.lowerBound + 2
+        let goal = AxisPosition(primary: model.azimuthSense * goalM, secondary: current.secondary)
+        status = String(format: "Unwinding: %.0f° past north, turning back…", past)
+        log(String(format: "Unwinding from %.0f° past north: primary %.2f → %.2f", past, current.primary, goal.primary))
+        do {
+            if !(try await slewAxes(special, to: goal)) {
+                // The mount's own slew can't do it: drive back under rate control.
+                let rate = (goal.primary > current.primary ? 1.0 : -1.0) * settings.maximumAzimuthRate
+                try await special.setSpeeds(primary: rate, secondary: 0)
+                while let now = try await readPosition(), abs(now.primary - goal.primary) > 1,
+                      (goal.primary - now.primary) * rate > 0 {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                try await special.stop()
+            }
+            status = "Unwound"
+            log("Unwound")
+        } catch is CancellationError {
+            try? await special.stop()
+        } catch {
+            try? await special.stop()
+            status = "Unwinding stopped: " + describe(error)
+            log(status)
+        }
+    }
+
+    /// Keeps the wound turn across disconnects: the axis reading alone can't tell it.
+    private func rememberWind(_ current: AxisPosition) {
+        let wound = pastNorth != nil
+        let saved = UserDefaults.standard.object(forKey: Self.windKey) as? Double
+        if wound {
+            if saved.map({ abs($0 - current.primary) > 1 }) ?? true {
+                UserDefaults.standard.set(current.primary, forKey: Self.windKey)
+            }
+        } else if saved != nil {
+            UserDefaults.standard.removeObject(forKey: Self.windKey)
+        }
+    }
+
     /// While a Normal-mode goto runs: where it's headed. The position isn't read mid-slew (the
     /// mount hesitates at any command), so this is what the sky shows meanwhile.
     private(set) var slewTarget: Horizontal?
@@ -928,7 +1024,7 @@ final class MountSession {
         var controller = RateController(limits: s.limits)
         let plan: MountPlan?
         if let pass {
-            guard let p = MountPlanner(limits: s.limits, model: model).plan(pass.track(above: startAltitude)) else {
+            guard let p = MountPlanner(limits: s.trackingLimits, model: model).plan(pass.track(above: startAltitude)) else {
                 throw MountSessionError.untrackablePass
             }
             plan = p
@@ -1014,7 +1110,7 @@ final class MountSession {
                 var a = axesNear(model.mountFrame(now), model, current.primary)
                 var b = axesNear(model.mountFrame(later), model, a.primary)
                 // Past the cable stop: the same direction a turn the other way, the long way round.
-                let range = cableRange
+                let range = trackingCableRange
                 if !range.contains(model.azimuthSense * a.primary) {
                     if !unwindAgreed {
                         try await special.stop()

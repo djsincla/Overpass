@@ -72,6 +72,11 @@ struct SettingsView: View {
                     LabeledContent("Cable stop", value: "\(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))")
                     LabeledSlider("Margin", value: $model.settings.cableMargin, in: 0...20, step: 1, unit: "°")
                     Toggle("Unwind at north without asking", isOn: $model.settings.unwindsWithoutAsking)
+                    Toggle("Track past north (Special mode)", isOn: $model.settings.tracksPastNorth)
+                        .help("Smooth and camera tracking carry on past north by up to the overtravel, then the mount unwinds when tracking ends. The cables need that much slack.")
+                    if model.settings.tracksPastNorth {
+                        LabeledSlider("Overtravel", value: $model.settings.overtravel, in: 15...180, step: 15, unit: "°")
+                    }
                 } header: {
                     Text("Cable stop")
                 } footer: {

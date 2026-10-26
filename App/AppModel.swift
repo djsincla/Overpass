@@ -35,6 +35,10 @@ struct Settings: Codable, Equatable {
     var cableMargin: Double = 5
     /// When tracking reaches north: go the long way round and carry on without asking.
     var unwindsWithoutAsking = false
+    /// Special mode: tracking may carry on past north by up to `overtravel` degrees, and the
+    /// mount unwinds when tracking ends. The cables need that much slack.
+    var tracksPastNorth = false
+    var overtravel: Double = 90
     /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
     /// pointing down from a hillside, as long as the tube clears the tripod.
     var minimumAltitudeAxis: Double = -5
@@ -110,8 +114,15 @@ struct Settings: Codable, Equatable {
         return l
     }
 
+    /// The limits for tracking: past north by the overtravel when that's on (Special mode).
+    var trackingLimits: MountLimits {
+        var l = limits
+        if tracksPastNorth { l.cableMargin -= overtravel }
+        return l
+    }
+
     var planner: MountPlanner {
-        var p = MountPlanner(limits: limits, model: alignment ?? AlignmentModel())
+        var p = MountPlanner(limits: trackingLimits, model: alignment ?? AlignmentModel())
         p.tolerance = pointingTolerance
         return p
     }
