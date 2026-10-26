@@ -45,7 +45,11 @@ struct MountPanel: View {
         } message: {
             Text("Never point a telescope, finder or camera at the Sun without a proper full-aperture solar filter. It can blind you instantly and destroy equipment.")
         }
-        .onChange(of: mount.kind) { _, _ in mount.preferredMode = mount.availableModes.first ?? .step }
+        .onChange(of: mount.kind) { _, _ in mount.preferredMode = modes.first ?? .step }
+        // A satellite the mount can't follow by itself never shows Passive as the mode.
+        .onChange(of: model.targetObjectID, initial: true) { _, _ in
+            if !modes.contains(mount.preferredMode), let first = modes.first { mount.preferredMode = first }
+        }
     }
 
     // MARK: Header: connection, position, STOP
@@ -136,17 +140,18 @@ struct MountPanel: View {
         let target = model.targetObject
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if mount.availableModes.count > 1 {
+                if modes.count > 1 {
                     Picker("Mode", selection: Bindable(mount).preferredMode) {
-                        ForEach(mount.availableModes) { Text($0.rawValue).tag($0) }
+                        ForEach(modes) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
                     .help(modeExplanation)
                     .disabled(mount.isTracking)
-                } else {
-                    Chip(text: "Smooth", systemImage: "waveform.path", tint: Theme.accent).help(modeExplanation)
+                } else if let only = modes.first {
+                    Chip(text: only.rawValue, systemImage: only == .smooth ? "waveform.path" : "stairs", tint: Theme.accent)
+                        .help(modeExplanation)
                 }
                 if mount.preferredMode == .step && mount.kind?.isSpecialMode == false {
                     Stepper(value: $model.settings.stepInterval, in: max(0.5, model.settings.normalModePeriod)...10, step: 0.5) {
@@ -294,6 +299,13 @@ struct MountPanel: View {
         if model.settings.alignmentFromMount { return "the mount's own coordinates" }
         let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
         return "\(model.settings.alignmentStars) stars\(rms)"
+    }
+
+    /// The modes this connection offers for the target: Passive only for what the mount can
+    /// follow by itself (not a satellite, apart from a geostationary one).
+    private var modes: [TrackingMode] {
+        let target = model.targetObject
+        return model.mount.availableModes.filter { $0 != .passive || target == nil || target?.passiveTracking != nil }
     }
 
     private var modeExplanation: String {
