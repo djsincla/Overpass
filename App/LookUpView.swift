@@ -161,12 +161,16 @@ private struct LookUpOverlay: View {
         for star in BrightStars.all {
             let h = observer.horizontal(ofEarthFixed: star.earthFixedPosition(at: time))
             guard h.altitude > -2, let p = sky.point(h) else { continue }
-            let size = max(2, 5 - star.magnitude)
+            // Big enough to find against the camera's picture, with a soft halo.
+            let size = max(4, 9 - 1.5 * star.magnitude)
+            let glow = size * 2.2
+            context.fill(Path(ellipseIn: CGRect(x: p.x - glow / 2, y: p.y - glow / 2, width: glow, height: glow)),
+                         with: .color(.white.opacity(0.18)))
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
-                         with: .color(.white.opacity(0.85)))
-            if star.magnitude < 1.5 {
-                context.draw(Text(star.name).font(.caption2).foregroundStyle(.white.opacity(0.55)),
-                             at: CGPoint(x: p.x, y: p.y + size / 2 + 7))
+                         with: .color(.white))
+            if star.magnitude < 2 {
+                context.draw(Text(star.name).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.75)),
+                             at: CGPoint(x: p.x, y: p.y + glow / 2 + 8))
             }
         }
     }
@@ -177,14 +181,17 @@ private struct LookUpOverlay: View {
             let h = observer.horizontal(ofEarthFixed: body.earthFixedPosition(at: time))
             guard h.altitude > -2, let p = sky.point(h) else { continue }
             let (size, color): (CGFloat, Color) = switch body {
-            case .sun: (18, .yellow)
-            case .moon: (16, Color(white: 0.9))
-            default: (7, .orange)
+            case .sun: (30, .yellow)
+            case .moon: (28, Color(white: 0.92))
+            default: (14, .orange)
             }
+            let glow = size * 1.8
+            context.fill(Path(ellipseIn: CGRect(x: p.x - glow / 2, y: p.y - glow / 2, width: glow, height: glow)),
+                         with: .color(color.opacity(0.22)))
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
                          with: .color(color))
-            context.draw(Text(body.name).font(.caption).foregroundStyle(color),
-                         at: CGPoint(x: p.x, y: p.y + size / 2 + 9))
+            context.draw(Text(body.name).font(.subheadline.bold()).foregroundStyle(color),
+                         at: CGPoint(x: p.x, y: p.y + glow / 2 + 10))
         }
     }
 
