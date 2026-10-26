@@ -492,6 +492,15 @@ final class MountSession {
 
     /// Stops everything: tracking, slews and jogs.
     func stopAll() async {
+        // Stop at once, then again once the loops have ended: waiting first let a goto finish
+        // over slow WiFi, and a loop partway through a step can still send one more command.
+        let wasMoving = trackingTask != nil || prepareTask != nil
+        if wasMoving {
+            prepareTask?.cancel()
+            trackingTask?.cancel()
+            try? await normal?.stop()
+            try? await special?.stop()
+        }
         await cancelTracking()
         try? await normal?.stop()
         try? await special?.stop()
