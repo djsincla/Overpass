@@ -396,7 +396,9 @@ struct ConjunctionMap: View {
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls {
             MapScaleView()
+            #if os(macOS)
             MapZoomStepper()
+            #endif
             MapCompass()
         }
         .onAppear { frame(centre: centre, radius: radius) }

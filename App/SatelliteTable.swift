@@ -74,6 +74,9 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
     static let byImportance: [SatelliteColumn] = [.age, .launched, .size, .period, .rcs, .dimensions, .span,
                                                   .owner, .type, .perigee, .apogee, .inclination, .number, .cospar]
 
+    /// The name column grows to this and no further, so the numbers sit next to it on a wide screen.
+    static let nameWidth: CGFloat = 260
+
     /// The columns that fit, in display order. The name keeps at least 170 points.
     static func fitting(_ width: CGFloat) -> [SatelliteColumn] {
         var room = width - 170 - 70  // the name, the tick and the list's own insets
@@ -165,10 +168,11 @@ struct SatelliteColumnHeader: View {
     var body: some View {
         HStack(spacing: 8) {
             Color.clear.frame(width: 20, height: 1)
-            title(.name).frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+            title(.name).frame(minWidth: 120, maxWidth: SatelliteColumn.nameWidth, alignment: .leading)
             ForEach(columns) { column in
                 title(column).frame(width: column.width, alignment: column.numeric ? .trailing : .leading)
             }
+            Spacer(minLength: 0)
         }
         .font(.caption.weight(.semibold))
     }
@@ -206,7 +210,7 @@ struct SatelliteColumnRow: View {
                 .foregroundStyle(selected ? Color.accentColor : .secondary)
                 .frame(width: 20)
             Text(satellite.name).lineLimit(1).truncationMode(.tail)
-                .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+                .frame(minWidth: 120, maxWidth: SatelliteColumn.nameWidth, alignment: .leading)
                 .help(satellite.name)
             ForEach(columns) { column in
                 Text(column.text(satellite, info))
@@ -215,6 +219,7 @@ struct SatelliteColumnRow: View {
                     .lineLimit(1)
                     .frame(width: column.width, alignment: column.numeric ? .trailing : .leading)
             }
+            Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
     }

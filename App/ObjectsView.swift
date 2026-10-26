@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 
 /// Everything you can select: the Sun, Moon and planets, bright stars, and satellites by source.
 /// What's selected here is what gets predicted, highlighted and offered for tracking.
+///
+/// A sidebar of pages (the selection, the solar system, the stars, each satellite source) with
+/// the chosen page on the right. Turning sources on and off lives in Manage sources.
 struct ObjectsView: View {
     @Environment(AppModel.self) private var model
     @State private var search = ""
@@ -11,126 +14,275 @@ struct ObjectsView: View {
     @State private var maxAgeDays: Double = 0
     /// Each source's column sort, saved between launches.
     @AppStorage("objects.columnSorts") private var savedSorts = Data()
+    @AppStorage("objects.page") private var savedPage = Page.selected.rawValue
+    @State private var page: Page?
     @State private var listWidth: CGFloat = 900
     @State private var addingURL = false
     @State private var importing = false
+    @State private var managingSources = false
     @State private var confirmingSun = false
-    /// Sections the user has opened or closed, relative to their default.
-    @State private var flipped: Set<String> = []
     /// Unticked while "Selected only" is on: kept visible so a mis-tap can be undone.
     @State private var recentlyUnselected: Set<String> = []
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle("Selected only", isOn: $selectedOnly)
-                        .onChange(of: selectedOnly) { _, _ in recentlyUnselected = [] }
-                    Picker("TLE age", selection: $maxAgeDays) {
-                        Text("Any").tag(0.0)
-                        Text("Under 1 day").tag(1.0)
-                        Text("Under 3 days").tag(3.0)
-                        Text("Under 7 days").tag(7.0)
-                    }
-                } footer: {
-                    Text("\(model.selected.count) selected. Passes are predicted for selected satellites; selected objects are marked on the sky.\n\nSearch matches names, numbers, owners and launch dates, and compares attributes: launched>2020, period<100, perigee>500, inc>50, rcs>10, span>20, size=large, owner=PRC, type=debris.")
-                }
+    /// A sidebar entry.
+    enum Page: Hashable {
+        case selected, solarSystem, stars
+        case source(String)
 
-                Section {
-                    ForEach(model.groups) { group in SourceRow(group: group) }
-                } header: {
-                    Text("TLE sources")
-                } footer: {
-                    Text("Turn a source on to list its satellites below. Turning one off keeps it here, so you can turn it back on.")
-                }
-
-                Section("Solar system") {
-                    ForEach(SolarSystemBody.allCases, id: \.self) { body in
-                        let object = SkyObject.body(body)
-                        if visible(object) { selectRow(object) }
-                    }
-                }
-
-                Section {
-                    if isOpen("stars", byDefault: false) {
-                        ForEach(BrightStars.all, id: \.name) { star in
-                            let object = SkyObject.star(star)
-                            if visible(object) {
-                                selectRow(object, detail: String(format: "mag %.1f", star.magnitude))
-                            }
-                        }
-                    }
-                } header: {
-                    DisclosureHeader(open: isOpen("stars", byDefault: false), toggle: { flip("stars") }) {
-                        Text("Bright stars")
-                    }
-                }
-
-                ForEach(model.groups.filter { $0.source.enabled }) { group in
-                    sourceSection(group)
-                }
-
+        var rawValue: String {
+            switch self {
+            case .selected: "selected"
+            case .solarSystem: "solar"
+            case .stars: "stars"
+            case .source(let id): "source:" + id
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
-            .navigationTitle("Objects")
-            .searchable(text: $search, prompt: "Name, number, or launched>2020, period<100…")
-            .refreshable { await model.refreshDue() }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Refresh all sources") { Task { await model.refreshAll() } }
-                        Button("Add a TLE URL…") { addingURL = true }
-                        Button("Import a TLE file…") { importing = true }
-                        Divider()
-                        Button("Deselect satellites that never rise here") { Task { await model.deselectNeverRising() } }
-                            .disabled(model.isPruning)
-                        Button("Clear selection", role: .destructive) { model.selected = [] }
-                    } label: {
-                        Label("More", systemImage: model.isRefreshing ? "arrow.triangle.2.circlepath" : "ellipsis.circle")
-                    }
-                }
-            }
-            .sheet(isPresented: $addingURL) { AddSourceSheet() }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.plainText, .text, .data]) { result in
-                if case .success(let url) = result { Task { await model.importFile(url) } }
-            }
-            .alert("Overpass", isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
-                Button("OK") { model.message = nil }
-            } message: {
-                Text(model.message ?? "")
-            }
-            .alert("Select the Sun?", isPresented: $confirmingSun) {
-                Button("I'll use a solar filter") { model.toggle(SkyObject.body(.sun).id) }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Only point a telescope or camera at the Sun with a proper full-aperture solar filter fitted.")
+        }
+
+        init(rawValue: String) {
+            switch rawValue {
+            case "solar": self = .solarSystem
+            case "stars": self = .stars
+            case let s where s.hasPrefix("source:"): self = .source(String(s.dropFirst(7)))
+            default: self = .selected
             }
         }
     }
 
-    // MARK: Sections
+    var body: some View {
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
+        } detail: {
+            NavigationStack {
+                detail
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+            }
+        }
+        .searchable(text: $search, placement: .sidebar, prompt: "Name, number, launched>2020…")
+        .onAppear { if page == nil { page = Page(rawValue: savedPage) } }
+        .onChange(of: page) { _, new in
+            if let new { savedPage = new.rawValue }
+            recentlyUnselected = []
+        }
+        .sheet(isPresented: $managingSources) { ManageSourcesSheet(addingURL: $addingURL, importing: $importing) }
+        .sheet(isPresented: $addingURL) { AddSourceSheet() }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.plainText, .text, .data]) { result in
+            if case .success(let url) = result { Task { await model.importFile(url) } }
+        }
+        .alert("Overpass", isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
+            Button("OK") { model.message = nil }
+        } message: {
+            Text(model.message ?? "")
+        }
+        .alert("Select the Sun?", isPresented: $confirmingSun) {
+            Button("I'll use a solar filter") { model.toggle(SkyObject.body(.sun).id) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only point a telescope or camera at the Sun with a proper full-aperture solar filter fitted.")
+        }
+    }
 
-    private func sourceSection(_ group: SourceGroup) -> some View {
-        let sort = sortBinding(group.id)
-        let shown = sort.wrappedValue.sorted(group.satellites.filter { visible(.satellite($0)) }) { model.info(.satellite($0)) }
-        let columns = SatelliteColumn.fitting(listWidth)
-        let limit = search.isEmpty ? 300 : 2000
-        // Big sources (Starlink, all active) start closed so they don't swamp the list.
-        let open = isOpen(group.id, byDefault: group.satellites.count <= 300)
-        return Section {
-            if open {
-                SatelliteColumnHeader(columns: columns, sort: sort)
-                ForEach(shown.prefix(limit), id: \.noradID) { sat in
-                    satelliteRow(sat, columns: columns)
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        List(selection: $page) {
+            Section {
+                NavigationLink(value: Page.selected) {
+                    Label("Selected", systemImage: "checkmark.circle").badge(model.selected.count)
                 }
-                if shown.count > limit {
-                    Text("\(shown.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
+                NavigationLink(value: Page.solarSystem) {
+                    Label("Solar system", systemImage: "sun.max")
+                        .badge(SolarSystemBody.allCases.filter { model.isSelected(SkyObject.body($0).id) }.count)
+                }
+                NavigationLink(value: Page.stars) {
+                    Label("Bright stars", systemImage: "sparkles")
+                        .badge(BrightStars.all.filter { model.isSelected(SkyObject.star($0).id) }.count)
                 }
             }
-        } header: {
-            DisclosureHeader(open: open, toggle: { flip(group.id) }) {
+            Section("Satellites") {
+                ForEach(model.groups.filter { $0.source.enabled }) { group in
+                    NavigationLink(value: Page.source(group.id)) {
+                        Label {
+                            Text(group.source.name)
+                        } icon: {
+                            Image(systemName: group.status?.lastError != nil ? "exclamationmark.triangle" : "antenna.radiowaves.left.and.right")
+                                .foregroundStyle(group.status?.lastError != nil ? .orange : Color.accentColor)
+                        }
+                        .badge(group.satellites.count)
+                    }
+                    .contextMenu {
+                        Button("Refresh now") { Task { await model.refresh(group.id) } }
+                        Button("Turn off") { Task { await model.setEnabled(group.id, false) } }
+                    }
+                }
+                Button { managingSources = true } label: {
+                    Label("Manage sources…", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .navigationTitle("Objects")
+        .refreshable { await model.refreshDue() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Manage sources…") { managingSources = true }
+                    Button("Refresh all sources") { Task { await model.refreshAll() } }
+                    Button("Add a TLE URL…") { addingURL = true }
+                    Button("Import a TLE file…") { importing = true }
+                    Divider()
+                    Button("Deselect satellites that never rise here") { Task { await model.deselectNeverRising() } }
+                        .disabled(model.isPruning)
+                    Button("Clear selection", role: .destructive) { model.selected = [] }
+                } label: {
+                    Label("More", systemImage: model.isRefreshing ? "arrow.triangle.2.circlepath" : "ellipsis.circle")
+                }
+            }
+        }
+    }
+
+    // MARK: Detail
+
+    @ViewBuilder
+    private var detail: some View {
+        if !search.isEmpty {
+            searchResults
+        } else {
+            switch page ?? .selected {
+            case .selected: selectedPage
+            case .solarSystem: bodiesPage
+            case .stars: starsPage
+            case .source(let id):
+                if let group = model.groups.first(where: { $0.id == id && $0.source.enabled }) {
+                    sourcePage(group)
+                } else {
+                    ContentUnavailableView("Source turned off", systemImage: "antenna.radiowaves.left.and.right.slash",
+                                           description: Text("Turn it on again in Manage sources."))
+                }
+            }
+        }
+    }
+
+    private var selectedPage: some View {
+        let bodies = SolarSystemBody.allCases.map(SkyObject.body).filter { model.isSelected($0.id) || recentlyUnselected.contains($0.id) }
+        let stars = BrightStars.all.map(SkyObject.star).filter { model.isSelected($0.id) || recentlyUnselected.contains($0.id) }
+        let sats = model.satellites.filter { model.isSelected("sat:\($0.noradID)") || recentlyUnselected.contains("sat:\($0.noradID)") }
+        return List {
+            if model.selected.isEmpty && recentlyUnselected.isEmpty {
+                ContentUnavailableView("Nothing selected", systemImage: "checkmark.circle",
+                                       description: Text("Pick satellites from a source, or the Sun, Moon and planets. Passes are predicted for what's selected, and it's marked on the sky."))
+            }
+            if !bodies.isEmpty || !stars.isEmpty {
+                Section("Sky") {
+                    ForEach(bodies + stars, id: \.id) { selectRow($0) }
+                }
+            }
+            if !sats.isEmpty {
+                satelliteSection(sats, sortID: "selected") {
+                    Text("Satellites")
+                }
+            }
+        }
+        .navigationTitle("Selected")
+        .toolbar { detailToolbar(showsSelectedOnly: false) }
+    }
+
+    private var bodiesPage: some View {
+        List {
+            Section {
+                ForEach(SolarSystemBody.allCases, id: \.self) { body in
+                    let object = SkyObject.body(body)
+                    if visible(object) { selectRow(object) }
+                }
+            } footer: {
+                Text("Selected bodies are marked on the sky and can be tracked.")
+            }
+        }
+        .navigationTitle("Solar system")
+        .toolbar { detailToolbar(showsAge: false) }
+    }
+
+    private var starsPage: some View {
+        List {
+            ForEach(BrightStars.all, id: \.name) { star in
+                let object = SkyObject.star(star)
+                if visible(object) { selectRow(object, detail: String(format: "mag %.1f", star.magnitude)) }
+            }
+        }
+        .navigationTitle("Bright stars")
+        .toolbar { detailToolbar(showsAge: false) }
+    }
+
+    private func sourcePage(_ group: SourceGroup) -> some View {
+        let shown = group.satellites.filter { visible(.satellite($0)) }
+        return List {
+            Section {
                 SourceHeader(group: group, shown: shown, filtered: shown.count < group.satellites.count,
                              clearFilters: clearFilters)
+            }
+            satelliteSection(shown, sortID: group.id) { EmptyView() }
+        }
+        .navigationTitle(group.source.name)
+        .toolbar { detailToolbar() }
+    }
+
+    /// Everything that matches, from every page at once.
+    private var searchResults: some View {
+        let sky = (SolarSystemBody.allCases.map(SkyObject.body) + BrightStars.all.map(SkyObject.star)).filter(visible)
+        let sats = model.satellites.filter { visible(.satellite($0)) }
+        return List {
+            if sky.isEmpty && sats.isEmpty {
+                ContentUnavailableView.search(text: search)
+            }
+            if !sky.isEmpty {
+                Section("Sky") { ForEach(sky, id: \.id) { selectRow($0) } }
+            }
+            if !sats.isEmpty {
+                satelliteSection(sats, sortID: "search") { Text("Satellites · \(sats.count)") }
+            }
+        }
+        .navigationTitle("Search")
+        .toolbar { detailToolbar() }
+    }
+
+    /// A sortable table of satellites, lined up in columns that fit the width.
+    private func satelliteSection<Header: View>(_ satellites: [SatelliteTarget], sortID: String,
+                                                @ViewBuilder header: () -> Header) -> some View {
+        let sort = sortBinding(sortID)
+        let sorted = sort.wrappedValue.sorted(satellites) { model.info(.satellite($0)) }
+        let columns = SatelliteColumn.fitting(listWidth)
+        let limit = search.isEmpty ? 500 : 2000
+        return Section {
+            SatelliteColumnHeader(columns: columns, sort: sort)
+            ForEach(sorted.prefix(limit), id: \.noradID) { sat in
+                satelliteRow(sat, columns: columns)
+            }
+            if sorted.count > limit {
+                Text("\(sorted.count - limit) more; search to narrow down").font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            header()
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func detailToolbar(showsSelectedOnly: Bool = true, showsAge: Bool = true) -> some ToolbarContent {
+        ToolbarItemGroup(placement: .secondaryAction) {
+            if showsSelectedOnly {
+                Toggle(isOn: $selectedOnly) { Label("Selected only", systemImage: "checkmark.circle") }
+                    .onChange(of: selectedOnly) { _, _ in recentlyUnselected = [] }
+                    .help("Show only what's selected")
+            }
+            if showsAge {
+                Picker(selection: $maxAgeDays) {
+                    Text("Any TLE age").tag(0.0)
+                    Text("TLE under 1 day").tag(1.0)
+                    Text("TLE under 3 days").tag(3.0)
+                    Text("TLE under 7 days").tag(7.0)
+                } label: {
+                    Label("TLE age", systemImage: "clock")
+                }
+                .help("Hide satellites whose elements are older than this")
             }
         }
     }
@@ -148,7 +300,7 @@ struct ObjectsView: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    private func selectRow(_ object: SkyObject, detail: String? = nil, age: TimeInterval? = nil) -> some View {
+    private func selectRow(_ object: SkyObject, detail: String? = nil) -> some View {
         let on = model.isSelected(object.id)
         return Button {
             if on { recentlyUnselected.insert(object.id) }
@@ -162,7 +314,6 @@ struct ObjectsView: View {
                     if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
                 }
                 Spacer()
-                if let age { ElementAge(seconds: age) }
             }
             .contentShape(Rectangle())
         }
@@ -205,38 +356,37 @@ struct ObjectsView: View {
         if maxAgeDays > 0, case .satellite(let s) = object, s.elementAge() > maxAgeDays * 86_400 { return false }
         return true
     }
-
-    /// Searching or showing only the selection opens everything, so matches are never hidden.
-    private func isOpen(_ id: String, byDefault: Bool) -> Bool {
-        if !search.isEmpty || selectedOnly { return true }
-        return byDefault != flipped.contains(id)
-    }
-
-    private func flip(_ id: String) {
-        if flipped.contains(id) { flipped.remove(id) } else { flipped.insert(id) }
-    }
 }
 
-/// A section header with its own open/close chevron, so it works the same on every platform.
-struct DisclosureHeader<Label: View>: View {
-    let open: Bool
-    let toggle: () -> Void
-    @ViewBuilder let label: Label
+/// Every TLE source with its switch, plus adding one by URL or file.
+struct ManageSourcesSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Binding var addingURL: Bool
+    @Binding var importing: Bool
 
     var body: some View {
-        Button(action: toggle) {
-            HStack {
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(open ? 90 : 0))
-                    .font(.caption.bold())
-                    .frame(width: 14)
-                label
+        NavigationStack {
+            Form {
+                Section {
+                    ForEach(model.groups) { group in SourceRow(group: group) }
+                } footer: {
+                    Text("A source that's on appears in the sidebar with its satellites. Turning one off keeps it here, so you can turn it back on.")
+                }
+                Section {
+                    Button("Add a TLE URL…") { dismiss(); addingURL = true }
+                    Button("Import a TLE file…") { dismiss(); importing = true }
+                } footer: {
+                    Text("Search matches names, numbers, owners and launch dates, and compares attributes: launched>2020, period<100, perigee>500, inc>50, rcs>10, span>20, size=large, owner=PRC, type=debris.")
+                }
             }
-            .contentShape(Rectangle())
+            .formStyle(.grouped)
+            .navigationTitle("TLE sources")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityValue(open ? "Expanded" : "Collapsed")
-        .accessibilityHint(open ? "Collapses the section" : "Expands the section")
+        .frame(minWidth: 460, minHeight: 520)
     }
 }
 
