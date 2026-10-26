@@ -30,6 +30,9 @@ struct Settings: Codable, Equatable {
 
     var cableStopAzimuth: Double = 0
     var cableMargin: Double = 5
+    /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
+    /// pointing down from a hillside, as long as the tube clears the tripod.
+    var minimumAltitudeAxis: Double = -5
     /// Above 90 allows pointing over the top.
     var maximumAltitudeAxis: Double = 90
     var maximumAzimuthRate: Double = 6
@@ -90,6 +93,7 @@ struct Settings: Codable, Equatable {
         l.cableStopAzimuth = cableStopAzimuth
         l.cableMargin = cableMargin
         l.maximumAltitudeAxis = maximumAltitudeAxis
+        l.minimumAltitudeAxis = minimumAltitudeAxis
         l.maximumAzimuthRate = maximumAzimuthRate
         l.maximumAltitudeRate = maximumAltitudeRate
         return l

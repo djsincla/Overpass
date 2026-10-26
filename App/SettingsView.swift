@@ -83,6 +83,8 @@ struct SettingsView: View {
                     if model.settings.maximumAltitudeAxis > 90 {
                         LabeledSlider("Altitude axis up to", value: $model.settings.maximumAltitudeAxis, in: 95...180, step: 5, unit: "°")
                     }
+                    LabeledSlider("Point down to", value: $model.settings.minimumAltitudeAxis, in: -45...10, step: 1, unit: "°")
+                        .help("The lowest altitude Overpass will drive the mount to. Below 0° points under the horizon (from a hillside, or at the ground for testing); check the tube clears the tripod and anything around it.")
                     LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
                     Picker("Normal mode updates", selection: $model.settings.normalModePeriod) {
                         ForEach([0.5, 1, 2, 5], id: \.self) { period in
