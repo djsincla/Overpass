@@ -637,6 +637,27 @@ final class AppModel {
         }
     }
 
+    /// Takes the latitude and longitude from the mount: its GPS fix, or what was last set in it.
+    /// The mount doesn't report a height, so that stays as it was.
+    func useMountLocation() async {
+        do {
+            let site = try await mount.site()
+            guard site.hasFix || site.latitude != 0 || site.longitude != 0 else {
+                message = "The mount has no GPS fix and no location set in it."
+                return
+            }
+            settings.latitude = site.latitude
+            settings.longitude = site.longitude
+            settings.hasLocation = true
+            let place = String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
+            message = site.hasFix
+                ? "Location from the mount's GPS: \(place)."
+                : "The mount's GPS has no fix, so this is the location last set in the mount: \(place)."
+        } catch {
+            message = "Couldn't read the mount's location: " + ((error as? MountSessionError)?.message ?? error.localizedDescription)
+        }
+    }
+
     // MARK: Persistence
 
     func save(_ value: some Encodable, _ key: String) {

@@ -362,6 +362,15 @@ final class MountSession {
                             secondary: a.axes.secondary + f * (b.axes.secondary - a.axes.secondary))
     }
 
+    /// Whether the mount's own location can be read: Normal mode, over WiFi or USB.
+    var canReadSite: Bool { normal != nil }
+
+    /// The mount's latitude and longitude: its GPS fix, or what was last set in it.
+    func site() async throws -> MountSite {
+        guard let normal else { throw MountSessionError.needsNormalMode }
+        return try await normal.site()
+    }
+
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {
         if let normal {
@@ -1711,7 +1720,7 @@ final class MountSession {
 }
 
 enum MountSessionError: Error {
-    case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
+    case inSpecialMode, noSerialPort, needsWiFi, needsNormalMode, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
 
     var message: String {
@@ -1719,6 +1728,7 @@ enum MountSessionError: Error {
         case .inSpecialMode: "The mount is in Special mode, so WiFi won't work. Connect by USB, or switch it back."
         case .noSerialPort: "Choose the mount's USB port in Settings."
         case .needsWiFi: "Passive and Step tracking need the WiFi connection."
+        case .needsNormalMode: "Connect over WiFi or USB Normal mode to read the mount's location."
         case .needsUSB: "Smooth tracking needs the USB connection (Special mode)."
         case .notAligned: "Align on at least two stars first."
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
