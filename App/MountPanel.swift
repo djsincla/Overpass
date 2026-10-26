@@ -313,6 +313,9 @@ struct MountPanel: View {
 struct TraceView: View {
     @Environment(AppModel.self) private var model
     @State private var exporting = false
+    /// Built when Export is pressed: this view redraws twice a second, and building the CSV of
+    /// minutes of samples each time stalled the tracking loop.
+    @State private var csv = CSVFile(text: "")
 
     var body: some View {
         let all = model.mount.trace
@@ -327,7 +330,10 @@ struct TraceView: View {
                 Spacer()
                 Text(String(format: "median %.0f″ · worst %.0f″ · longest loop %.2f s", median, errors.last ?? 0, gaps.max() ?? 0))
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                Button { exporting = true } label: { Image(systemName: "square.and.arrow.down") }
+                Button {
+                    csv = CSVFile(text: model.mount.traceCSV)
+                    exporting = true
+                } label: { Image(systemName: "square.and.arrow.down") }
                     .buttonStyle(.borderless)
                     .help("Save the last \(Int(MountSession.traceSpan / 60)) minutes of tracking as CSV")
                     .accessibilityLabel("Export trace")
@@ -360,7 +366,7 @@ struct TraceView: View {
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
             .accessibilityLabel(String(format: "Tracking error over the last minute, median %.0f arc-seconds", median))
         }
-        .fileExporter(isPresented: $exporting, document: CSVFile(text: model.mount.traceCSV),
+        .fileExporter(isPresented: $exporting, document: csv,
                       contentType: .commaSeparatedText, defaultFilename: "overpass-trace") { _ in }
     }
 }

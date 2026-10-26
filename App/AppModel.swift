@@ -605,8 +605,13 @@ final class AppModel {
     }
 
     func plan(for pass: SatellitePass) -> MountPlan? {
-        settings.planner.plan(pass.track)
+        // The sky redraws every second; planning a pass each time stalled the tracking loop.
+        if let cached = planCache, cached.passID == pass.id, cached.settings == settings { return cached.plan }
+        let plan = settings.planner.plan(pass.track)
+        planCache = (pass.id, settings, plan)
+        return plan
     }
+    @ObservationIgnored private var planCache: (passID: String, settings: Settings, plan: MountPlan?)?
 
     // MARK: Location
 
