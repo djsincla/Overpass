@@ -43,6 +43,11 @@ struct ContentView: View {
         TabView {
             ObserveView()
                 .tabItem { Label("Observe", systemImage: "scope") }
+            #if os(iOS)
+            // Second, so it isn't one of the tabs an iPhone tucks under More.
+            LookUpView()
+                .tabItem { Label("Look up", systemImage: "binoculars") }
+            #endif
             ObjectsView()
                 .tabItem { Label("Objects", systemImage: "checklist") }
             ConjunctionsView()
@@ -50,8 +55,6 @@ struct ContentView: View {
             CameraTrackView()
                 .tabItem { Label("Camera", systemImage: "camera.viewfinder") }
             #if os(iOS)
-            LookUpView()
-                .tabItem { Label("Look up", systemImage: "binoculars") }
             // On the Mac, Settings is in the app menu (⌘,).
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }

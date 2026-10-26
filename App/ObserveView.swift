@@ -16,6 +16,7 @@ struct ObserveView: View {
     @AppStorage("observe.layout") private var layout = Layout.listLeft
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     /// How the sky, the list and the mount panel sit on a wide screen.
@@ -41,27 +42,24 @@ struct ObserveView: View {
             Group {
                 if model.settings.hasLocation {
                     GeometryReader { proxy in
-                        if proxy.size.width > 760 {
+                        if proxy.size.width > 760 && proxy.size.height > 560 {
                             // Mac and iPad: arranged as chosen in the Layout menu, dividers draggable.
                             wideLayout
+                        } else if proxy.size.width > proxy.size.height {
+                            // iPhone on its side: the sky as tall as the screen, the switchable panel beside it.
+                            HStack(spacing: 0) {
+                                dome
+                                    .padding(8)
+                                    .frame(width: min(proxy.size.height, proxy.size.width * 0.5))
+                                Divider()
+                                switchablePanel
+                            }
                         } else {
                             // iPhone: dome over the switchable panel, divider draggable.
                             ResizableSplit(axis: .vertical, fraction: $phoneDomeFraction, range: 0.2...0.7) {
                                 dome.padding(.horizontal)
                             } second: {
-                                VStack(spacing: 0) {
-                                    Picker("Panel", selection: $panel) {
-                                        ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
-                                    }
-                                    .pickerStyle(.segmented)
-                                    .labelsHidden()
-                                    .padding(8)
-                                    if panel == .mount {
-                                        ScrollView { MountPanel().padding(12) }
-                                    } else {
-                                        list(panel)
-                                    }
-                                }
+                                switchablePanel
                             }
                         }
                     }
@@ -70,6 +68,10 @@ struct ObserveView: View {
                 }
             }
             .navigationTitle("Overpass")
+            #if os(iOS)
+            // On a phone on its side the large title takes a quarter of the height.
+            .navigationBarTitleDisplayMode(verticalSizeClass == .compact ? .inline : .automatic)
+            #endif
             .toolbar {
                 @Bindable var model = model
                 ToolbarItem(placement: .primaryAction) {
@@ -131,7 +133,7 @@ struct ObserveView: View {
     /// The Layout menu only matters where the screen is wide enough for side-by-side panels.
     private var isWide: Bool {
         #if os(iOS)
-        sizeClass == .regular
+        sizeClass == .regular && verticalSizeClass != .compact
         #else
         true
         #endif
@@ -170,6 +172,23 @@ struct ObserveView: View {
             listPane
         } second: {
             ScrollView { MountPanel().padding(12) }
+        }
+    }
+
+    /// iPhone: Passes, Objects or the mount panel, switched at the top.
+    private var switchablePanel: some View {
+        VStack(spacing: 0) {
+            Picker("Panel", selection: $panel) {
+                ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(8)
+            if panel == .mount {
+                ScrollView { MountPanel().padding(12) }
+            } else {
+                list(panel)
+            }
         }
     }
 
