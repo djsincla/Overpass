@@ -16,11 +16,13 @@ For the longest time I have been running Heavenscape SkyTrack on a Windows lapto
 
 **Tracking.** Three modes, depending on how you are connected:
 
-- **Passive** (WiFi): one goto, then the mount's own sidereal, lunar or solar rate. Fine for the Moon, planets and geostationary satellites.
-- **Step** (WiFi): a goto to where the target will be, repeated every couple of seconds. This is what I used for amateur radio passes for years, and it is fine for an antenna and jumpy in a telescope.
-- **Smooth** (USB): both axis rates varied about seven times a second against a planned track. On a HAZ46 it settles to a median error of about 2″.
+- **Passive** (WiFi or USB Normal mode): one goto, then the mount's own sidereal, lunar or solar rate. Fine for stars, planets, the Moon, the Sun and geostationary satellites, and not offered for any other satellite.
+- **Step** (WiFi or USB Normal mode): a goto to where the target will be, repeated every couple of seconds. This is what I used for amateur radio passes for years, and it is fine for an antenna and jumpy in a telescope.
+- **Smooth** (USB Special Mode): both axis rates varied about seven times a second against a planned track. On a HAZ46 it settles to a median error of about 2″.
 
-**Cable stop.** The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and Overpass plans every slew and pass to match, going the long way round when it has to. Over-the-top flips are there for passes close to the zenith.
+[docs/Tracking-modes.md](docs/Tracking-modes.md) explains Passive and Step in detail: what each sends to the mount, how accurate it is, and what happens at north and when the connection drops.
+
+**Cable stop.** The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and Overpass plans every slew and pass to match, going the long way round when it has to. When a pass reaches north the mount stops and Overpass asks whether to unwind and carry on. Over USB there is an option to track up to 90° past north, unwinding when tracking ends. Over-the-top flips are there for passes close to the zenith.
 
 **Conjunctions.** Space station transits of the Moon and Sun around any place you choose, out to two weeks, drawn on a map with the band where the transit is visible and the time along its centreline. Watch an event and the app refreshes the station elements and recalculates it as the day gets closer, showing how far it moved.
 
@@ -28,7 +30,7 @@ For the longest time I have been running Heavenscape SkyTrack on a Windows lapto
 
 ## Connecting to the mount
 
-WiFi uses iOptron's normal command set on the mount's own network (10.10.100.254, port 8899 by default) and gives you Passive and Step tracking.
+WiFi uses iOptron's normal command set on the mount's own network (10.10.100.254, port 8899 by default) and gives you Passive and Step tracking. USB in Normal mode does the same over the cable.
 
 USB uses iOptron's Special Mode, which only works over the USB port, and gives you Smooth tracking. On a Mac the HAZ46 cable appears as `/dev/cu.PL2303G-USBtoUART210` through Prolific's driver. An iPhone or iPad needs a relay on the mount's USB port, such as a Raspberry Pi Zero 2 W running `ser2net`, reached over TCP.
 
@@ -58,7 +60,7 @@ Sun, Moon and planet positions follow Meeus's *Astronomical Algorithms* and are 
 
 ## Status
 
-Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode and Smooth tracking at about 2″. Not yet tested on hardware: the iOS build, the USB relay, camera guiding, the route around the cable stop, and the fix for the 5 second timing glitch, which I ran out of battery before trying.
+Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position. Not yet tested on hardware: the iOS build, the USB relay, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, and the fix for the 5 second timing glitch, which I ran out of battery before trying.
 
 ## Installing
 
