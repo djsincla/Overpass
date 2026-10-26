@@ -180,6 +180,12 @@ public struct AxisUnwrapper: Sendable {
         lastRaw = raw
     }
 
+    /// Starts on the turn nearest `reference`: a position remembered from before, past the cable stop.
+    public init(raw: Double, near reference: Double) {
+        unwrapped = reference + wrap180(raw - reference)
+        lastRaw = raw
+    }
+
     public mutating func update(raw: Double) -> Double {
         unwrapped += wrap180(raw - lastRaw)
         lastRaw = raw

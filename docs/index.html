@@ -116,7 +116,7 @@
     </div>
     <div class="card">
       <h3>Cable stop</h3>
-      <p>The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and every slew and pass is planned to match, going the long way round when it has to. Over-the-top flips are there for passes close to the zenith.</p>
+      <p>The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and every slew and pass is planned to match, going the long way round when it has to. When a pass reaches north the mount stops and Overpass asks whether to unwind and carry on, or does it without asking if you set that. Over USB there is an option to track up to 90° past north, with the mount unwinding when tracking ends, as long as your cables have the slack. Over-the-top flips are there for passes close to the zenith.</p>
     </div>
     <div class="card">
       <h3>Conjunctions</h3>
@@ -141,7 +141,12 @@
     <li>After the mount has been in Special Mode, <code>:GAC#</code> in Normal mode reads az 0°, alt 0° until the mount is aligned again.</li>
     <li>After <code>:ZZZ#</code> the mount says nothing for about a second while it changes modes, and anything asked in that second times out.</li>
     <li>Every 5 seconds it answers a position request about 15 ms late, which at satellite speeds looks like a 10 to 20″ tracking error if you trust the timestamp of the reply.</li>
+    <li>The Normal-mode goto never turns through north. I measured it with 90° hops for three turns each way, and again with the mount set to 35° S: every hop across north went the long way round, and every hop across south went the short way. It unwound after as little as 180° of turn, so there is no wind-up allowance to use. The Special Mode slew, <code>:T0#</code>, treats north as two separate ends as well.</li>
+    <li>A goto at full speed (<code>:MSR9#</code>) covers 90° in about 17 s and 270° in about 47 s, and lands within 0.005°. Asking the mount anything while it slews makes it hesitate, so Overpass stays quiet for the expected slew time before checking whether it has arrived.</li>
+    <li>Leaving Special Mode, <code>:GAC#</code> reports a placeholder (az 0°, alt 0°, or az 180°, alt 90°) for several seconds before the real position comes back. A sync sent in that window is added to the position the mount kept, which is how I once doubled it.</li>
+    <li>The <code>:GLS#</code> status reply also carries the mount's latitude, longitude and GPS state (0 no GPS, 1 no fix yet, 2 fix), which is where Settings gets the mount's GPS position from.</li>
   </ul>
+  <p>The full list, with the measurements behind each one, is in <a href="https://github.com/djsincla/Overpass/blob/main/docs/iOptron-Special-Mode-Protocol.md">docs/iOptron-Special-Mode-Protocol.md</a>.</p>
 </section>
 
 <section>
@@ -161,13 +166,27 @@
   <div class="status">
     <div class="card">
       <h3><span style="background: var(--green)"></span>Tested on a HAZ46</h3>
-      <p>The WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode and Smooth tracking at about 2″.</p>
+      <p>The WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position.</p>
     </div>
     <div class="card">
       <h3><span style="background: var(--amber)"></span>Not yet tested on hardware</h3>
-      <p>The iOS build, the USB relay, camera guiding, the route around the cable stop, and the fix for the 5 second timing glitch, which I ran out of battery before trying.</p>
+      <p>The iOS build, the USB relay, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, and the fix for the 5 second timing glitch, which I ran out of battery before trying.</p>
     </div>
   </div>
+</section>
+
+<section>
+  <h2>Reporting a problem</h2>
+  <p>Issues are turned off on the GitHub repository, so problems and questions come to me by email at <a href="mailto:AB6A@arrl.net">AB6A@arrl.net</a>. Most mount trouble happens in the dark in a field, and I can only fix what I can replay, so the log matters more than the description. Send:</p>
+  <ul class="notes">
+    <li><b>The mount log.</b> Settings, Reporting a problem, Share the mount log. Every connect, mode switch, goto, step and stop is in it with a UTC time and what the mount read back. On a Mac it is also at <code>~/Library/Containers/com.djsincla.overpass/Data/Library/Application Support/com.djsincla.overpass/mount-log.txt</code>.</li>
+    <li><b>Your settings file.</b> Settings, Settings file, Export. Be aware it includes your latitude and longitude, so edit those out if you would rather not say where you observe from.</li>
+    <li><b>When and what.</b> The time it went wrong, in UTC if you can, the pass or object, and the tracking mode.</li>
+    <li><b>The mount.</b> Its model and the MountInfo code the mount panel shows when connected, the firmware version if you know it, and whether it was on WiFi, USB Normal mode or USB Special Mode.</li>
+    <li><b>A trace, for tracking errors.</b> Turn on Settings, Keep a tracking log to export, track the pass again, then Export from the trace panel. It is off by default because it holds minutes of samples in memory.</li>
+    <li><b>A photo or a short video</b> if the mount did something physical, such as heading off the wrong way round.</li>
+  </ul>
+  <p>If you have a mount I have not tested, such as an HAE, run Test the mount's slew and Test mode switching in Settings first. Both write what they find to the mount log, and that log is what I need to add support for it.</p>
 </section>
 
 <section>

@@ -96,6 +96,15 @@ struct MountPanel: View {
                     .keyboardShortcut(.space, modifiers: [])
                     .help("Stop all motion and tracking (space)")
                 }
+                if let past = mount.pastNorth, !mount.isTracking {
+                    HStack {
+                        Text(String(format: "%.0f° past north", past)).font(.callout).foregroundStyle(.orange)
+                        Spacer()
+                        Button(mount.isUnwinding ? "Unwinding…" : "Unwind") { mount.unwind() }
+                            .disabled(mount.isUnwinding)
+                            .help("Turn back inside the cable range. Stop interrupts it.")
+                    }
+                }
             }
         }
     }

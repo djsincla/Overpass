@@ -72,6 +72,11 @@ struct SettingsView: View {
                     LabeledContent("Cable stop", value: "\(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))")
                     LabeledSlider("Margin", value: $model.settings.cableMargin, in: 0...20, step: 1, unit: "°")
                     Toggle("Unwind at north without asking", isOn: $model.settings.unwindsWithoutAsking)
+                    Toggle("Track past north (Special mode)", isOn: $model.settings.tracksPastNorth)
+                        .help("Smooth and camera tracking carry on past north by up to the overtravel, then the mount unwinds when tracking ends. The cables need that much slack.")
+                    if model.settings.tracksPastNorth {
+                        LabeledSlider("Overtravel", value: $model.settings.overtravel, in: 15...180, step: 15, unit: "°")
+                    }
                 } header: {
                     Text("Cable stop")
                 } footer: {
@@ -136,6 +141,17 @@ struct SettingsView: View {
                               defaultFilename: "Overpass settings") { _ in }
                 .fileImporter(isPresented: $importingSettings, allowedContentTypes: [.json]) { result in
                     if case .success(let url) = result { importResult = model.importSettings(from: url) }
+                }
+
+                Section {
+                    ShareLink(item: MountSession.logFile) {
+                        Label("Share the mount log", systemImage: "doc.text")
+                    }
+                    .disabled(!FileManager.default.fileExists(atPath: MountSession.logFile.path))
+                } header: {
+                    Text("Reporting a problem")
+                } footer: {
+                    Text("Email AB6A@arrl.net with the mount log, the settings file, the time it went wrong (UTC if you can) and what you were tracking. The log has every connect, mode switch, goto, step and stop, with what the mount read back.")
                 }
 
                 #if os(iOS)
