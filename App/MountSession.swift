@@ -732,6 +732,16 @@ final class MountSession {
     private func runStep(_ object: SkyObject, pass: SatellitePass?) async throws {
         guard let normal else { throw MountSessionError.needsWiFi }
         var waitingAtRise = false
+        // Once following the satellite, a step that would need the long way round means the pass
+        // has crossed north, which the mount's goto can't follow: stop rather than unwind.
+        var following = false
+        let crossing = pass.flatMap(northCrossing(of:))
+        if let crossing, let pass {
+            log("\(pass.name) crosses north at \(crossing.formatted(date: .omitted, time: .standard)); Step tracking stops there")
+        }
+        func crossingNote() -> String {
+            crossing.map { " · stops at \($0.formatted(date: .omitted, time: .shortened)), where it crosses north" } ?? ""
+        }
         while !Task.isCancelled {
             let s = settings
             let tick = Date.now
@@ -755,22 +765,24 @@ final class MountSession {
                 }
                 let point = pass.flatMap { $0.startPoint(above: startAltitude) }
                 if let point { countDown(to: point.date) }
-                status = point
+                status = (point
                     .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSince(skyNow)))" }
-                    ?? "Below \(Int(startAltitude))°"
+                    ?? "Below \(Int(startAltitude))°") + crossingNote()
             } else {
                 // Read at the end of the last step; good enough to tell which way round to go.
                 let here = if let skyPosition { skyPosition } else { try await currentAltAz(normal) }
                 guard let legs = route(from: here, to: aim) else { throw MountSessionError.inCableMargin }
                 if legs.count > 1 {
-                    // The track crosses the cable stop: go back round the other way, then carry on.
+                    if following { throw MountSessionError.crossesNorthInNormalMode }
+                    // Not on the satellite yet: get to it the allowed way round, then follow.
                     try await goto(normal, to: aim, from: here)
                     continue
                 }
                 do {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
                     log("Step to " + describe(aim) + ", mount read " + describe(here))
-                    status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude)
+                    following = true
+                    status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude) + crossingNote()
                 } catch NormalModeError.slewRefused {
                     status = "Mount refused the step (below its altitude limit?)"
                     log("Step to " + describe(aim) + " refused by the mount")
@@ -784,6 +796,28 @@ final class MountSession {
 
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
+
+    /// Where Normal mode's gotos can't turn through: north.
+    static let normalModeStop = 0.0
+
+    /// The azimuth the mount can't turn through as connected: north in Normal mode, the cable
+    /// stop in Special mode (where Overpass drives the axes itself).
+    var effectiveCableStop: Double {
+        kind?.isSpecialMode == false ? Self.normalModeStop : settings.cableStopAzimuth
+    }
+
+    /// While a Normal-mode goto runs: where it's headed. The position isn't read mid-slew (the
+    /// mount hesitates at any command), so this is what the sky shows meanwhile.
+    private(set) var slewTarget: Horizontal?
+
+    /// When `pass` crosses north above the start elevation, if it does: Normal mode can't follow past there.
+    func northCrossing(of pass: SatellitePass) -> Date? {
+        let track = pass.track.filter { $0.position.altitude >= startAltitude }
+        for (a, b) in zip(track, track.dropFirst()) where abs(b.position.azimuth - a.position.azimuth) > 180 {
+            return b.date
+        }
+        return nil
+    }
 
     /// Update period while moving into position (waiting at the start, catching up, crossing
     /// north); the faster setting is only for tracking on target.
@@ -803,7 +837,7 @@ final class MountSession {
         for (i, leg) in legs.enumerated() {
             if legs.count > 1 {
                 let way = wrap180(leg.azimuth - here.azimuth) > 0 ? "clockwise" : "anticlockwise"
-                status = "Going round the cable stop (\(Int(s.cableStopAzimuth))°) \(way) · leg \(i + 1) of \(legs.count)"
+                status = "Going round \(way), away from north (the mount's goto won't turn through it) · leg \(i + 1) of \(legs.count)"
             }
             try await slewAndWait(normal, from: here, to: leg)
             here = leg
@@ -811,9 +845,11 @@ final class MountSession {
         if legs.count > 1 { status = message }
     }
 
-    /// Normal mode: the cable stop's allowed route from here to there, as gotos.
+    /// Normal mode: the allowed route from here to there, as gotos. The HAZ46's own goto never
+    /// turns through north (az 0°): asked for 283° to 19°, it went most of the way round the
+    /// other way (26 Oct 2026). So in Normal mode north is the stop, whatever the cable stop is.
     private func route(from: Horizontal, to: Horizontal) -> [Horizontal]? {
-        CableRoute.legs(from: from, to: to, stop: settings.cableStopAzimuth, margin: settings.cableMargin)
+        CableRoute.legs(from: from, to: to, stop: Self.normalModeStop, margin: settings.cableMargin)
     }
 
     private func currentAltAz(_ normal: NormalModeClient) async throws -> Horizontal {
@@ -836,6 +872,8 @@ final class MountSession {
         }
         log("Goto " + describe(target) + " from " + describe(start))
         let sent = Date.now
+        slewTarget = target
+        defer { slewTarget = nil }
         try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
         let distance = max(abs(wrap180(target.azimuth - start.azimuth)), abs(target.altitude - start.altitude))
         // Plus time to speed up and slow down.
@@ -1700,7 +1738,7 @@ final class MountSession {
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, inCableMargin, pastCableStop, belowHorizon, couldNotReachStart
-    case cableStopNotSet
+    case cableStopNotSet, crossesNorthInNormalMode
 
     var message: String {
         switch self {
@@ -1709,6 +1747,7 @@ enum MountSessionError: Error {
         case .needsWiFi: "Passive and Step tracking need the WiFi connection."
         case .needsUSB: "Smooth tracking needs the USB connection (Special mode)."
         case .cableStopNotSet: "Set the cable stop in Settings before moving the mount."
+        case .crossesNorthInNormalMode: "Stopped where the pass crosses north: in Normal mode the mount's goto can't turn through north. Special mode (USB) can follow it across."
         case .notAligned: "Align on at least two stars first."
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
         case .untrackablePass: "This pass crosses the cable stop or exceeds the altitude limits."

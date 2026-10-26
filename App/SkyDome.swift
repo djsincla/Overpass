@@ -18,6 +18,8 @@ struct SkyDome: View {
     var targetObjectID: String?
     /// Where the scope is pointing.
     var scopePosition: Horizontal?
+    /// Where a goto is taking the scope, while it runs.
+    var slewTarget: Horizontal?
     var onTapObject: ((String) -> Void)?
     /// Right-click (long press on touch) menu for an object on the dome, by id.
     var menu: ((String) -> AnyView)?
@@ -44,6 +46,7 @@ struct SkyDome: View {
                     drawLegend(&context, proxy.size)
                 }
                 drawLiveObjects(&context, geometry)
+                if let slewTarget { drawSlewTarget(&context, geometry, slewTarget) }
                 if let scopePosition { drawScope(&context, geometry, scopePosition) }
                 if let hoveredID, let hovered = pickable(geometry).first(where: { $0.id == hoveredID }) {
                     let p = hovered.point
@@ -357,6 +360,14 @@ struct SkyDome: View {
         context.stroke(cross, with: .color(.red), lineWidth: 2)
         context.stroke(Path(ellipseIn: CGRect(x: p.x - 8, y: p.y - 8, width: 16, height: 16)),
                        with: .color(.red), lineWidth: 1.5)
+    }
+
+    /// A goto's destination: a dashed red ring, since the scope's own marker can't move until it arrives.
+    private func drawSlewTarget(_ context: inout GraphicsContext, _ g: DomeGeometry, _ h: Horizontal) {
+        let p = g.point(h)
+        context.stroke(Path(ellipseIn: CGRect(x: p.x - 11, y: p.y - 11, width: 22, height: 22)),
+                       with: .color(.red.opacity(0.8)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+        context.draw(Text("goto").font(.caption2).foregroundStyle(.red.opacity(0.8)), at: CGPoint(x: p.x, y: p.y + 19))
     }
 
     private func drawLegend(_ context: inout GraphicsContext, _ size: CGSize) {
