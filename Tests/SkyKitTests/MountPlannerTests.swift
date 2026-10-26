@@ -53,8 +53,16 @@ let zenithPass: [PassSample] = {
         for s in plan.samples { #expect((lo...(lo + 360 - 2 * limits.cableMargin)).contains(s.axes.primary)) }
     }
 
-    @Test func cableStopBlocksNormalTracking() {
-        #expect(planner(overTheTop: false).plan(northernPass) == nil)
+    @Test func crossingTheStopGoesTheLongWayRound() throws {
+        let p = planner(overTheTop: false)
+        let plan = try #require(p.plan(northernPass))
+        #expect(plan.orientation == MountPlan.Orientation.normal)
+        // One jump of nearly a full turn, back inside the cable range, and the time it takes counted.
+        let jumps = zip(plan.samples, plan.samples.dropFirst()).filter { abs($1.axes.primary - $0.axes.primary) > 180 }
+        #expect(jumps.count == 1)
+        #expect(plan.secondsOffTarget > 300 / p.limits.maximumAzimuthRate)
+        let lo = p.limits.cableStopAzimuth + p.limits.cableMargin
+        for s in plan.samples { #expect((lo...(lo + 360 - 2 * p.limits.cableMargin)).contains(s.axes.primary)) }
     }
 
     @Test func overTheTopAvoidsCableStop() throws {

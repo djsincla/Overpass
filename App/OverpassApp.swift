@@ -65,6 +65,15 @@ struct ContentView: View {
             #endif
         }
         .tint(Theme.accent)
+        .alert("Tracking stopped at north", isPresented: Binding(
+            get: { model.mount.unwindQuestion != nil },
+            set: { if !$0 { model.mount.answerUnwind(false) } })) {
+            Button("Unwind and carry on") { model.mount.answerUnwind(true) }
+            Button("Always unwind") { model.mount.answerUnwind(true, always: true) }
+            Button("Stop tracking", role: .cancel) { model.mount.answerUnwind(false) }
+        } message: {
+            Text(model.mount.unwindQuestion ?? "")
+        }
         .modifier(Appearance(dark: model.settings.alwaysDark || model.settings.redMode))
         .modifier(NightVision(enabled: model.settings.redMode))
         .task {

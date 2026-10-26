@@ -251,11 +251,14 @@ struct PassDetailView: View {
     }
 
     func mountSummary(_ plan: MountPlan?) -> String {
-        guard let plan else { return "Can't track: crosses the cable stop or exceeds the altitude limits" }
+        guard let plan else { return "Can't track: exceeds the altitude limits" }
         let how = switch plan.orientation {
         case .normal: "Normal"
         case .overTheTop: "Over the top"
         case .flipAtCulmination: "Flips over the top at the peak"
+        }
+        if plan.unwindSeconds > 0 {
+            return "\(how); crosses north, where the mount goes the long way round (about \(Int(plan.unwindSeconds)) s)"
         }
         return plan.secondsOffTarget == 0 ? how : "\(how); loses it for \(Int(plan.secondsOffTarget)) s near the top"
     }
