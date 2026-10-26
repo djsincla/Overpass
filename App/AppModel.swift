@@ -30,6 +30,9 @@ struct Settings: Codable, Equatable {
 
     var cableStopAzimuth: Double = 0
     var cableMargin: Double = 5
+    /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
+    /// pointing down from a hillside, as long as the tube clears the tripod.
+    var minimumAltitudeAxis: Double = -5
     /// Above 90 allows pointing over the top.
     var maximumAltitudeAxis: Double = 90
     var maximumAzimuthRate: Double = 6
@@ -77,6 +80,9 @@ struct Settings: Codable, Equatable {
     /// Camera guiding: which camera, and how its image moves with the mount.
     var cameraDeviceID: String?
     var cameraCalibration: CameraCalibration?
+    /// Camera tracking's aim point, as fractions of the frame's width and height.
+    var cameraAimX: Double = 0.5
+    var cameraAimY: Double = 0.5
 
     var observer: Observer {
         Observer(latitude: latitude, longitude: longitude, height: heightMeters, refraction: refraction)
@@ -87,6 +93,7 @@ struct Settings: Codable, Equatable {
         l.cableStopAzimuth = cableStopAzimuth
         l.cableMargin = cableMargin
         l.maximumAltitudeAxis = maximumAltitudeAxis
+        l.minimumAltitudeAxis = minimumAltitudeAxis
         l.maximumAzimuthRate = maximumAzimuthRate
         l.maximumAltitudeRate = maximumAltitudeRate
         return l
@@ -202,6 +209,7 @@ final class AppModel {
 
     let mount = MountSession()
     let guider = Guider()
+    let cameraTracker: CameraTracker
     let conjunctions = ConjunctionsModel()
 
     private var catalog: TLECatalog?
@@ -221,8 +229,10 @@ final class AppModel {
         } catch {
             message = "Couldn't open the TLE cache: \(error.localizedDescription)"
         }
+        cameraTracker = CameraTracker(camera: guider.camera)
         mount.app = self
         guider.app = self
+        cameraTracker.app = self
         conjunctions.app = self
     }
 

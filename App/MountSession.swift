@@ -268,6 +268,7 @@ final class MountSession {
         special = nil
         usbTransport = nil
         unwrapper = nil
+        axisHistory = []
     }
 
     /// The mount's USB port, or on iPhone and iPad the relay plugged into it.
@@ -327,6 +328,30 @@ final class MountSession {
         return asked + typical / 2
     }
 
+    /// The last few seconds of axis readings (Special mode), for matching camera frames to where
+    /// the mount was when they were taken.
+    private var axisHistory: [(date: Date, axes: AxisPosition)] = []
+
+    /// Where the axes were at `date`, interpolated between readings. Slightly past the last
+    /// reading it carries on at the last speed.
+    func axes(at date: Date) -> AxisPosition? {
+        guard let last = axisHistory.last else { return nil }
+        guard let i = axisHistory.firstIndex(where: { $0.date >= date }) else {
+            guard axisHistory.count >= 2, date.timeIntervalSince(last.date) < 0.5 else { return last.axes }
+            return Self.interpolate(axisHistory[axisHistory.count - 2], last, at: date)
+        }
+        return i == 0 ? axisHistory[0].axes : Self.interpolate(axisHistory[i - 1], axisHistory[i], at: date)
+    }
+
+    private static func interpolate(_ a: (date: Date, axes: AxisPosition), _ b: (date: Date, axes: AxisPosition),
+                                    at date: Date) -> AxisPosition {
+        let span = b.date.timeIntervalSince(a.date)
+        guard span > 0 else { return b.axes }
+        let f = date.timeIntervalSince(a.date) / span
+        return AxisPosition(primary: a.axes.primary + f * (b.axes.primary - a.axes.primary),
+                            secondary: a.axes.secondary + f * (b.axes.secondary - a.axes.secondary))
+    }
+
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {
         if let normal {
@@ -340,6 +365,10 @@ final class MountSession {
         let current = AxisPosition(primary: unwrapper.update(raw: raw.primary), secondary: raw.secondary)
         self.unwrapper = unwrapper
         axes = current
+        if let date = skyPositionDate {
+            axisHistory.append((date, current))
+            axisHistory.removeFirst(axisHistory.prefix { date.timeIntervalSince($0.date) > 5 }.count)
+        }
         let model = settings.alignment ?? AlignmentModel()
         skyPosition = model.sky(for: current)
         if settings.alignment != nil, !recordHeld, let skyPosition { remember(skyPosition) }
@@ -467,30 +496,49 @@ final class MountSession {
         trackingName = nil
         trackingObject = nil
         trackingMode = nil
+        tracksCamera = false
     }
 
     // MARK: Tracking
 
     func track(_ object: SkyObject, mode: TrackingMode, pass: SatellitePass?) async {
+        await startTracking(name: object.name, object: object, mode: mode) {
+            switch mode {
+            case .passive: try await self.runPassive(object)
+            case .step: try await self.runStep(object, pass: pass)
+            case .smooth: try await self.runSmooth(object, pass: pass)
+            }
+        }
+    }
+
+    /// Follows whatever the camera tracker is locked on (Special mode).
+    func trackCamera(_ source: CameraTracker) async {
+        await startTracking(name: "Camera target", object: nil, mode: nil, camera: true) {
+            try await self.runCamera(source)
+        }
+    }
+
+    /// Camera tracking is running.
+    private(set) var tracksCamera = false
+
+    private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
+                               _ run: @escaping @MainActor () async throws -> Void) async {
         await stopAll()
-        trackingName = object.name
+        trackingName = name
         trackingObject = object
         trackingMode = mode
+        tracksCamera = camera
         trace = []
         lastLoop = nil
         status = "Starting…"
+        let label = mode.map { "\(name) (\($0))" } ?? name
         trackingTask = Task {
             do {
-                switch mode {
-                case .passive: try await runPassive(object)
-                case .step: try await runStep(object, pass: pass)
-                case .smooth: try await runSmooth(object, pass: pass)
-                }
+                try await run()
             } catch is CancellationError {
             } catch {
                 status = describe(error)
-                log("Tracking \(object.name) (\(mode)) stopped: \(describe(error))")
-                log("Tracking \(object.name) (\(mode)) stopped: \(describe(error))")
+                log("Tracking \(label) stopped: \(describe(error))")
                 try? await normal?.stop()
                 try? await special?.stop()
             }
@@ -499,6 +547,7 @@ final class MountSession {
                 trackingName = nil
                 trackingObject = nil
                 trackingMode = nil
+                tracksCamera = false
             }
         }
     }
@@ -860,6 +909,93 @@ final class MountSession {
         }
     }
 
+    /// Camera tracking: drive the axes at the target's measured speed, plus a correction toward
+    /// where it is now. The target's position comes in the mount's own axis coordinates (where
+    /// the mount pointed when the frame was taken, plus the offset in the image), so the camera's
+    /// delay doesn't leave it off centre: the delay shifts the mount's and the target's motion alike.
+    private func runCamera(_ source: CameraTracker) async throws {
+        guard let special else { throw MountSessionError.needsUSB }
+        var controller = RateController(limits: settings.limits)
+        var moving = false
+        // The error at the start of a stretch where it hasn't been shrinking. Something fixed in
+        // the picture (the camera's text, a hot pixel, a mark on the lens) keeps the same offset
+        // however far the mount turns, so following it would run the mount away.
+        var stuck: (date: Date, error: Double)?
+        while !Task.isCancelled {
+            let loopStart = Date.now
+            let s = settings
+            let period = s.trackingPeriod
+            guard let current = try await readPosition() else { return }
+            let read = skyPositionDate ?? .now
+
+            guard let estimate = source.estimate(at: read) else {
+                if source.isLost {
+                    try await special.stop()
+                    status = "Lost the target. Click it again to pick it up."
+                    return
+                }
+                // Just picked: measuring its speed before moving.
+                if moving { try await special.stop(); moving = false }
+                setStatus("Measuring its motion…")
+                try await Task.sleep(for: .seconds(period))
+                continue
+            }
+            let unseen = read.timeIntervalSince(estimate.latest)
+            if unseen > source.coastLimit {
+                try await special.stop()
+                status = "Lost the target. Click it again to pick it up."
+                return
+            }
+
+            // A correction acts for a whole period, and the camera adds its own delay on top,
+            // so this stays gentler than Smooth tracking.
+            controller.gain = min(1.0, 0.5 / period)
+            controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
+            var command = controller.rates(desired: estimate.position, primaryRate: estimate.primaryRate,
+                                           secondaryRate: estimate.secondaryRate, current: current)
+
+            // Hold the altitude axis at the mount's limits rather than drive through them.
+            let model = s.alignment ?? .iOptronSpecialMode
+            let altitude = model.mountFrame(model.sky(for: current)).altitude
+            let rising = model.altitudeSense * command.secondary > 0
+            let atLimit = (rising && altitude >= s.limits.maximumAltitudeAxis) || (!rising && altitude <= s.limits.minimumAltitudeAxis)
+            if atLimit { command.secondary = 0 }
+            if wouldHitCableStop(current, primaryRate: command.primary) { throw MountSessionError.pastCableStop }
+
+            let cosAltitude = cos(model.sky(for: current).altitude.radians)
+            let error = hypot((estimate.position.primary - current.primary) * cosAltitude,
+                              atLimit ? 0 : estimate.position.secondary - current.secondary)
+            if error < 0.1 {
+                stuck = nil
+            } else if let start = stuck, error > 0.7 * start.error {
+                if read.timeIntervalSince(start.date) > 8 {
+                    try await special.stop()
+                    status = "Stopped: the mount turned but the object stayed as far from the aim point. "
+                        + "It may be fixed in the picture (the camera's text, a mark on the lens), or the calibration may be off."
+                    return
+                }
+            } else {
+                stuck = (read, error)
+            }
+
+            try await special.setSpeeds(primary: command.primary, secondary: command.secondary)
+            moving = true
+            record(current: current, desired: estimate.position, feed: (estimate.primaryRate, estimate.secondaryRate), command: command)
+            let off = trace.last.map { $0.error * 60 } ?? 0
+            let limit = rising ? s.limits.maximumAltitudeAxis : s.limits.minimumAltitudeAxis
+            setStatus(atLimit ? "Held at the altitude limit (\(Int(limit))°). Change it with Point down to."
+                      : unseen > 0.3 ? "Out of sight, carrying on along its path…"
+                      : String(format: "Camera tracking · %.1f′ off", off))
+            let rest = period - Date.now.timeIntervalSince(loopStart)
+            if rest > 0.005 { try await Task.sleep(for: .seconds(rest)) }
+        }
+    }
+
+    /// Sets the status only when it changes, so a fast loop doesn't redraw the screen each pass.
+    private func setStatus(_ text: String) {
+        if status != text { status = text }
+    }
+
     /// Adds one loop iteration to the trace, keeping the last `traceSpan` seconds.
     private func record(current: AxisPosition, desired: AxisPosition, feed: (Double, Double),
                         command: (primary: Double, secondary: Double), held: Bool = false) {
@@ -1174,6 +1310,8 @@ final class MountSession {
 
         if try await client.identify().isSpecialMode {
             // Already in Special mode, so no switch has reset the axes. Check them against the record.
+            // It may still be moving at the last speeds set, if Overpass quit or crashed mid-track.
+            try? await client.stop()
             let identity = try await client.identify()
             if let known = knownPointing, let raw = try? await client.positions() {
                 let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))

@@ -77,6 +77,12 @@ final class Guider {
     /// With a bright star centred and the mount still, nudge each axis and watch how the image
     /// moves. That gives the camera's rotation, mirroring and scale relative to the mount.
     func calibrate() async {
+        await calibrate { [camera] in camera.spot.map { (x: $0.x, y: $0.y) } }
+    }
+
+    /// Calibrates using `position`, where the reference object is in the image now: the bright
+    /// spot for guiding, or whatever camera tracking is locked on (a star, a distant light or mast).
+    func calibrate(using position: @escaping @MainActor () -> (x: Double, y: Double)?) async {
         guard let app, let mount, !isCalibrating else { return }
         guard mount.kind == .usb, !mount.isTracking else {
             status = "Calibrate over USB, with tracking stopped and a bright star centred."
@@ -87,8 +93,8 @@ final class Guider {
         defer { isCalibrating = false }
         do {
             let altitude = mount.skyPosition?.altitude ?? 45
-            let primary = try await measure(primaryRate: 0.1, secondaryRate: 0)
-            let secondary = try await measure(primaryRate: 0, secondaryRate: 0.1)
+            let primary = try await measure(primaryRate: 0.1, secondaryRate: 0, position)
+            let secondary = try await measure(primaryRate: 0, secondaryRate: 0.1, position)
             let calibration = CameraCalibration(primaryShift: primary.shift, primaryDegrees: primary.degrees,
                                                 secondaryShift: secondary.shift, secondaryDegrees: secondary.degrees,
                                                 altitude: altitude)
@@ -102,28 +108,39 @@ final class Guider {
     }
 
     /// Moves one axis until the spot has shifted a clear distance (or 10 s pass), then moves back.
-    private func measure(primaryRate: Double, secondaryRate: Double) async throws -> (shift: (x: Double, y: Double), degrees: Double) {
+    private func measure(primaryRate: Double, secondaryRate: Double,
+                         _ position: @MainActor () -> (x: Double, y: Double)?) async throws -> (shift: (x: Double, y: Double), degrees: Double) {
         guard let mount else { throw GuiderError.noMount }
-        let start = try await averageSpot()
+        let start = try await averageSpot(position)
         guard let axesBefore = try await mount.currentAxes() else { throw GuiderError.noMount }
 
         status = "Calibrating: moving \(primaryRate != 0 ? "azimuth" : "altitude")…"
+        // Slowly at first, for a telescope's narrow view; faster if the image barely moves, as
+        // with a wide-angle webcam, where 0.1°/s would take most of a minute to show.
+        var speed = 1.0
         try await mount.moveAxes(primary: primaryRate, secondary: secondaryRate)
         let began = Date.now
-        while Date.now.timeIntervalSince(began) < 10 {
+        while Date.now.timeIntervalSince(began) < 12 {
             try await Task.sleep(for: .milliseconds(150))
-            if let spot = camera.spot, hypot(spot.x - start.x, spot.y - start.y) > 40 { break }
-            if camera.spot == nil && Date.now.timeIntervalSince(began) > 2 { break }
+            let elapsed = Date.now.timeIntervalSince(began)
+            let moved = position().map { hypot($0.x - start.x, $0.y - start.y) }
+            if let moved, moved > 40 { break }
+            if moved == nil && elapsed > 2 { break }
+            if let moved, moved < 10, (speed == 1 && elapsed > 2) || (speed == 5 && elapsed > 5) {
+                speed *= speed == 1 ? 5 : 4
+                try await mount.moveAxes(primary: primaryRate * speed, secondary: secondaryRate * speed)
+            }
         }
-        let elapsed = Date.now.timeIntervalSince(began)
         try await mount.stopMotion()
         try await Task.sleep(for: .milliseconds(800))
-        let end = try await averageSpot()
+        let end = try await averageSpot(position)
         guard let axesAfter = try await mount.currentAxes() else { throw GuiderError.noMount }
 
         // Back to where we started, so the second axis is measured from the centre too.
-        try await mount.moveAxes(primary: -primaryRate, secondary: -secondaryRate)
-        try await Task.sleep(for: .seconds(elapsed))
+        let away = primaryRate != 0 ? axesAfter.primary - axesBefore.primary : axesAfter.secondary - axesBefore.secondary
+        let rate = abs(primaryRate + secondaryRate) * speed
+        try await mount.moveAxes(primary: -primaryRate * speed, secondary: -secondaryRate * speed)
+        try await Task.sleep(for: .seconds(abs(away) / rate))
         try await mount.stopMotion()
         try await Task.sleep(for: .milliseconds(800))
 
@@ -134,10 +151,10 @@ final class Guider {
     }
 
     /// The spot position averaged over a few frames, to beat down seeing and noise.
-    private func averageSpot() async throws -> (x: Double, y: Double) {
+    private func averageSpot(_ position: @MainActor () -> (x: Double, y: Double)?) async throws -> (x: Double, y: Double) {
         var xs: [Double] = [], ys: [Double] = []
         for _ in 0..<12 {
-            if let spot = camera.spot {
+            if let spot = position() {
                 xs.append(spot.x)
                 ys.append(spot.y)
             }
