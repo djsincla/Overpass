@@ -507,6 +507,7 @@ final class MountSession {
 
     /// Stops everything: tracking, slews and jogs.
     func stopAll() async {
+        if let trackingName { log("Stop pressed while tracking \(trackingName)") } else if prepareTask != nil { log("Stop pressed while moving to the start point") }
         // Stop at once, then again once the loops have ended: waiting first let a goto finish
         // over slow WiFi, and a loop partway through a step can still send one more command.
         let wasMoving = trackingTask != nil || prepareTask != nil
@@ -571,6 +572,7 @@ final class MountSession {
         lastLoop = nil
         status = "Starting…"
         let label = mode.map { "\(name) (\($0))" } ?? name
+        log("Tracking \(label) started" + (skyPosition.map { " at " + describe($0) } ?? ""))
         trackingTask = Task {
             do {
                 try await run()
@@ -609,6 +611,7 @@ final class MountSession {
             return
         }
         status = "Moving to start point"
+        log("Move to start of \(pass.name): " + describe(point.position) + " at \(point.date.formatted(date: .omitted, time: .standard))")
         prepareTask = Task {
             do {
                 if let normal {
@@ -622,6 +625,7 @@ final class MountSession {
             } catch is CancellationError {
             } catch {
                 status = describe(error)
+                log("Move to start stopped: \(describe(error))")
                 try? await normal?.stop()
                 try? await special?.stop()
             }
@@ -765,9 +769,11 @@ final class MountSession {
                 }
                 do {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
+                    log("Step to " + describe(aim) + ", mount read " + describe(here))
                     status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude)
                 } catch NormalModeError.slewRefused {
                     status = "Mount refused the step (below its altitude limit?)"
+                    log("Step to " + describe(aim) + " refused by the mount")
                 }
             }
             _ = try? await readPosition()
@@ -828,16 +834,23 @@ final class MountSession {
             try await normal.setMaximumSlewSpeed(9)
             maximumSpeedSet = true
         }
+        log("Goto " + describe(target) + " from " + describe(start))
+        let sent = Date.now
         try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
         let distance = max(abs(wrap180(target.azimuth - start.azimuth)), abs(target.altitude - start.altitude))
         // Plus time to speed up and slow down.
         try await Task.sleep(for: .seconds(distance / Self.estimatedSlewRate + 2))
         let deadline = Date.now + 180
         while try await normal.isSlewing() {
-            guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
+            guard Date.now < deadline else {
+                log("Goto still slewing after 180 s; giving up")
+                throw MountSessionError.couldNotReachStart
+            }
             try await Task.sleep(for: .seconds(1))
         }
-        _ = try await currentAltAz(normal)
+        let arrived = try await currentAltAz(normal)
+        log(String(format: "Goto done in %.0f s: reads ", Date.now.timeIntervalSince(sent)) + describe(arrived)
+            + String(format: ", %.2f° from the target", angularSeparation(arrived.unitVector, target.unitVector)))
     }
 
     private func runSmooth(_ object: SkyObject, pass: SatellitePass?) async throws {
