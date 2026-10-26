@@ -232,6 +232,7 @@ final class MountSession {
             }
             kind = s.connection
             state = .connected
+            if let moveBlocker { status = moveBlocker }
             startPolling()
         } catch {
             state = .failed(describe(error))
@@ -395,9 +396,22 @@ final class MountSession {
         if mountAzimuth < lo || mountAzimuth > lo + 360 { throw MountSessionError.pastCableStop }
     }
 
+    /// Why the mount can't move yet, or nil. Every move checks this first.
+    var moveBlocker: String? {
+        settings.cableStopConfirmed ? nil : "Set the cable stop in Settings before moving the mount"
+    }
+
+    /// True, with the reason in the status, when moves are blocked.
+    private func blocksMove() -> Bool {
+        guard let moveBlocker else { return false }
+        status = moveBlocker
+        return true
+    }
+
     // MARK: Manual moves
 
     func jog(_ direction: JogDirection, pressed: Bool) async {
+        if pressed, blocksMove() { return }
         if pressed { await cancelTracking() }
         do {
             if let normal {
@@ -437,6 +451,7 @@ final class MountSession {
     /// Fine tune. While Step or Smooth tracking, shifts the tracking offsets; otherwise makes a
     /// short, slow move of about `arcminutes` (the mount's own tracking carries on in Passive).
     func nudge(_ direction: JogDirection, arcminutes: Double) async {
+        if blocksMove() { return }
         let degrees = arcminutes / 60
         if trackingMode == .step || trackingMode == .smooth {
             switch direction {
@@ -546,6 +561,7 @@ final class MountSession {
 
     private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
                                _ run: @escaping @MainActor () async throws -> Void) async {
+        if blocksMove() { return }
         await stopAll()
         trackingName = name
         trackingObject = object
@@ -586,6 +602,7 @@ final class MountSession {
 
     /// Moves the mount to where the pass will first reach the start elevation, and holds there.
     func moveToStart(of pass: SatellitePass) async {
+        if blocksMove() { return }
         await stopAll()
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
@@ -1125,6 +1142,7 @@ final class MountSession {
     /// round as if ±180° were two ends). Every move is watched and stopped if it goes more than 2°
     /// the wrong way. Returns a report.
     func testNativeSlew() async -> String {
+        if let moveBlocker { return moveBlocker }
         guard let special else { return "Connect over USB (Special mode) first." }
         await stopAll()
         var report: [String] = []
@@ -1226,6 +1244,7 @@ final class MountSession {
 
     /// Runs both axes at these speeds (degrees per second) until told otherwise.
     func moveAxes(primary: Double, secondary: Double) async throws {
+        guard moveBlocker == nil else { throw MountSessionError.cableStopNotSet }
         guard let special else { throw MountSessionError.needsUSB }
         try await special.setSpeeds(primary: primary, secondary: secondary)
     }
@@ -1570,6 +1589,7 @@ final class MountSession {
     /// position at each step, to see what a mode change does to it. Returns a report; every
     /// line also goes to the mount log.
     func testModeSwitching() async -> String {
+        if let moveBlocker { return moveBlocker }
         guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
         await stopAll()
         pollTask?.cancel()
@@ -1667,6 +1687,7 @@ final class MountSession {
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, inCableMargin, pastCableStop, belowHorizon, couldNotReachStart
+    case cableStopNotSet
 
     var message: String {
         switch self {
@@ -1674,6 +1695,7 @@ enum MountSessionError: Error {
         case .noSerialPort: "Choose the mount's USB port in Settings."
         case .needsWiFi: "Passive and Step tracking need the WiFi connection."
         case .needsUSB: "Smooth tracking needs the USB connection (Special mode)."
+        case .cableStopNotSet: "Set the cable stop in Settings before moving the mount."
         case .notAligned: "Align on at least two stars first."
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
         case .untrackablePass: "This pass crosses the cable stop or exceeds the altitude limits."
