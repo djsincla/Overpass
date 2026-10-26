@@ -10,6 +10,26 @@ struct ObserveView: View {
     @AppStorage("observe.domeFraction") private var domeFraction = 0.5
     @AppStorage("observe.listFraction") private var listFraction = 0.45
     @AppStorage("observe.phoneDomeFraction") private var phoneDomeFraction = 0.42
+    @AppStorage("observe.columnFraction") private var columnFraction = 0.42
+    @AppStorage("observe.threeListFraction") private var threeListFraction = 0.3
+    @AppStorage("observe.threeDomeFraction") private var threeDomeFraction = 0.6
+    @AppStorage("observe.layout") private var layout = Layout.listLeft
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// How the sky, the list and the mount panel sit on a wide screen.
+    enum Layout: String, CaseIterable, Identifiable {
+        case skyLeft, listLeft, threeColumns
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .skyLeft: "Sky on the left"
+            case .listLeft: "List on the left"
+            case .threeColumns: "List, sky, mount"
+            }
+        }
+    }
 
     enum Panel: String, CaseIterable, Identifiable {
         case passes = "Passes", objects = "Objects", mount = "Mount"
@@ -22,25 +42,8 @@ struct ObserveView: View {
                 if model.settings.hasLocation {
                     GeometryReader { proxy in
                         if proxy.size.width > 760 {
-                            // Mac and iPad: dome | (list over mount panel), both dividers draggable.
-                            ResizableSplit(axis: .horizontal, fraction: $domeFraction, range: 0.25...0.75) {
-                                dome.padding()
-                            } second: {
-                                ResizableSplit(axis: .vertical, fraction: $listFraction, range: 0.15...0.85) {
-                                    VStack(spacing: 0) {
-                                        Picker("List", selection: listBinding) {
-                                            Text("Passes").tag(Panel.passes)
-                                            Text("Objects").tag(Panel.objects)
-                                        }
-                                        .pickerStyle(.segmented)
-                                        .labelsHidden()
-                                        .padding(8)
-                                        list(listBinding.wrappedValue)
-                                    }
-                                } second: {
-                                    ScrollView { MountPanel().padding(12) }
-                                }
-                            }
+                            // Mac and iPad: arranged as chosen in the Layout menu, dividers draggable.
+                            wideLayout
                         } else {
                             // iPhone: dome over the switchable panel, divider draggable.
                             ResizableSplit(axis: .vertical, fraction: $phoneDomeFraction, range: 0.2...0.7) {
@@ -84,6 +87,19 @@ struct ObserveView: View {
                     .help("Every pass of an object over the next two weeks")
                     .disabled(model.selectedObjects.isEmpty)
                 }
+                if isWide {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Picker("Layout", selection: $layout) {
+                                ForEach(Layout.allCases) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.inline)
+                        } label: {
+                            Label("Layout", systemImage: "rectangle.split.3x1")
+                        }
+                        .help("Arrange the sky, the list and the mount panel")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showingFilters = true } label: {
                         Label("Pass filters", systemImage: "line.3.horizontal.decrease.circle")
@@ -109,6 +125,65 @@ struct ObserveView: View {
                                         set: { if !$0 { model.calculatorObjectID = nil } })) {
                 PassCalculatorView(objectID: model.calculatorObjectID ?? "")
             }
+        }
+    }
+
+    /// The Layout menu only matters where the screen is wide enough for side-by-side panels.
+    private var isWide: Bool {
+        #if os(iOS)
+        sizeClass == .regular
+        #else
+        true
+        #endif
+    }
+
+    @ViewBuilder
+    private var wideLayout: some View {
+        switch layout {
+        case .skyLeft:
+            ResizableSplit(axis: .horizontal, fraction: $domeFraction, range: 0.25...0.75) {
+                dome.padding()
+            } second: {
+                listOverMount
+            }
+        case .listLeft:
+            ResizableSplit(axis: .horizontal, fraction: $columnFraction, range: 0.25...0.75) {
+                listOverMount
+            } second: {
+                dome.padding()
+            }
+        case .threeColumns:
+            ResizableSplit(axis: .horizontal, fraction: $threeListFraction, range: 0.15...0.6) {
+                listPane
+            } second: {
+                ResizableSplit(axis: .horizontal, fraction: $threeDomeFraction, range: 0.3...0.8) {
+                    dome.padding()
+                } second: {
+                    ScrollView { MountPanel().padding(12) }
+                }
+            }
+        }
+    }
+
+    private var listOverMount: some View {
+        ResizableSplit(axis: .vertical, fraction: $listFraction, range: 0.15...0.85) {
+            listPane
+        } second: {
+            ScrollView { MountPanel().padding(12) }
+        }
+    }
+
+    /// Passes or Objects, switched at the top.
+    private var listPane: some View {
+        VStack(spacing: 0) {
+            Picker("List", selection: listBinding) {
+                Text("Passes").tag(Panel.passes)
+                Text("Objects").tag(Panel.objects)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(8)
+            list(listBinding.wrappedValue)
         }
     }
 

@@ -9,6 +9,27 @@ struct OverpassApp: App {
             ContentView()
                 .environment(model)
         }
+        .commands {
+            #if os(macOS)
+            CommandGroup(replacing: .appInfo) { AboutCommand() }
+            #endif
+        }
+        #if os(macOS)
+        SwiftUI.Settings {
+            SettingsView()
+                .environment(model)
+                .frame(minWidth: 520, idealWidth: 600, minHeight: 500, idealHeight: 760)
+                .tint(Theme.accent)
+                .modifier(NightVision(enabled: model.settings.redMode))
+        }
+
+        Window("About Overpass", id: "about") {
+            AboutView()
+                .tint(Theme.accent)
+                .modifier(NightVision(enabled: model.settings.redMode))
+        }
+        .windowResizability(.contentSize)
+        #endif
     }
 }
 
@@ -23,8 +44,11 @@ struct ContentView: View {
                 .tabItem { Label("Objects", systemImage: "checklist") }
             ConjunctionsView()
                 .tabItem { Label("Conjunctions", systemImage: "moon.stars") }
+            #if os(iOS)
+            // On the Mac, Settings is in the app menu (⌘,).
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+            #endif
         }
         .tint(Theme.accent)
         .modifier(Appearance(dark: model.settings.alwaysDark || model.settings.redMode))
