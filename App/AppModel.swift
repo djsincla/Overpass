@@ -29,6 +29,9 @@ struct Settings: Codable, Equatable {
     var darkSkySunAltitude: Double = -6
 
     var cableStopAzimuth: Double = 0
+    /// The mount doesn't move until the cable stop has been set for it: a new install's
+    /// default (north) once sent the mount round the wrong way.
+    var cableStopConfirmed = false
     var cableMargin: Double = 5
     /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
     /// pointing down from a hillside, as long as the tube clears the tripod.
@@ -227,7 +230,12 @@ final class AppModel {
     static let storage = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Overpass")
 
     init() {
-        settings = Self.load("settings", default: Settings())
+        var settings = Self.load("settings", default: Settings())
+        // From before the confirmation existed: a cable stop moved off the default was set on purpose.
+        if !settings.cableStopConfirmed, settings.cableStopAzimuth != Settings().cableStopAzimuth {
+            settings.cableStopConfirmed = true
+        }
+        self.settings = settings
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
         do {
@@ -333,7 +341,7 @@ final class AppModel {
 
     /// Whether `object` can be tracked now, with this connection and mode.
     func canTrack(_ object: SkyObject?) -> Bool {
-        guard let object, mount.state == .connected else { return false }
+        guard let object, mount.state == .connected, settings.cableStopConfirmed else { return false }
         switch (mount.kind?.isSpecialMode, mount.effectiveMode) {
         case (false, .passive): return object.passiveTracking != nil
         case (true, _): return settings.alignment != nil
@@ -642,6 +650,44 @@ final class AppModel {
 
     /// Loads saved values over the defaults, so a newer app version with extra settings
     /// keeps everything the user already set instead of resetting it.
+    // MARK: Settings file
+
+    /// The settings as a file to carry to another device: the mount, its cable stop and limits,
+    /// the location, timing and alignment.
+    func settingsFile() -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return (try? encoder.encode(SettingsFile(settings: settings))) ?? Data()
+    }
+
+    /// Takes the settings from a file, keeping this device's own: how it connects (USB port,
+    /// relay), its camera, and how the screen looks.
+    func importSettings(from url: URL) -> String {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url),
+              let file = try? JSONDecoder().decode(SettingsFile.self, from: data), file.app == SettingsFile.appName else {
+            return "That isn't an Overpass settings file."
+        }
+        var imported = file.settings
+        let mine = settings
+        imported.connection = mine.connection
+        imported.serialPath = mine.serialPath
+        imported.relayHost = mine.relayHost
+        imported.relayPort = mine.relayPort
+        imported.cameraDeviceID = mine.cameraDeviceID
+        imported.cameraCalibration = mine.cameraCalibration
+        imported.cameraAimX = mine.cameraAimX
+        imported.cameraAimY = mine.cameraAimY
+        imported.redMode = mine.redMode
+        imported.alwaysDark = mine.alwaysDark
+        imported.redAppIcon = mine.redAppIcon
+        imported.tracksLog = mine.tracksLog
+        settings = imported
+        return String(format: "Imported: cable stop %.0f° (margin %.0f°), location %.3f°, %.3f°.",
+                      imported.cableStopAzimuth, imported.cableMargin, imported.latitude, imported.longitude)
+    }
+
     static func load<T: Codable>(_ key: String, default value: T) -> T {
         guard let stored = UserDefaults.standard.data(forKey: key) else { return value }
         if let decoded = try? JSONDecoder().decode(T.self, from: stored) { return decoded }
@@ -650,5 +696,54 @@ final class AppModel {
         base.merge(saved) { _, new in new }
         guard let merged = try? JSONSerialization.data(withJSONObject: base) else { return value }
         return (try? JSONDecoder().decode(T.self, from: merged)) ?? value
+    }
+}
+
+/// What an exported settings file holds. Settings missing from an older file take their defaults.
+struct SettingsFile: Codable {
+    static let appName = "Overpass"
+    var app = appName
+    var version = 1
+    var exported = Date.now
+    var settings: Settings
+
+    init(settings: Settings) { self.settings = settings }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        app = try c.decode(String.self, forKey: .app)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        exported = try c.decodeIfPresent(Date.self, forKey: .exported) ?? .now
+        // Merged onto the defaults, as saved settings are, so a file from an older version still loads.
+        let raw = try c.decode(AnyJSON.self, forKey: .settings)
+        var base = (try JSONSerialization.jsonObject(with: JSONEncoder().encode(Settings()))) as? [String: Any] ?? [:]
+        if case .object(let saved) = raw { base.merge(saved.mapValues(\.value)) { _, new in new } }
+        settings = try JSONDecoder().decode(Settings.self, from: JSONSerialization.data(withJSONObject: base))
+    }
+}
+
+/// Just enough of JSON to carry an object through a decoder untouched.
+enum AnyJSON: Decodable {
+    case object([String: AnyJSON]), array([AnyJSON]), string(String), number(Double), bool(Bool), null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let n = try? c.decode(Double.self) { self = .number(n) }
+        else if let s = try? c.decode(String.self) { self = .string(s) }
+        else if let a = try? c.decode([AnyJSON].self) { self = .array(a) }
+        else { self = .object(try c.decode([String: AnyJSON].self)) }
+    }
+
+    var value: Any {
+        switch self {
+        case .object(let o): o.mapValues(\.value)
+        case .array(let a): a.map(\.value)
+        case .string(let s): s
+        case .number(let n): n
+        case .bool(let b): b
+        case .null: NSNull()
+        }
     }
 }

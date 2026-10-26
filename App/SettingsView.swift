@@ -1,6 +1,7 @@
 import IOptronKit
 import SkyKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     /// "0.1.0 (1)", from the bundle (set in project.yml).
@@ -20,6 +21,10 @@ struct SettingsView: View {
     @State private var setAltitude = 0.0
     @State private var positionResult: String?
     @State private var busy = false
+    @State private var exportingSettings = false
+    @State private var importingSettings = false
+    @State private var importResult: String?
+    @State private var settingsFile = JSONFile(data: Data())
     #if os(macOS)
     @State private var serialPorts: [String] = []
     #endif
@@ -62,6 +67,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if !model.settings.cableStopConfirmed {
+                        Label("The mount won't move until its cable stop is set. Set the azimuth, then confirm it.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Button("The cable stop is at \(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))") {
+                            model.settings.cableStopConfirmed = true
+                        }
+                    }
                     LabeledSlider("Cable stop azimuth", value: $model.settings.cableStopAzimuth, in: 0...355, step: 5, unit: "°")
                     LabeledSlider("Margin", value: $model.settings.cableMargin, in: 0...20, step: 1, unit: "°")
                     Button("Suggest a cable stop from upcoming passes") { advice = suggest() }
@@ -117,6 +130,24 @@ struct SettingsView: View {
                     Text("Mount")
                 } footer: {
                     Text("Over the top tilts the tube past the zenith; check it clears the mount and tripod first. Speeds are assumptions until measured on your HAZ46. \"On target\" is about half your field of view.")
+                }
+
+                Section {
+                    Button("Export settings…") {
+                        settingsFile = JSONFile(data: model.settingsFile())
+                        exportingSettings = true
+                    }
+                    Button("Import settings…") { importingSettings = true }
+                    if let importResult { Text(importResult).font(.callout).foregroundStyle(.secondary) }
+                } header: {
+                    Text("Settings file")
+                } footer: {
+                    Text("Carries the location, cable stop, limits, speeds, timing and alignment to another device, by AirDrop or Files. Each device keeps its own connection, camera and appearance.")
+                }
+                .fileExporter(isPresented: $exportingSettings, document: settingsFile, contentType: .json,
+                              defaultFilename: "Overpass settings") { _ in }
+                .fileImporter(isPresented: $importingSettings, allowedContentTypes: [.json]) { result in
+                    if case .success(let url) = result { importResult = model.importSettings(from: url) }
                 }
 
                 #if os(iOS)
@@ -253,5 +284,21 @@ struct SettingsView: View {
                 .keyboardType(.numbersAndPunctuation)
                 #endif
         }
+    }
+}
+
+/// A JSON file to save, for the settings export.
+struct JSONFile: FileDocument {
+    static let readableContentTypes: [UTType] = [.json]
+    var data: Data
+
+    init(data: Data) { self.data = data }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
