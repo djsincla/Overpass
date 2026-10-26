@@ -724,6 +724,9 @@ final class MountSession {
     private func runStep(_ object: SkyObject, pass: SatellitePass?) async throws {
         guard let normal else { throw MountSessionError.needsWiFi }
         var waitingAtRise = false
+        // On the satellite; reaching north from here stops and asks before unwinding.
+        var following = false
+        var unwindAgreed = false
         let crossing = pass.flatMap(northCrossing(of:))
         if let crossing, let pass {
             log("\(pass.name) crosses the cable stop at \(crossing.formatted(date: .omitted, time: .standard)); the mount goes the long way round there")
@@ -765,7 +768,14 @@ final class MountSession {
                 let here = if let skyPosition { skyPosition } else { try await currentAltAz(normal) }
                 if Self.turnsLongWay(from: here, to: aim, stop: s.cableStopAzimuth) {
                     // The mount's goto won't turn through north, so it goes the long way round.
-                    // Let it, aimed at where the satellite will be when it gets there.
+                    // Mid-pass, stop and ask first; then go, aimed at where the satellite will be
+                    // when the mount gets there.
+                    if following, !unwindAgreed {
+                        guard try await confirmUnwind(object.name, seconds: Self.slewTime(from: here, to: aim, stop: s.cableStopAzimuth)) else { return }
+                        unwindAgreed = true
+                        continue
+                    }
+                    unwindAgreed = false
                     var ahead = aim
                     for _ in 0..<3 {
                         ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth))
@@ -782,6 +792,7 @@ final class MountSession {
                 do {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
                     log("Step to " + describe(aim) + ", mount read " + describe(here))
+                    following = true
                     status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude) + crossingNote()
                 } catch NormalModeError.slewRefused {
                     status = "Mount refused the step (below its altitude limit?)"
@@ -799,6 +810,38 @@ final class MountSession {
 
     /// The azimuth the mount can't turn through, in either mode.
     var effectiveCableStop: Double { settings.cableStopAzimuth }
+
+    /// While tracking waits at the cable stop: the question for the user, answered with `answerUnwind`.
+    private(set) var unwindQuestion: String?
+    private var unwindAnswer: Bool?
+
+    func answerUnwind(_ carryOn: Bool, always: Bool = false) {
+        if always { app?.settings.unwindsWithoutAsking = true }
+        if unwindQuestion != nil { unwindAnswer = carryOn }
+    }
+
+    /// Tracking has reached the cable stop, with the mount stopped: asks whether to go the long
+    /// way round and carry on, unless Settings says to without asking. True to carry on.
+    private func confirmUnwind(_ name: String, seconds: Double) async throws -> Bool {
+        if settings.unwindsWithoutAsking { return true }
+        log("\(name) reached the cable stop; asking whether to unwind")
+        unwindAnswer = nil
+        unwindQuestion = "\(name) crosses north, which the mount doesn't turn through. Going the long way round takes about \(Int(seconds)) s, then tracking carries on."
+        status = "Stopped at north, waiting for an answer"
+        defer { unwindQuestion = nil }
+        while unwindAnswer == nil { try await Task.sleep(for: .milliseconds(200)) }
+        let carryOn = unwindAnswer ?? false
+        log(carryOn ? "Unwinding" : "Stopped at the cable stop")
+        if !carryOn { status = "Stopped at north" }
+        return carryOn
+    }
+
+    /// The azimuth axis reading (sense × primary) the mount may cover in Special mode.
+    private var cableRange: ClosedRange<Double> {
+        let model = settings.alignment ?? AlignmentModel()
+        let lo = settings.cableStopAzimuth + model.yaw + settings.cableMargin
+        return lo...(lo + 360 - 2 * settings.cableMargin)
+    }
 
     /// While a Normal-mode goto runs: where it's headed. The position isn't read mid-slew (the
     /// mount hesitates at any command), so this is what the sky shows meanwhile.
@@ -894,6 +937,12 @@ final class MountSession {
         }
         var mountSlews = true
         var glitchesInARow = 0
+        // On the target; reaching the cable stop from here stops and asks before unwinding.
+        var following = false
+        var unwindAgreed = false
+        if let pass, let crossing = northCrossing(of: pass) {
+            log("\(pass.name) crosses the cable stop at \(crossing.formatted(date: .omitted, time: .standard)); the mount goes the long way round there")
+        }
 
         while !Task.isCancelled {
             let loopStart = Date.now
@@ -919,6 +968,14 @@ final class MountSession {
                     // Far behind (tracking started mid-pass, or the mount was elsewhere): jump with
                     // the mount's own slew to where the satellite will be once it gets there.
                     let gap = max(abs(target.axes.primary - current.primary), abs(target.axes.secondary - current.secondary))
+                    // The plan goes the long way round here, as the mount's own goto would.
+                    if following, gap > 180, !unwindAgreed {
+                        try await special.stop()
+                        guard try await confirmUnwind(object.name, seconds: gap / s.maximumAzimuthRate + 2) else { return }
+                        unwindAgreed = true
+                        continue
+                    }
+                    if gap <= 2 { following = true; unwindAgreed = false }
                     if mountSlews, gap > 2,
                        let ahead = plan.target(at: t + gap / Self.estimatedSlewRate + 2) {
                         status = "Catching up at full speed…"
@@ -954,12 +1011,27 @@ final class MountSession {
                 let later = try s.observer.look(at: object.target, AstroTime(t + 1))
                 // (The rate over the next second already reaches past the command latency.)
                 guard now.altitude > s.minimumAltitude else { throw MountSessionError.belowHorizon }
-                let a = axesNear(model.mountFrame(now), model, current.primary)
-                let b = axesNear(model.mountFrame(later), model, a.primary)
+                var a = axesNear(model.mountFrame(now), model, current.primary)
+                var b = axesNear(model.mountFrame(later), model, a.primary)
+                // Past the cable stop: the same direction a turn the other way, the long way round.
+                let range = cableRange
+                if !range.contains(model.azimuthSense * a.primary) {
+                    if !unwindAgreed {
+                        try await special.stop()
+                        let turn = 360 - abs(a.primary - current.primary)
+                        guard try await confirmUnwind(object.name, seconds: turn / s.maximumAzimuthRate + 2) else { return }
+                        unwindAgreed = true
+                        continue
+                    }
+                    let shift = model.azimuthSense * (model.azimuthSense * a.primary < range.lowerBound ? 360.0 : -360.0)
+                    a.primary += shift
+                    b.primary += shift
+                }
                 desired = a
                 rates = (b.primary - a.primary, b.secondary - a.secondary)
                 controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
                 let gap = max(abs(a.primary - current.primary), abs(a.secondary - current.secondary))
+                if gap <= 2 { unwindAgreed = false }
                 period = gap > 2 ? Self.positioningPeriod : s.trackingPeriod
                 status = "Tracking"
             }
@@ -1732,7 +1804,7 @@ enum MountSessionError: Error {
         case .needsUSB: "Smooth tracking needs the USB connection (Special mode)."
         case .notAligned: "Align on at least two stars first."
         case .notPassive: "The mount can't track this by itself; use Step or Smooth."
-        case .untrackablePass: "This pass crosses the cable stop or exceeds the altitude limits."
+        case .untrackablePass: "This pass exceeds the altitude limits."
         case .routeCrossesCableStop: "Stopped: that move would swing through the cable stop."
         case .pastCableStop: "Stopped at the cable stop."
         case .belowHorizon: "It's below your horizon."

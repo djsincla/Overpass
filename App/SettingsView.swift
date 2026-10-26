@@ -71,10 +71,11 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Cable stop", value: "\(Int(model.settings.cableStopAzimuth))° \(compass(model.settings.cableStopAzimuth))")
                     LabeledSlider("Margin", value: $model.settings.cableMargin, in: 0...20, step: 1, unit: "°")
+                    Toggle("Unwind at north without asking", isOn: $model.settings.unwindsWithoutAsking)
                 } header: {
                     Text("Cable stop")
                 } footer: {
-                    Text("The mount never turns through the pole: north here, south in the southern hemisphere. Its own goto works this way, so Overpass does the same. Set the cables neutral with the scope pointing the opposite way.")
+                    Text("The mount never turns through the pole: north here, south in the southern hemisphere. Its own goto works this way, so Overpass does the same. When tracking reaches north, the mount stops and Overpass asks whether to go the long way round and carry on. Set the cables neutral with the scope pointing the opposite way.")
                 }
 
                 Section {

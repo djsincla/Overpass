@@ -112,14 +112,3 @@ func tempDirectory() -> URL {
         #expect(TLESource.builtIn.filter { $0.enabled }.map { $0.id } == ["celestrak-visual", "celestrak-stations"])
     }
 }
-
-@Suite struct CableStopAdvisorTests {
-    @Test func picksStopAwayFromPasses() {
-        // Both passes stay in the northern sky, so a stop due south blocks nothing.
-        let options = CableStopAdvisor.rank(tracks: [lowPass(startAzimuth: 300), lowPass(startAzimuth: 290)], limits: MountLimits())
-        #expect(options.first?.blockedPasses == 0)
-        let best = options.filter { $0.blockedPasses == 0 }.map { $0.azimuth }
-        #expect(best.contains(180))
-        #expect(!best.contains(0))
-    }
-}

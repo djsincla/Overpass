@@ -33,6 +33,8 @@ struct Settings: Codable, Equatable {
     /// sets this, not a setting.
     var cableStopAzimuth: Double { latitude < 0 ? 180 : 0 }
     var cableMargin: Double = 5
+    /// When tracking reaches north: go the long way round and carry on without asking.
+    var unwindsWithoutAsking = false
     /// The lowest the altitude axis may point, degrees. Below the horizon is allowed for
     /// pointing down from a hillside, as long as the tube clears the tripod.
     var minimumAltitudeAxis: Double = -5

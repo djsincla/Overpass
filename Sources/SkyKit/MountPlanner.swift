@@ -43,6 +43,8 @@ public struct MountPlan: Sendable {
     public let maximumError: Double
     /// Time spent further than the tolerance from the target.
     public let secondsOffTarget: TimeInterval
+    /// Where the pass crosses the cable stop, the time spent going the long way round. Zero when it doesn't.
+    public var unwindSeconds: TimeInterval = 0
 
     public var start: AxisPosition { samples[0].axes }
 }
@@ -129,8 +131,21 @@ public struct MountPlanner: Sendable {
         let stop = limits.cableStopAzimuth + model.yaw
         let lo = stop + limits.cableMargin, hi = stop + 360 - limits.cableMargin
         let turn = 360 * ((lo - az.min()!) / 360).rounded(.up)
-        guard az.max()! + turn < hi else { return nil }
-        az = az.map { $0 + turn }
+        var unwinding: TimeInterval = 0
+        if az.max()! + turn < hi {
+            az = az.map { $0 + turn }
+        } else {
+            // The pass crosses the stop. Do what the mount's own goto does: go the long way
+            // round there, and pick the satellite up again on the far side. Samples inside the
+            // margin wait at the nearer edge.
+            az = az.map { a in
+                let v = a + 360 * ((lo - a) / 360).rounded(.up)
+                return v <= hi ? v : (v - hi < lo + 360 - v ? hi : lo)
+            }
+            for (a, b) in zip(az, az.dropFirst()) where abs(b - a) > 180 {
+                unwinding += abs(b - a) / limits.maximumAzimuthRate + 2
+            }
+        }
 
         guard alt.allSatisfy({ (limits.minimumAltitudeAxis...limits.maximumAltitudeAxis).contains($0) }) else {
             return nil
@@ -141,12 +156,12 @@ public struct MountPlanner: Sendable {
             return PlannedSample(date: dates[i], axes: axes,
                                  error: angularSeparation(model.sky(for: axes).unitVector, track[i].position.unitVector))
         }
-        var off: TimeInterval = 0
+        var off = unwinding
         for i in samples.indices.dropFirst() where samples[i].error > tolerance || samples[i - 1].error > tolerance {
             off += dates[i].timeIntervalSince(dates[i - 1])
         }
         return MountPlan(orientation: orientation, samples: samples,
-                         maximumError: samples.map(\.error).max()!, secondsOffTarget: off)
+                         maximumError: samples.map(\.error).max()!, secondsOffTarget: off, unwindSeconds: unwinding)
     }
 
     /// Limits speed without lagging: the average of a forward pass (which lags) and a backward pass
