@@ -62,7 +62,8 @@ struct LookUpView: View {
         .onDisappear {
             motion.stop()
             camera.stop()
-            UIApplication.shared.isIdleTimerDisabled = false
+            // Stays on anyway while the mount is connected.
+            UIApplication.shared.isIdleTimerDisabled = model.mount.state == .connected
         }
         .onChange(of: showsCamera) { _, on in on ? camera.start() : camera.stop() }
     }
