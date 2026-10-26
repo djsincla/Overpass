@@ -88,6 +88,15 @@ Everything here was measured on one HAZ46 (MountInfo 0052 / 8052) over USB, with
 - Under rate control (`:M0#`/`:M2#`) the axis crosses ±180° without trouble, and the reading wraps.
 - So Overpass keeps `:T0#` targets at least 8° short of ±180°, crosses north under rate control at full speed, and finishes any goal inside that zone under rate control. Any native slew that starts heading away from its target is stopped within about a second.
 
+**Normal-mode goto and north (26 Oct 2026)**
+- The alt-az goto never turns through north. Measured over USB Normal mode with 90° hops: three turns clockwise and one anticlockwise with the mount set to 35° N, then two turns each way set to 35° S. Every hop across north went the long way round (270° in 47 s), and every hop across south went the short way.
+- North is a hard stop for the goto, with no wind-up allowance: it unwound after only 180° of turn from where it started. A hop ending exactly on 0° also went the long way.
+- The hemisphere setting doesn't move the stop to south.
+- A goto at `:MSR9#` covers 90° in about 17 s and 270° in about 47 s, about 5.5–6°/s, and lands within 0.005°.
+- Any command sent mid-goto, including a position read, makes the mount hesitate. Overpass waits out the expected slew time before polling `:GLS#` for the end of the slew.
+- `:GLS#` replies `sLLLLLLLLTTTTTTTTgsrpth#`: longitude (signed, 0.01″), latitude + 90° (0.01″), then GPS state (0 none, 1 no fix, 2 fix), system status, tracking rate, slew speed, time source and hemisphere. Read on 26 Oct 2026: 35.3592°, −120.8367°, GPS 2.
+- So Overpass treats north as the cable stop in both modes. Tracking that reaches north stops and asks whether to go the long way round. In Special mode, which drives the axes directly, an option allows up to 90° of overtravel past north, unwinding when tracking ends.
+
 **Timing and tracking**
 - One Smooth-tracking update (`:P2#` plus `:M2…#`) takes about 45 ms at 115,200 baud, nearly all of it waiting for the mount to answer, so 0.05 s is about as fast as updates can go.
 - Every 5 s or so, one position reply comes about 15 ms late. Timestamping positions at a typical exchange delay, and holding the planned speed through a lone outlier, removed the 10–20″ spikes this caused.
