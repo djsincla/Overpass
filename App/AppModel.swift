@@ -28,10 +28,10 @@ struct Settings: Codable, Equatable {
     var minimumAltitude: Double = 0
     var darkSkySunAltitude: Double = -6
 
-    /// The azimuth the mount never turns through: the pole, north here and south in the
-    /// southern hemisphere. The HAZ46's own goto never turns through north, so its cable wrap
-    /// sets this, not a setting.
-    var cableStopAzimuth: Double { latitude < 0 ? 180 : 0 }
+    /// The azimuth the mount never turns through: north. The HAZ46's own goto never turns
+    /// through north, in either hemisphere (measured 26 Oct 2026 with the mount set to 35° S),
+    /// so its cable wrap sets this, not a setting.
+    var cableStopAzimuth: Double { 0 }
     var cableMargin: Double = 5
     /// When tracking reaches north: go the long way round and carry on without asking.
     var unwindsWithoutAsking = false

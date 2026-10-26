@@ -20,7 +20,7 @@ For the longest time I have been running Heavenscape SkyTrack on a Windows lapto
 - **Step** (WiFi): a goto to where the target will be, repeated every couple of seconds. This is what I used for amateur radio passes for years, and it is fine for an antenna and jumpy in a telescope.
 - **Smooth** (USB): both axis rates varied about seven times a second against a planned track. On a HAZ46 it settles to a median error of about 2″.
 
-**Cable stop.** The mount never turns through the pole: north in the northern hemisphere, south in the southern. The HAZ46's own goto works this way, and Overpass plans every slew and pass to match, going the long way round when it has to. Over-the-top flips are there for passes close to the zenith.
+**Cable stop.** The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and Overpass plans every slew and pass to match, going the long way round when it has to. Over-the-top flips are there for passes close to the zenith.
 
 **Conjunctions.** Space station transits of the Moon and Sun around any place you choose, out to two weeks, drawn on a map with the band where the transit is visible and the time along its centreline. Watch an event and the app refreshes the station elements and recalculates it as the day gets closer, showing how far it moved.
 
