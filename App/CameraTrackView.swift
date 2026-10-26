@@ -306,6 +306,9 @@ struct CameraTrackControls: View {
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
 
+            LabeledSlider("Point down to", value: Bindable(model).settings.minimumAltitudeAxis, in: -45...10, step: 1, unit: "°")
+                .help("The lowest altitude the mount will follow down to. Below 0° is under the horizon; check the tube clears the tripod. Also in Settings.")
+
             Divider().padding(.vertical, 2)
 
             HStack {

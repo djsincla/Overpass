@@ -962,7 +962,8 @@ final class MountSession {
             moving = true
             record(current: current, desired: estimate.position, feed: (estimate.primaryRate, estimate.secondaryRate), command: command)
             let off = trace.last.map { $0.error * 60 } ?? 0
-            setStatus(atLimit ? "Held at the altitude limit"
+            let limit = rising ? s.limits.maximumAltitudeAxis : s.limits.minimumAltitudeAxis
+            setStatus(atLimit ? "Held at the altitude limit (\(Int(limit))°). Change it with Point down to."
                       : unseen > 0.3 ? "Out of sight, carrying on along its path…"
                       : String(format: "Camera tracking · %.1f′ off", off))
             let rest = period - Date.now.timeIntervalSince(loopStart)
