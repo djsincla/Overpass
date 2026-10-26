@@ -60,6 +60,10 @@ struct Settings: Codable, Equatable {
 
     /// Tracking starts (and "Move to start" waits) where a pass first reaches this elevation.
     var trackingStartAltitude: Double = 10
+    /// WWV-style ticks for the last ten seconds before tracking starts.
+    var countdownSounds = true
+    /// A WWV hour tone a minute before tracking starts.
+    var minuteWarningSound = true
 
     var stepInterval: Double = 2
     /// Normal mode (WiFi or USB): the shortest time between commands, for position polling and

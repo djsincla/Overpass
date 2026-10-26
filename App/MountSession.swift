@@ -153,6 +153,16 @@ final class MountSession {
     /// alignment always use real time (the scope is on the real star).
     private var skyNow: Date { app?.viewDate() ?? .now }
 
+    private let countdownSounds = CountdownSounds()
+
+    /// Sound alerts before tracking starts, `start` being sky time (the time bar's).
+    private func countDown(to start: Date) {
+        let s = settings
+        guard s.countdownSounds || s.minuteWarningSound else { return countdownSounds.cancel() }
+        countdownSounds.alert(before: start - skyNow.timeIntervalSince(.now),
+                              minuteWarning: s.minuteWarningSound, countdown: s.countdownSounds)
+    }
+
     var availableModes: [TrackingMode] {
         switch kind {
         case .wifi, .usbNormal: [.passive, .step]
@@ -497,6 +507,7 @@ final class MountSession {
         trackingMode = nil
         tracksCamera = false
         for task in tasks { task.cancel() }
+        countdownSounds.cancel()
         // Wait for the loops to end. One partway through a step would otherwise send its speeds
         // after the stop that follows, and the mount would pause and carry on.
         for task in tasks { await task.value }
@@ -712,7 +723,9 @@ final class MountSession {
                     try await goto(normal, to: point.position)
                     waitingAtRise = true
                 }
-                status = pass.flatMap { $0.startPoint(above: startAltitude) }
+                let point = pass.flatMap { $0.startPoint(above: startAltitude) }
+                if let point { countDown(to: point.date) }
+                status = point
                     .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSince(skyNow)))" }
                     ?? "Below \(Int(startAltitude))°"
             } else {
@@ -868,6 +881,7 @@ final class MountSession {
                     desired = plan.start
                     rates = (0, 0)
                     controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
+                    countDown(to: plan.samples[0].date)
                     status = "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))"
                 }
             } else {

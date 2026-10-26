@@ -86,6 +86,14 @@ struct SettingsView: View {
                     LabeledSlider("Point down to", value: $model.settings.minimumAltitudeAxis, in: -45...10, step: 1, unit: "°")
                         .help("The lowest altitude Overpass will drive the mount to. Below 0° points under the horizon (from a hillside, or at the ground for testing); check the tube clears the tripod and anything around it.")
                     LabeledSlider("Start tracking at", value: $model.settings.trackingStartAltitude, in: 0...45, step: 1, unit: "°")
+                    LabeledContent("Sound alerts") {
+                        VStack(alignment: .leading) {
+                            Toggle("A minute before tracking starts", isOn: $model.settings.minuteWarningSound)
+                                .help("A 1500 Hz tone, the WWV time signal's hour mark")
+                            Toggle("Count down the last 10 seconds", isOn: $model.settings.countdownSounds)
+                                .help("A tick each second, like WWV on 10 MHz, and a long 1000 Hz tone as tracking begins")
+                        }
+                    }
                     Picker("Normal mode updates", selection: $model.settings.normalModePeriod) {
                         ForEach([0.5, 1, 2, 5], id: \.self) { period in
                             Text("Every \(period.formatted(.number.precision(.fractionLength(0...1)))) s").tag(period)
