@@ -20,6 +20,17 @@ struct FrameResult: @unchecked Sendable {
     let previewRect: CGRect
 }
 
+/// How the preview is shown. Display only: detection measures objects against their local
+/// background noise, which a tone curve can't improve.
+struct PreviewTone: Equatable, Sendable {
+    /// Spread the frame's own darkest to brightest across the full range (lifts a faint night sky).
+    var autoStretch = false
+    /// −0.5 to 0.5, added after contrast.
+    var brightness = 0.0
+    /// 1 leaves it as it is.
+    var contrast = 1.0
+}
+
 /// Live frames from a camera, reduced to grayscale and searched for the guide spot.
 /// On a Mac this includes an iPhone through Continuity Camera.
 @MainActor @Observable
@@ -36,6 +47,16 @@ final class CameraFeed {
     /// picture, so 2× is still sharp on a 1080p camera; tracking always sees the whole frame.
     var zoom = 1.0 {
         didSet { capture.setZoom(zoom, centre: zoomCentre) }
+    }
+    /// The preview's tone curve.
+    var tone = PreviewTone() {
+        didSet { capture.setTone(tone) }
+    }
+    /// Whether this camera can freeze its exposure (most webcams offer only that and auto).
+    private(set) var canHoldExposure = false
+    /// Freeze the exposure where it is, so a bright object entering the view doesn't darken the rest.
+    var holdsExposure = false {
+        didSet { capture.setHoldsExposure(holdsExposure) }
     }
     /// Where the zoom centres, as fractions of the frame's width and height.
     var zoomCentre = (x: 0.5, y: 0.5) {
@@ -74,7 +95,8 @@ final class CameraFeed {
             Task { @MainActor in self?.receive(result) }
         }
         do {
-            try await capture.start(deviceID: id)
+            canHoldExposure = try await capture.start(deviceID: id)
+            capture.setHoldsExposure(holdsExposure && canHoldExposure)
             isRunning = true
         } catch {
             self.error = "Couldn't open the camera: \(error.localizedDescription)"
@@ -121,6 +143,22 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
 
     private var zoom = 1.0
     private var zoomCentre = (x: 0.5, y: 0.5)
+    private var tone = PreviewTone()
+    private var device: AVCaptureDevice?
+
+    func setTone(_ tone: PreviewTone) {
+        queue.async { self.tone = tone }
+    }
+
+    func setHoldsExposure(_ hold: Bool) {
+        queue.async {
+            guard let device = self.device else { return }
+            let mode: AVCaptureDevice.ExposureMode = hold ? .locked : .continuousAutoExposure
+            guard device.isExposureModeSupported(mode), (try? device.lockForConfiguration()) != nil else { return }
+            device.exposureMode = mode
+            device.unlockForConfiguration()
+        }
+    }
 
     func setZoom(_ zoom: Double, centre: (x: Double, y: Double)) {
         queue.async {
@@ -140,13 +178,17 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
             .devices.map { ($0.uniqueID, $0.localizedName) }
     }
 
-    func start(deviceID: String) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    /// Returns whether the camera can hold its exposure.
+    func start(deviceID: String) async throws -> Bool {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
             queue.async {
                 do {
                     try self.configure(deviceID: deviceID)
                     self.session.startRunning()
-                    continuation.resume()
+                    let device = self.device
+                    continuation.resume(returning: device.map {
+                        $0.isExposureModeSupported(.locked) && $0.isExposureModeSupported(.continuousAutoExposure)
+                    } ?? false)
                 } catch {
                     continuation.resume(throwing: error)
                 }
@@ -165,6 +207,7 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
         session.inputs.forEach { session.removeInput($0) }
         session.outputs.forEach { session.removeOutput($0) }
         session.addInput(try AVCaptureDeviceInput(device: device))
+        self.device = device
         let output = AVCaptureVideoDataOutput()
         // The luma plane of 4:2:0 video is already a grayscale image.
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange]
@@ -221,11 +264,11 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
                 let cw = Int(Double(width) / zoom), ch = Int(Double(height) / zoom)
                 let cx = min(max(Int(zoomCentre.x * Double(width)) - cw / 2, 0), width - cw)
                 let cy = min(max(Int(zoomCentre.y * Double(height)) - ch / 2, 0), height - ch)
-                preview = Self.crop(base.assumingMemoryBound(to: UInt8.self), rowBytes: rowBytes, x: cx, y: cy, width: cw, height: ch)
+                preview = Self.crop(base.assumingMemoryBound(to: UInt8.self), rowBytes: rowBytes, x: cx, y: cy, width: cw, height: ch, tone: tone)
                 let k = Double(w) / Double(width)
                 previewRect = CGRect(x: Double(cx) * k, y: Double(cy) * k, width: Double(cw) * k, height: Double(ch) * k)
             } else {
-                preview = Self.image(pixels, w, h)
+                preview = Self.image(pixels, w, h, tone: tone)
             }
         }
         handler?(FrameResult(spotChecked: checksSpot, spot: spot, frame: deliversFrames ? frame : nil,
@@ -233,7 +276,7 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
     }
 
     /// A region of the full-resolution luma plane, scaled down if it's wider than 960 pixels.
-    static func crop(_ base: UnsafePointer<UInt8>, rowBytes: Int, x: Int, y: Int, width: Int, height: Int) -> CGImage? {
+    static func crop(_ base: UnsafePointer<UInt8>, rowBytes: Int, x: Int, y: Int, width: Int, height: Int, tone: PreviewTone) -> CGImage? {
         guard width > 0, height > 0 else { return nil }
         let step = max(1, (width + 959) / 960)
         let w = width / step, h = height / step
@@ -249,10 +292,33 @@ private final class CaptureController: NSObject, AVCaptureVideoDataOutputSampleB
                 vImageScale_Planar8(&source, &destination, nil, vImage_Flags(kvImageNoFlags))
             }
         }
-        return image(pixels, w, h)
+        return image(pixels, w, h, tone: tone)
     }
 
-    static func image(_ pixels: [UInt8], _ width: Int, _ height: Int) -> CGImage? {
+    /// The grey levels the preview shows for each level the camera gave, or nil to leave them.
+    static func toneTable(_ tone: PreviewTone, _ pixels: [UInt8]) -> [UInt8]? {
+        guard tone != PreviewTone() else { return nil }
+        var low = 0.0, high = 255.0
+        if tone.autoStretch {
+            var sample = Swift.stride(from: 0, to: pixels.count, by: max(1, pixels.count / 20_000)).map { pixels[$0] }
+            sample.sort()
+            low = Double(sample[sample.count / 100])
+            high = max(Double(sample[min(sample.count - 1, sample.count * 997 / 1000)]), low + 8)
+        }
+        return (0..<256).map { v in
+            let n = ((Double(v) - low) / (high - low) - 0.5) * tone.contrast + 0.5 + tone.brightness
+            return UInt8(min(max(n * 255, 0), 255).rounded())
+        }
+    }
+
+    static func image(_ pixels: [UInt8], _ width: Int, _ height: Int, tone: PreviewTone = PreviewTone()) -> CGImage? {
+        var pixels = pixels
+        if let table = toneTable(tone, pixels) {
+            pixels.withUnsafeMutableBytes { raw in
+                var buffer = vImage_Buffer(data: raw.baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: width)
+                vImageTableLookUp_Planar8(&buffer, &buffer, table, vImage_Flags(kvImageNoFlags))
+            }
+        }
         guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
                        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0),

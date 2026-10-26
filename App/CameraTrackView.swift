@@ -54,6 +54,11 @@ struct CameraTrackView: View {
 struct CameraTrackScreen: View {
     @Environment(AppModel.self) private var model
     @State private var pinchStart: Double?
+    @State private var showingImageControls = false
+    @AppStorage("camera.autoStretch") private var autoStretch = false
+    @AppStorage("camera.brightness") private var brightness = 0.0
+    @AppStorage("camera.contrast") private var contrast = 1.0
+    @AppStorage("camera.holdExposure") private var holdExposure = false
     static let zooms = [1.0, 2, 4, 8]
 
     var body: some View {
@@ -68,7 +73,8 @@ struct CameraTrackScreen: View {
                 }
                 Canvas { context, _ in draw(&context, layout) }
                 VStack {
-                    HStack {
+                    HStack(alignment: .top) {
+                        imageControls.padding(10)
                         Spacer()
                         zoomPicker.padding(10)
                     }
@@ -99,7 +105,73 @@ struct CameraTrackScreen: View {
         .aspectRatio(camera.frameSize.width > 0 ? Double(camera.frameSize.width) / Double(camera.frameSize.height) : 16 / 9,
                      contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .onAppear { applyImageSettings() }
+        .onChange(of: autoStretch) { applyImageSettings() }
+        .onChange(of: brightness) { applyImageSettings() }
+        .onChange(of: contrast) { applyImageSettings() }
+        .onChange(of: holdExposure) { applyImageSettings() }
         .accessibilityLabel(tracker.tracker == nil ? "Camera view. Click an object to track it." : "Camera view, following an object")
+    }
+
+    private func applyImageSettings() {
+        let camera = model.cameraTracker.camera
+        let tone = PreviewTone(autoStretch: autoStretch, brightness: brightness, contrast: contrast)
+        if camera.tone != tone { camera.tone = tone }
+        if camera.holdsExposure != holdExposure { camera.holdsExposure = holdExposure }
+    }
+
+    /// Exposure and the preview's tone, over the top-left of the picture.
+    private var imageControls: some View {
+        let camera = model.cameraTracker.camera
+        return VStack(alignment: .leading, spacing: 8) {
+            Button {
+                showingImageControls.toggle()
+            } label: {
+                Image(systemName: "slider.horizontal.3").padding(4)
+            }
+            .buttonStyle(.borderless)
+            .help("Exposure and image adjustments")
+            .accessibilityLabel("Image adjustments")
+
+            if showingImageControls {
+                VStack(alignment: .leading, spacing: 8) {
+                    if camera.canHoldExposure {
+                        Picker("Exposure", selection: $holdExposure) {
+                            Text("Auto").tag(false)
+                            Text("Hold").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .help("Hold freezes the camera's exposure where it is, so a bright object coming into view doesn't darken everything else")
+                    } else if camera.isRunning {
+                        Text("This camera sets its own exposure").font(.caption)
+                    }
+                    Toggle("Auto stretch", isOn: $autoStretch)
+                        .help("Spread the picture's darkest to brightest across the full range; lifts a faint night sky")
+                    LabeledContent("Brightness") {
+                        Slider(value: $brightness, in: -0.5...0.5).frame(width: 130)
+                    }
+                    LabeledContent("Contrast") {
+                        Slider(value: $contrast, in: 0.5...4).frame(width: 130)
+                    }
+                    HStack {
+                        Text("Changes the picture only, not what's tracked").font(.caption2).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset") {
+                            autoStretch = false
+                            brightness = 0
+                            contrast = 1
+                        }
+                        .disabled(!autoStretch && brightness == 0 && contrast == 1)
+                    }
+                }
+                .font(.callout)
+                .frame(width: 280)
+            }
+        }
+        .padding(6)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+        .environment(\.colorScheme, .dark)
+        .foregroundStyle(.white)
     }
 
     private var zoomPicker: some View {
