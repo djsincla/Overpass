@@ -243,9 +243,10 @@ final class AppModel {
     static let storage = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Overpass")
 
     init() {
-        settings = Self.load("settings", default: Settings())
+        var settings = Self.load("settings", default: Settings())
         // Normal mode is the default at every launch: Special mode is chosen for a session, not kept.
         if settings.connection == .usb { settings.connection = .usbNormal }
+        self.settings = settings
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
         do {
