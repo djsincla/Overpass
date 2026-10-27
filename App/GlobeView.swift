@@ -13,8 +13,8 @@ struct GlobeTrack: Identifiable {
     let visible: [[Geodetic]]
     /// Where it is overhead at the time shown, if that's within the track.
     let now: Geodetic?
-    /// The ground it can be seen from at that moment (above the horizon), as a radius in metres.
-    let footprint: Double?
+    /// The edge of the ground it can be seen from at that moment (above the horizon).
+    let footprint: [Geodetic]?
     let focused: Bool
 }
 
@@ -42,9 +42,14 @@ struct GlobeView: View {
                     MapPolyline(coordinates: segment.map(\.coordinate), contourStyle: .geodesic)
                         .stroke(track.color, style: StrokeStyle(lineWidth: track.focused ? 5 : 3.5, lineCap: .round))
                 }
-                if let footprint = track.footprint, let now = track.now, track.focused {
-                    MapCircle(center: now.coordinate, radius: footprint)
+                // A polygon worked out here: MapCircle can't draw a circle around a pole.
+                if let footprint = track.footprint, track.focused {
+                    MapPolygon(coordinates: footprint.map(\.coordinate))
                         .foregroundStyle(track.color.opacity(0.12))
+                    // The outline only along the real edge: a polar cap's seam and pole points aren't one.
+                    let polar = abs(footprint[0].latitude) == 90
+                    let edge = polar ? Array(footprint.dropFirst().dropLast()) : footprint + [footprint[0]]
+                    MapPolyline(coordinates: edge.map(\.coordinate))
                         .stroke(track.color.opacity(0.5), lineWidth: 1)
                 }
                 if let now = track.now {
@@ -85,13 +90,5 @@ struct GlobeView: View {
         } else {
             position = .camera(MapCamera(centerCoordinate: home.coordinate, distance: 22_000_000))
         }
-    }
-}
-
-extension GroundTrack {
-    /// The radius on the ground, in metres, from which a satellite at `height` km is above the horizon.
-    static func footprintRadius(height: Double) -> Double {
-        let r = Geodesy.meanRadius
-        return r * acos(r / (r + max(height, 0))) * 1000
     }
 }

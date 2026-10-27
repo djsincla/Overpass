@@ -264,7 +264,7 @@ struct ObserveView: View {
             return GlobeTrack(id: pass.id, name: pass.name, color: Theme.track(model.trackIndex(pass)),
                               segments: GroundTrack.segments(points),
                               visible: GroundTrack.segments(points.filter { $0.date >= pass.start.date && $0.date <= pass.end.date }),
-                              now: now, footprint: now.map { GroundTrack.footprintRadius(height: $0.height) },
+                              now: now, footprint: now.map { GroundTrack.footprint(center: $0, height: $0.height) },
                               focused: pass.id == focus?.id)
         }
     }

@@ -47,4 +47,25 @@ import Testing
         #expect(segments[0].last == Geodetic(latitude: 5, longitude: 180))
         #expect(segments[1].first == Geodetic(latitude: 5, longitude: -180))
     }
+
+    @Test func footprintEdgeIsAtTheHorizon() {
+        let center = Geodetic(latitude: 40, longitude: -100)
+        let ring = GroundTrack.footprint(center: center, height: 500)
+        #expect(ring.count == 120)
+        // About 2,450 km for 500 km up.
+        let expected = Geodesy.meanRadius * acos(Geodesy.meanRadius / (Geodesy.meanRadius + 500))
+        for p in ring { #expect(abs(Geodesy.distance(center, p) - expected) < 1) }
+    }
+
+    @Test func footprintOverThePoleIsACap() {
+        // 80° N with a 2,450 km (22°) footprint takes in the North Pole.
+        let ring = GroundTrack.footprint(center: Geodetic(latitude: 80, longitude: -60), height: 500)
+        #expect(ring.first == Geodetic(latitude: 90, longitude: -180))
+        #expect(ring.last == Geodetic(latitude: 90, longitude: 180))
+        let edge = ring.dropFirst().dropLast()
+        #expect(zip(edge, edge.dropFirst()).allSatisfy { $0.longitude <= $1.longitude })
+        #expect(edge.allSatisfy { $0.latitude > 55 })
+        // The meridian ends meet.
+        #expect(edge.first!.latitude == edge.last!.latitude)
+    }
 }
