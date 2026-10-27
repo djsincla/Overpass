@@ -7,7 +7,11 @@ import SwiftUI
 struct SkyDome: View {
     let observer: Observer
     let date: Date
+    /// The pass in focus, drawn with its times and markers.
     var pass: SatellitePass?
+    var passColor: Color = .cyan
+    /// Other shown passes, drawn as plain tracks in their own colours.
+    var otherTracks: [(pass: SatellitePass, color: Color)] = []
     var plan: MountPlan?
     var tolerance: Double = 0.1
     var cableStopAzimuth: Double?
@@ -41,8 +45,9 @@ struct SkyDome: View {
                 if let az = cableStopAzimuth { drawCableStop(&context, geometry, az) }
                 drawStars(&context, geometry)
                 drawSolarSystem(&context, geometry)
+                for track in otherTracks { drawPass(&context, geometry, track.pass, color: track.color, detailed: false) }
                 if let pass {
-                    drawPass(&context, geometry, pass)
+                    drawPass(&context, geometry, pass, color: passColor, detailed: true)
                     drawLegend(&context, proxy.size)
                 }
                 drawLiveObjects(&context, geometry)
@@ -240,21 +245,33 @@ struct SkyDome: View {
         }
     }
 
-    private func drawPass(_ context: inout GraphicsContext, _ g: DomeGeometry, _ pass: SatellitePass) {
+    /// A pass's track. In focus (`detailed`) it gets the shadow, tick, start and peak markers;
+    /// otherwise a thinner line with its name at the start.
+    private func drawPass(_ context: inout GraphicsContext, _ g: DomeGeometry, _ pass: SatellitePass,
+                          color: Color, detailed: Bool) {
         let track = pass.track
         guard track.count > 1 else { return }
 
-        // Solid where the satellite is sunlit; dashed grey in the Earth's shadow.
+        // Solid where the satellite is sunlit; dashed in the Earth's shadow.
+        let width: CGFloat = detailed ? 3 : 2
         for (a, b) in zip(track, track.dropFirst()) {
             var segment = Path()
             segment.move(to: g.point(a.position))
             segment.addLine(to: g.point(b.position))
             if a.sunlit {
-                context.stroke(segment, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                context.stroke(segment, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
             } else {
                 // Still clearly visible against the night sky: the pass doesn't stop, it's just unlit.
-                context.stroke(segment, with: .color(.white.opacity(0.75)), style: StrokeStyle(lineWidth: 2.5, dash: [6, 4]))
+                let unlit = detailed ? Color.white.opacity(0.75) : color.opacity(0.6)
+                context.stroke(segment, with: .color(unlit), style: StrokeStyle(lineWidth: width - 0.5, dash: [6, 4]))
             }
+        }
+
+        guard detailed else {
+            drawArrowhead(&context, g, from: track[track.count - 2].position, to: pass.end.position, color: color)
+            let start = g.point(pass.start.position)
+            context.draw(Text(pass.name).font(.caption2.bold()).foregroundStyle(color), at: CGPoint(x: start.x, y: start.y - 10))
+            return
         }
 
         // Where it enters or leaves the shadow, with the time.
@@ -264,7 +281,7 @@ struct SkyDome: View {
             context.fill(marker, with: .color(.black))
             var half = Path()
             half.addArc(center: p, radius: 6, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
-            context.fill(half, with: .color(.cyan))
+            context.fill(half, with: .color(color))
             context.stroke(marker, with: .color(.white), lineWidth: 1.5)
             let label = b.sunlit ? "lit" : "shadow"
             // Above the marker when it's close to the start, whose time sits above the start ring.
@@ -295,7 +312,7 @@ struct SkyDome: View {
         context.draw(Text(pass.start.date, style: .time).font(.caption2).foregroundStyle(.green),
                      at: CGPoint(x: start.x, y: start.y - 12))
 
-        drawArrowhead(&context, g, from: track[track.count - 2].position, to: pass.end.position)
+        drawArrowhead(&context, g, from: track[track.count - 2].position, to: pass.end.position, color: color)
         let peak = g.point(pass.culmination.position)
         context.draw(Text("\(Int(pass.maxAltitude.rounded()))°").font(.caption2.bold()).foregroundStyle(.white),
                      at: CGPoint(x: peak.x + 14, y: peak.y))
@@ -375,7 +392,7 @@ struct SkyDome: View {
         var lit = Path()
         lit.move(to: CGPoint(x: x, y: y))
         lit.addLine(to: CGPoint(x: x + 22, y: y))
-        context.stroke(lit, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        context.stroke(lit, with: .color(passColor), style: StrokeStyle(lineWidth: 3, lineCap: .round))
         context.draw(Text("Sunlit").font(.caption2).foregroundStyle(.secondary), at: CGPoint(x: x + 30, y: y), anchor: .leading)
         var dark = Path()
         dark.move(to: CGPoint(x: x, y: y + 16))
@@ -384,7 +401,7 @@ struct SkyDome: View {
         context.draw(Text("Eclipsed").font(.caption2).foregroundStyle(.secondary), at: CGPoint(x: x + 30, y: y + 16), anchor: .leading)
     }
 
-    private func drawArrowhead(_ context: inout GraphicsContext, _ g: DomeGeometry, from: Horizontal, to: Horizontal) {
+    private func drawArrowhead(_ context: inout GraphicsContext, _ g: DomeGeometry, from: Horizontal, to: Horizontal, color: Color) {
         let a = g.point(from), b = g.point(to)
         let angle = atan2(b.y - a.y, b.x - a.x)
         var head = Path()
@@ -392,7 +409,7 @@ struct SkyDome: View {
         head.addLine(to: CGPoint(x: b.x - 10 * cos(angle - 0.45), y: b.y - 10 * sin(angle - 0.45)))
         head.move(to: b)
         head.addLine(to: CGPoint(x: b.x - 10 * cos(angle + 0.45), y: b.y - 10 * sin(angle + 0.45)))
-        context.stroke(head, with: .color(.cyan), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+        context.stroke(head, with: .color(color), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
     }
 }
 

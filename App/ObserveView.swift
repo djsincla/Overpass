@@ -14,6 +14,8 @@ struct ObserveView: View {
     @AppStorage("observe.threeListFraction") private var threeListFraction = 0.3
     @AppStorage("observe.threeDomeFraction") private var threeDomeFraction = 0.6
     @AppStorage("observe.layout") private var layout = Layout.listLeft
+    /// The sky, or the Earth (as a globe or a flat map) with the ground tracks.
+    @AppStorage("observe.view") private var view = SkyView.sky
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -212,10 +214,56 @@ struct ObserveView: View {
     }
 
     private var dome: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
             let date = model.viewDate(context.date)
-            let pass = model.highlightedPass(at: date)
+            let shown = model.shownPasses(at: date)
+            let highlighted = model.highlightedPass(at: date)
+            let pass = shown.first { $0.id == highlighted?.id } ?? shown.last
+            Group {
+                if view != .sky {
+                    GlobeView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
+                              flat: view == .map,
+                              tracks: globeTracks(shown, focus: pass, at: date),
+                              onTapTrack: { id in if let p = shown.first(where: { $0.id == id }) { model.highlight(pass: p) } })
+                } else {
+                    sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if !model.shownTrackKeys.isEmpty { TrackLegend(passes: shown, focusID: pass?.id) }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Picker("View", selection: $view) {
+                    ForEach(SkyView.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(8)
+                // Clear of the globe's own recentre button.
+                .padding(.trailing, view == .sky ? 0 : 44)
+                .help("The sky overhead, or the Earth with the ground tracks as a globe or a flat map")
+            }
+        }
+    }
+
+    private func globeTracks(_ passes: [SatellitePass], focus: SatellitePass?, at date: Date) -> [GlobeTrack] {
+        passes.map { pass in
+            let points = model.groundTrack(for: pass)
+            let inWindow = points.first.map { $0.date <= date } == true && points.last.map { $0.date >= date } == true
+            let now = inWindow ? model.subpoint(of: pass.noradID, at: date) : nil
+            return GlobeTrack(id: pass.id, name: pass.name, color: Theme.track(model.trackIndex(pass)),
+                              segments: GroundTrack.segments(points),
+                              visible: GroundTrack.segments(points.filter { $0.date >= pass.start.date && $0.date <= pass.end.date }),
+                              now: now, footprint: now.map { GroundTrack.footprintRadius(height: $0.height) },
+                              focused: pass.id == focus?.id)
+        }
+    }
+
+    private func sky(date: Date, pass: SatellitePass?, others: [SatellitePass]) -> some View {
             SkyDome(observer: model.settings.observer, date: date, pass: pass,
+                    passColor: pass.map { Theme.track(model.trackIndex($0)) } ?? .cyan,
+                    otherTracks: others.map { ($0, Theme.track(model.trackIndex($0))) },
                     plan: pass.flatMap(model.plan(for:)), tolerance: model.settings.pointingTolerance,
                     cableStopAzimuth: model.mount.effectiveCableStop,
                     liveObjects: model.liveObjects(at: date),
@@ -225,7 +273,6 @@ struct ObserveView: View {
                     slewTarget: model.mount.slewTarget,
                     onTapObject: { model.highlight(objectID: $0) },
                     menu: { AnyView(domeMenu($0)) })
-        }
     }
 
     /// Right-click on anything in the sky: track it, target it, select it, or plan around it.
@@ -254,6 +301,9 @@ struct ObserveView: View {
         }
         Divider()
         Button("Highlight") { model.highlight(objectID: id) }
+        if let pass = model.passes.first(where: { "sat:\($0.noradID)" == id && $0.end.date > model.viewDate() }) {
+            Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
+        }
         Button(model.isSelected(id) ? "Remove from selection" : "Add to selection") { model.toggle(id) }
         Button("Pass calculator…") { model.calculatorObjectID = id }
     }
@@ -276,6 +326,9 @@ struct ObserveView: View {
 struct PassesList: View {
     @Environment(AppModel.self) private var model
     @State private var detail: SatellitePass?
+    #if os(iOS)
+    @State private var editMode = EditMode.inactive
+    #endif
 
     var body: some View {
         if model.predictionTargets.isEmpty {
@@ -286,15 +339,44 @@ struct PassesList: View {
                                    description: Text("None of your \(model.predictionTargets.count) selected satellites pass in the next \(Int(model.filter.hoursAhead)) hours with these filters."))
         } else {
             // Passes still to come at the time the bar is set to; refreshed as time moves on.
-            TimelineView(.periodic(from: .now, by: 5)) { context in
+            TimelineView(.periodic(from: Theme.clockAnchor, by: 5)) { context in
             let date = model.viewDate(context.date)
             let lead = [model.targetPassID, model.highlightedPass(at: date)?.id].compactMap { $0 }
-            List(PassGroup.docked(model.passes.filter { $0.end.date > date }, preferring: lead)) { group in
+            let groups = PassGroup.docked(model.passes.filter { $0.end.date > date }, preferring: lead)
+            // The selection is the shown tracks: click for one, ⌘-click or ⇧-click for several
+            // (Select on iPhone and iPad). Selecting only changes what the sky and globe show.
+            let selection = Binding<Set<String>>(
+                get: { Set(model.shownPasses(at: date).map(\.id)) },
+                set: { model.setShownTracks(ids: $0, inListOrder: groups.map(\.lead)) })
+            VStack(spacing: 0) {
+            #if os(iOS)
+            HStack {
+                Text(editMode.isEditing ? "Choose up to \(AppModel.maximumShownTracks) passes to show" : "")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button(editMode.isEditing ? "Done" : "Select") {
+                    withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                }
+                .font(.callout)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            #endif
+            List(groups, selection: selection) { group in
                 let pass = group.lead
                 HStack {
-                    // Clicking a pass only refocuses the dome on it. It never moves the mount.
+                    if model.isShown(pass) && model.shownTrackKeys.count > 1 {
+                        Circle().fill(Theme.track(model.trackIndex(pass))).frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
+                    }
+                    #if os(iOS)
+                    // Tapping a pass only refocuses the dome on it. It never moves the mount.
                     Button { model.highlight(pass: pass) } label: { PassRow(pass: pass, docked: group.others.map(\.name)) }
                         .buttonStyle(.plain)
+                        .allowsHitTesting(!editMode.isEditing)
+                    #else
+                    PassRow(pass: pass, docked: group.others.map(\.name))
+                    #endif
                     if model.targetPassID == pass.id {
                         Image(systemName: "scope").foregroundStyle(Theme.target).accessibilityLabel("Tracking target")
                     }
@@ -302,9 +384,18 @@ struct PassesList: View {
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Details for \(pass.name)")
                 }
-                .listRowBackground(RowHighlight(focused: model.highlightedPass(at: date)?.id == pass.id,
+                #if os(iOS)
+                .listRowBackground(RowHighlight(focused: !editMode.isEditing && model.highlightedPass(at: date)?.id == pass.id,
                                                 target: model.targetPassID == pass.id))
+                #endif
+                .swipeActions(edge: .leading) {
+                    Button(model.isShown(pass) ? "Hide track" : "Add track", systemImage: model.isShown(pass) ? "eye.slash" : "plus") {
+                        model.toggleTrack(pass)
+                    }
+                    .tint(Theme.accent)
+                }
                 .contextMenu {
+                    Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
                     if model.targetPassID == pass.id {
                         Button("Untrack") { Task { await model.untrack() } }
                     } else {
@@ -316,6 +407,15 @@ struct PassesList: View {
                 }
             }
             .listStyle(.plain)
+            #if os(iOS)
+            .environment(\.editMode, $editMode)
+            #else
+            // Delete takes the focused pass off the sky and globe.
+            .onDeleteCommand {
+                if let pass = model.highlightedPass(at: model.viewDate()), model.isShown(pass) { model.hideTrack(pass) }
+            }
+            #endif
+            }
             }
             .sheet(item: $detail) { pass in
                 NavigationStack {
@@ -375,7 +475,7 @@ struct SelectedObjectsList: View {
             .labelsHidden()
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
                 let date = model.viewDate(context.date)
                 List(sorted(model.selectedObjects.filter { passesFilters($0, date) }, date)) { object in
                     Button { model.highlight(objectID: object.id) } label: {
@@ -572,4 +672,43 @@ struct Brightness: View {
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
     }
+}
+
+/// The shown tracks over the sky or globe: tap one to focus it, × to take it off.
+struct TrackLegend: View {
+    @Environment(AppModel.self) private var model
+    let passes: [SatellitePass]
+    let focusID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(passes) { pass in
+                HStack(spacing: 6) {
+                    Circle().fill(Theme.track(model.trackIndex(pass))).frame(width: 9, height: 9)
+                    Button { model.highlight(pass: pass) } label: {
+                        HStack(spacing: 4) {
+                            Text(pass.name).font(.caption.weight(pass.id == focusID ? .bold : .regular)).lineLimit(1)
+                            Text(pass.start.date, style: .time).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    Button { model.hideTrack(pass) } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Hide \(pass.name)")
+                    .help("Take this track off")
+                }
+            }
+        }
+        .padding(8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .padding(8)
+    }
+}
+
+/// What the Observe screen's main view shows.
+enum SkyView: String, CaseIterable, Identifiable {
+    case sky = "Sky", globe = "Globe", map = "Map"
+    var id: Self { self }
 }

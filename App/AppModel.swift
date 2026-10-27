@@ -130,7 +130,7 @@ struct Settings: Codable, Equatable {
 
 /// Which passes to show, saved between launches. Which satellites is the selection.
 struct FilterSettings: Codable, Equatable {
-    var hoursAhead: Double = 24
+    var hoursAhead: Double = 8
     var minimumMaxAltitude: Double = 10
     var minimumDurationMinutes: Double = 0
     var visibleOnly = false
@@ -299,17 +299,114 @@ final class AppModel {
         return passes.filter { $0.end.date > date }.min { $0.start.date < $1.start.date }
     }
 
+    /// Highlights a pass. Unless it's already one of the shown tracks, it becomes the only one,
+    /// as a plain click picks one row of a list.
     func highlight(pass: SatellitePass) {
         highlightedPassKey = (pass.noradID, pass.start.date)
         highlightedObjectID = "sat:\(pass.noradID)"
+        if !isShown(pass) { shownTrackKeys = [PassKey(pass)] }
     }
 
     /// Highlights an object, and for a satellite its next pass.
     func highlight(objectID: String) {
         highlightedObjectID = objectID
         if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > viewDate() }) {
-            highlightedPassKey = (pass.noradID, pass.start.date)
+            highlight(pass: pass)
         }
+    }
+
+    // MARK: Shown tracks
+
+    /// A pass by satellite and rise time. Predictions rerun can move the rise by a few seconds.
+    struct PassKey: Equatable {
+        let noradID: String
+        let start: Date
+        init(_ pass: SatellitePass) { noradID = pass.noradID; start = pass.start.date }
+        func matches(_ pass: SatellitePass) -> Bool {
+            pass.noradID == noradID && abs(pass.start.date.timeIntervalSince(start)) < 60
+        }
+    }
+
+    static let maximumShownTracks = 5
+
+    /// The passes drawn on the sky and the globe, in the order they were added, each in its own
+    /// colour. The highlighted pass is the one in focus.
+    private(set) var shownTrackKeys: [PassKey] = []
+
+    /// The shown passes still to finish at `date`; with none chosen, the highlighted pass.
+    func shownPasses(at date: Date) -> [SatellitePass] {
+        let found = shownTrackKeys.compactMap { key in passes.first(where: key.matches) }.filter { $0.end.date > date }
+        if found.isEmpty, let pass = highlightedPass(at: date) { return [pass] }
+        return found
+    }
+
+    func isShown(_ pass: SatellitePass) -> Bool { shownTrackKeys.contains { $0.matches(pass) } }
+
+    /// Which of `Theme.tracks` a shown pass is drawn in: its place in the list.
+    func trackIndex(_ pass: SatellitePass) -> Int {
+        shownTrackKeys.firstIndex { $0.matches(pass) } ?? 0
+    }
+
+    /// Adds a pass to the shown tracks and focuses it. Past the limit, the oldest goes.
+    func showTrack(_ pass: SatellitePass) {
+        if !isShown(pass) { shownTrackKeys.append(PassKey(pass)) }
+        if shownTrackKeys.count > Self.maximumShownTracks {
+            shownTrackKeys.removeFirst(shownTrackKeys.count - Self.maximumShownTracks)
+        }
+        highlightedPassKey = (pass.noradID, pass.start.date)
+        highlightedObjectID = "sat:\(pass.noradID)"
+    }
+
+    /// Takes a pass off the sky and the globe. If it was in focus, the last one left takes over.
+    func hideTrack(_ pass: SatellitePass) {
+        shownTrackKeys.removeAll { $0.matches(pass) }
+        guard let key = highlightedPassKey, key.noradID == pass.noradID,
+              abs(key.start.timeIntervalSince(pass.start.date)) < 60 else { return }
+        if let last = shownTrackKeys.last {
+            highlightedPassKey = (last.noradID, last.start)
+            highlightedObjectID = "sat:\(last.noradID)"
+        } else {
+            highlightedPassKey = nil
+            highlightedObjectID = nil
+        }
+    }
+
+    func toggleTrack(_ pass: SatellitePass) {
+        if isShown(pass) { hideTrack(pass) } else { showTrack(pass) }
+    }
+
+    /// The pass list's selection: the ids of the shown passes. Setting it is a click, ⌘-click or
+    /// ⇧-click in the list, so new rows are added in list order and the last one added is focused.
+    func setShownTracks(ids: Set<String>, inListOrder list: [SatellitePass]) {
+        let current = shownPasses(at: viewDate())
+        let removed = current.filter { !ids.contains($0.id) }
+        let added = list.filter { ids.contains($0.id) && !isShown($0) }
+        if shownTrackKeys.isEmpty {
+            // The highlighted pass was standing in for an empty list: make the click explicit.
+            shownTrackKeys = current.filter { ids.contains($0.id) }.map(PassKey.init)
+        }
+        for pass in removed { hideTrack(pass) }
+        for pass in added { showTrack(pass) }
+    }
+
+    /// Ground tracks by pass id, worked out once: half an orbit either side of the pass.
+    @ObservationIgnored private var groundTrackCache: [String: [GroundPoint]] = [:]
+
+    func groundTrack(for pass: SatellitePass) -> [GroundPoint] {
+        if let cached = groundTrackCache[pass.id] { return cached }
+        guard let satellite = satelliteByID[pass.noradID] else { return [] }
+        let window = GroundTrack.window(for: pass, period: satellite.period)
+        let points = GroundTrack.points(of: satellite, from: window.start, to: window.end)
+        if groundTrackCache.count > 50 { groundTrackCache.removeAll() }
+        groundTrackCache[pass.id] = points
+        return points
+    }
+
+    /// Where a satellite is overhead at `date`.
+    func subpoint(of noradID: String, at date: Date) -> Geodetic? {
+        guard let satellite = satelliteByID[noradID],
+              let p = try? satellite.earthFixedPosition(at: AstroTime(date)) else { return nil }
+        return Geodesy.geodetic(ofEarthFixed: p)
     }
 
     var targetObject: SkyObject? { targetObjectID.flatMap(object) }

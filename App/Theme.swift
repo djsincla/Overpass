@@ -5,6 +5,20 @@ import SwiftUI
 enum Theme {
     /// Buttons and selection: a sky blue that keeps white text readable.
     static let accent = Color(red: 0.22, green: 0.58, blue: 0.96)
+    /// Every periodic timeline starts from this instant, so they all tick together and SwiftUI
+    /// redraws once a second. Started from `.now`, each row ticked at its own moment and the
+    /// screen was laid out fifteen or twenty times a second.
+    static let clockAnchor = Date(timeIntervalSinceReferenceDate: 0)
+    /// Shown satellite tracks, in the order they're added. The first matches the single-pass cyan.
+    static let tracks: [Color] = [
+        .cyan,
+        Color(red: 1.0, green: 0.60, blue: 0.20),
+        Color(red: 1.0, green: 0.42, blue: 0.78),
+        Color(red: 0.98, green: 0.90, blue: 0.30),
+        Color(red: 0.70, green: 0.55, blue: 1.0),
+    ]
+
+    static func track(_ index: Int) -> Color { tracks[index % tracks.count] }
     /// A satellite in sunlight: the pass track, the profile, the "lit" chips.
     static let sunlit = Color.adaptive(light: (0.0, 0.52, 0.74), dark: (0.36, 0.86, 1.0))
     /// In the Earth's shadow.
@@ -210,5 +224,22 @@ struct PassProfile: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// A clock for list rows that show live times. It ticks on the whole second, together with the
+/// periodic timelines, so every row updates in the same redraw.
+@MainActor @Observable final class Ticker {
+    static let shared = Ticker()
+    private(set) var now = Date.now
+
+    private init() {
+        Task { [weak self] in
+            while true {
+                let wait = 1 - Date.now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+                try? await Task.sleep(for: .seconds(wait))
+                self?.now = .now
+            }
+        }
     }
 }

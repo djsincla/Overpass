@@ -47,8 +47,8 @@ struct MountPanel: View {
         }
         .onChange(of: mount.kind) { _, _ in mount.preferredMode = modes.first ?? .step }
         // A satellite the mount can't follow by itself never shows Passive as the mode.
-        .onChange(of: model.targetObjectID, initial: true) { _, _ in
-            if !modes.contains(mount.preferredMode), let first = modes.first { mount.preferredMode = first }
+        .onChange(of: (model.targetObject ?? model.highlightedObject)?.id, initial: true) { _, _ in
+            if !modes.contains(mount.preferredMode) { mount.preferredMode = modes.contains(.step) ? .step : modes.first ?? .step }
         }
     }
 
@@ -304,8 +304,9 @@ struct MountPanel: View {
     /// The modes this connection offers for the target: Passive only for what the mount can
     /// follow by itself (not a satellite, apart from a geostationary one).
     private var modes: [TrackingMode] {
-        let target = model.targetObject
-        return model.mount.availableModes.filter { $0 != .passive || target == nil || target?.passiveTracking != nil }
+        // The locked target, or before one is set, whatever is highlighted.
+        let object = model.targetObject ?? model.highlightedObject
+        return model.mount.availableModes.filter { $0 != .passive || object == nil || object?.passiveTracking != nil }
     }
 
     private var modeExplanation: String {
@@ -418,7 +419,7 @@ struct PointingError: View {
     let scope: Horizontal
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: Theme.clockAnchor, by: 0.5)) { context in
             // Compare with the target at the moment the position was read, not now.
             if let error = error(at: model.mount.skyPositionDate ?? context.date) {
                 content(error)

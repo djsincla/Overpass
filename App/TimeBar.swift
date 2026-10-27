@@ -21,7 +21,7 @@ struct TimeBar: View {
             HStack(spacing: 6) {
                 Image(systemName: shifted ? "clock.arrow.2.circlepath" : "clock")
                     .foregroundStyle(shifted ? Theme.focus : .secondary)
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
                     Text(model.viewDate(context.date), format: .dateTime.weekday(.abbreviated).hour().minute().second())
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(shifted ? Theme.focus : .primary)

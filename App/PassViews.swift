@@ -39,8 +39,10 @@ struct PassRow: View {
     var docked: [String] = []
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let now = model.viewDate(context.date)
+        // The shared ticker, not a TimelineView: one inside each List cell kept the main thread
+        // about 70% busy on an iPhone (30% on a Mac) whatever its period (measured 26 Oct 2026).
+        let now = model.viewDate(Ticker.shared.now)
+        do {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(pass.name).font(.headline).lineLimit(1)
@@ -78,8 +80,8 @@ struct PassRow: View {
                 .frame(minWidth: 50, alignment: .trailing)
             }
             .padding(.vertical, 3)
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -134,6 +136,7 @@ struct FilterSheet: View {
                 Section("When") {
                     Picker("Look ahead", selection: $model.filter.hoursAhead) {
                         Text("6 hours").tag(6.0)
+                        Text("8 hours").tag(8.0)
                         Text("12 hours").tag(12.0)
                         Text("1 day").tag(24.0)
                         Text("3 days").tag(72.0)
@@ -205,7 +208,7 @@ struct PassDetailView: View {
         let plan = model.plan(for: pass)
         ScrollView {
             VStack(spacing: 16) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
                     SkyDome(observer: model.settings.observer, date: model.viewDate(context.date), pass: pass, plan: plan,
                             tolerance: model.settings.pointingTolerance, cableStopAzimuth: model.settings.cableStopAzimuth)
                 }
