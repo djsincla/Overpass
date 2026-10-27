@@ -33,6 +33,9 @@ struct Settings: Codable, Equatable {
     /// so its cable wrap sets this, not a setting.
     var cableStopAzimuth: Double { 0 }
     var cableMargin: Double = 5
+    /// Normal mode: turn off the mount's own sidereal, lunar or solar tracking on connecting, so
+    /// it isn't creeping from where a hand-controller goto or an earlier session left it.
+    var stopsMountTrackingOnConnect = true
     /// When tracking reaches north: go the long way round and carry on without asking.
     var unwindsWithoutAsking = false
     /// Special mode: tracking may carry on past north by up to `overtravel` degrees, and the

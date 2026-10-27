@@ -194,6 +194,7 @@ final class MountSession {
                 site = try? await client.site()
                 gpsState = site?.gps
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                await stopMountTrackingIfSet(client)
                 await syncIfLeftSpecialMode(client)
                 normal = client
                 identity = id
@@ -217,12 +218,14 @@ final class MountSession {
                     // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
                     site = try? await client.site()
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    await stopMountTrackingIfSet(client)
                     await syncAfterSwitch(client, position: position)
                     id = try await client.identify()
                 } else {
                     // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
                     site = try? await client.site()
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    await stopMountTrackingIfSet(client)
                     await syncIfLeftSpecialMode(client)
                 }
                 normal = client
@@ -793,6 +796,16 @@ final class MountSession {
         case .solar: "solar"
         case .king: "King"
         case .custom: "custom"
+        }
+    }
+
+    /// Normal mode on connecting: the mount may be tracking by itself, from a hand-controller
+    /// goto or an earlier session. Turned off unless Settings says to leave it (`:ST0#` does
+    /// nothing if it wasn't tracking).
+    private func stopMountTrackingIfSet(_ normal: NormalModeClient) async {
+        guard settings.stopsMountTrackingOnConnect else { return }
+        if (try? await normal.setTracking(false)) != nil {
+            log("Connect: the mount's own tracking turned off (Settings)")
         }
     }
 
