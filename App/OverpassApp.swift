@@ -108,8 +108,8 @@ struct ContentView: View {
 }
 
 #if os(macOS)
-/// Stops the mount on quit. In Special mode it keeps turning at the last speeds it was given
-/// until told otherwise, so quitting mid-track would leave it running.
+/// Disconnects on quit: stops the mount, which in Special mode keeps turning at the last speeds
+/// it was given, and puts it back in Normal mode.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static weak var model: AppModel?
 
@@ -117,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             guard let mount = Self.model?.mount, mount.state == .connected else { return .terminateNow }
             Task {
-                await mount.stopAll()
+                await mount.disconnect()
                 sender.reply(toApplicationShouldTerminate: true)
             }
             return .terminateLater

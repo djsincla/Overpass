@@ -36,7 +36,7 @@ WiFi uses iOptron's normal command set on the mount's own network (10.10.100.254
 
 USB uses iOptron's Special Mode, which only works over the USB port, and gives you Smooth tracking. On a Mac the HAZ46 cable appears as `/dev/cu.PL2303G-USBtoUART210` through Prolific's driver. An iPhone or iPad needs a relay on the mount's USB port, such as a Raspberry Pi Zero 2 W running `ser2net`, reached over TCP.
 
-Be aware that the mount stays in Special Mode across power cycles, and WiFi does not work while it is in it. Leave "Leave Special mode when disconnecting" turned on, unless you enjoy wondering why the WiFi stopped working.
+Be aware that the mount stays in Special Mode across power cycles, and WiFi does not work while it is in it. Overpass puts it back in Normal mode whenever it disconnects, and when the Mac app quits.
 
 ## What I found out about the HAZ46
 

@@ -60,8 +60,6 @@ struct Settings: Codable, Equatable {
     /// iPhone/iPad: the relay on the mount's USB port.
     var relayHost = "raspberrypi.local"
     var relayPort = 2000
-    /// Special mode survives power cycles; leaving it on would stop WiFi working next time.
-    var leaveSpecialModeOnDisconnect = true
 
     /// Night vision: the whole app in red on black, to keep dark adaptation at the eyepiece.
     var redMode = false

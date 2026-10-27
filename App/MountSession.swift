@@ -258,7 +258,9 @@ final class MountSession {
         await stopAll()
         pollTask?.cancel()
         pollTask = nil
-        if let special, settings.leaveSpecialModeOnDisconnect {
+        // Always back to Normal mode: Special mode survives power cycles, and left on it would
+        // stop WiFi and the hand controller working next time.
+        if let special {
             // Where the tube points, from the Special-mode axes, before leaving: Normal mode
             // comes back reading az 0, alt 0, so tell it.
             var pointing: Horizontal?
@@ -277,6 +279,7 @@ final class MountSession {
                     log(String(format: "Left Special mode: :GAC# az %.3f° alt %.3f°", p.azimuth, p.altitude))
                 }
             }
+            if app?.settings.connection == .usb { app?.settings.connection = .usbNormal }
         }
         await closeTransport()
         state = .disconnected
