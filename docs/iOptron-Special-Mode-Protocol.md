@@ -79,6 +79,7 @@ Everything here was measured on one HAZ46 (MountInfo 0052 / 8052) over USB, with
 **Syncing**
 - A Normal-mode alt-az sync (`:Sas`/`:Sz` + `:CM#`) sent during the placeholder is **added** to the position the mount kept. Leaving Special mode at az 201.95°, alt 19.21° and syncing to that same position left the mount reading az 43.91°, alt 38.44°, exactly double. So never sync after a switch; there is nothing to fix.
 - Whether `:CM#` sets or adds once the real position is back is not yet measured. Overpass reads the position back after every sync and reports a mismatch.
+- Overpass's own record of where the scope points can go stale: the hand controller, or a mode switch that fails partway, moves the mount without Overpass seeing it. On 27 Oct 2026 the sync after switching to Normal mode used that stale record twice and left the mount 35° out in azimuth and about 25° in altitude. Since then the sync uses the mount's own reading once the real position is back, and entering Special mode replaces the record with the axes.
 - `:S0#`/`:S1#` (Special-mode axis sync) has not been measured. Overpass's Special-mode sync moves its own alignment zeros instead, and "Set position" reads the axes back to check the mount took the values as positions.
 
 **`:T0#` slews on the azimuth axis**

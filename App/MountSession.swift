@@ -613,6 +613,11 @@ final class MountSession {
 
     private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
                                _ run: @escaping @MainActor () async throws -> Void) async {
+        // Mid-switch neither client is usable: a track started then failed with "stopped answering".
+        guard !isSwitchingMode else {
+            status = "Wait for the mode switch to finish"
+            return
+        }
         await stopAll(unwinding: false)
         trackingName = name
         trackingObject = object
@@ -1626,11 +1631,13 @@ final class MountSession {
                 + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
             if let known = knownPointing {
                 let off = angularSeparation(here.unitVector, known.horizontal.unitVector)
-                recordHeld = off > 0.5
                 status = off > 0.5
-                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; use Set position, or align", off)
+                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; going by the axes", off)
                     : "Special mode: the axes agree with where Overpass last saw the scope"
             }
+            // The axes are the mount's own reading: they win over a record that may be stale.
+            recordHeld = false
+            remember(here, now: true)
         }
         return identity
     }
@@ -1693,8 +1700,15 @@ final class MountSession {
             status = "Normal mode, but the mount still reported a placeholder position after 20 s, so it wasn't synced"
             return
         }
+        // The mount's own reading, now its real position is back: where the scope is. Overpass's
+        // record could be stale (the hand controller, or a failed switch, moves the mount
+        // unseen), and syncing on a stale record moved the alignment 35° (27 Oct 2026). Normal
+        // mode still needs a sync before it tracks; on its own reading that changes nothing.
         var name = "the scope's position"
-        var sky = knownPointing?.horizontal ?? position
+        var sky = position
+        if let known = knownPointing?.horizontal, angularSeparation(known.unitVector, position.unitVector) > 0.5 {
+            log("Overpass's record (" + describe(known) + ") differs from the mount's reading; the mount's reading is used")
+        }
         if let target = app?.targetObject, let h = try? settings.observer.look(at: target.target, AstroTime(.now)),
            angularSeparation(h.unitVector, sky.unitVector) < 0.5 {
             name = target.name
@@ -1761,8 +1775,10 @@ final class MountSession {
                 await holdStill(special: special)
                 if let raw = try? await special.positions() {
                     let model = settings.alignment ?? .iOptronSpecialMode
-                    log(String(format: "Switching to Normal mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary)
-                        + describe(model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))))
+                    let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
+                    log(String(format: "Switching to Normal mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary) + describe(here))
+                    recordHeld = false
+                    remember(here, now: true)
                 }
                 _ = try await special.exitSpecialMode()
                 let normal = NormalModeClient(transport: transport)
