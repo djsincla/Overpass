@@ -100,7 +100,9 @@ struct EarthGlobeView {
         }
         Globe.place(coordinator.homeNode, at: home)
         let sunScene = Globe.vector(sun)
-        coordinator.earth.geometry?.firstMaterial?.setValue(NSValue(scnVector3: sunScene), forKey: "sunDirection")
+        let earth = coordinator.earth.geometry?.firstMaterial
+        earth?.setValue(NSValue(scnVector3: sunScene), forKey: "sunDirection")
+        Globe.showFootprint(of: tracks.first { $0.focused && $0.now != nil }, on: earth)
 
         // Static parts: rebuilt when a track's points or focus change.
         var keep = Set<String>()
@@ -197,15 +199,28 @@ extension EarthGlobeView: NSViewRepresentable {
             .surface: """
             #pragma arguments
             float3 sunDirection;
+            float3 footprintCenter;
+            float footprintCos;
+            float3 footprintColor;
             #pragma body
             float3 n = normalize((scn_frame.inverseViewTransform * float4(_surface.normal, 0.0)).xyz);
             float day = smoothstep(-0.10, 0.10, dot(n, normalize(sunDirection)));
             _surface.diffuse.rgb *= mix(0.07, 1.0, day);
             _surface.emission.rgb *= (1.0 - day) * 1.3;
+            // The focused satellite's footprint: a tint inside, a line about 1.5 px wide at its edge.
+            float d = dot(n, normalize(footprintCenter)) - footprintCos;
+            float w = max(fwidth(d), 1e-6);
+            float inside = smoothstep(-w, w, d);
+            float edge = 1.0 - smoothstep(0.75 * w, 1.75 * w, abs(d));
+            _surface.diffuse.rgb = mix(_surface.diffuse.rgb, footprintColor, max(inside * 0.16, edge * 0.8));
+            _surface.emission.rgb *= 1.0 - edge;
             """,
             .fragment: redShader,
         ]
         m.setValue(NSValue(scnVector3: SCNVector3(0, 0, 1)), forKey: "sunDirection")
+        m.setValue(NSValue(scnVector3: SCNVector3(0, 0, 1)), forKey: "footprintCenter")
+        m.setValue(NSNumber(value: 2), forKey: "footprintCos")
+        m.setValue(NSValue(scnVector3: SCNVector3(1, 1, 1)), forKey: "footprintColor")
         sphere.firstMaterial = m
         return sphere
     }
@@ -301,7 +316,7 @@ extension EarthGlobeView: NSViewRepresentable {
         return node
     }
 
-    /// The satellite at its height, a line down to the point below, the footprint, and the name.
+    /// The satellite at its height, a line down to the point below, and the name.
     static func movingTrack(_ track: GlobeTrack) -> SCNNode? {
         guard let now = track.now else { return nil }
         let node = SCNNode()
@@ -320,8 +335,6 @@ extension EarthGlobeView: NSViewRepresentable {
             node.addChildNode(SCNNode(geometry: drop))
         }
 
-        if track.focused, let cap = footprintCap(center: now, color: color) { node.addChildNode(cap) }
-
         let label = SCNText(string: track.name, extrusionDepth: 0)
         label.font = .systemFont(ofSize: 10, weight: .semibold)
         label.flatness = 0.1
@@ -337,37 +350,25 @@ extension EarthGlobeView: NSViewRepresentable {
         return node
     }
 
-    /// The ground the satellite can be seen from: a spherical cap, in rings out to its horizon.
-    static func footprintCap(center: Geodetic, color: PlatformColor) -> SCNNode? {
-        let angle = GroundTrack.footprintAngle(height: center.height)
-        let rings = 10, spokes = 96, lift = 1.002
-        let ground = Geodetic(latitude: center.latitude, longitude: center.longitude)
-        var vertices = [point(ground, radius: lift)]
-        for ring in 1...rings {
-            for spoke in 0..<spokes {
-                let p = Geodesy.destination(from: ground, bearing: 360 * Double(spoke) / Double(spokes),
-                                            angle: angle * Double(ring) / Double(rings))
-                vertices.append(point(p, radius: lift))
-            }
+    /// The ground the satellite can be seen from, tinted on the Earth's own surface with an edge
+    /// at its horizon. Drawn per pixel, so it stays on the sphere however wide it is: a mesh cap's
+    /// flat triangles sank below the surface in bands once a high satellite's cap spanned 70° or more.
+    static func showFootprint(of track: GlobeTrack?, on material: SCNMaterial?) {
+        guard let material else { return }
+        guard let track, let now = track.now else {
+            material.setValue(NSNumber(value: 2), forKey: "footprintCos")
+            return
         }
-        var indices: [Int32] = []
-        func v(_ ring: Int, _ spoke: Int) -> Int32 { Int32(1 + (ring - 1) * spokes + spoke % spokes) }
-        for spoke in 0..<spokes { indices += [0, v(1, spoke), v(1, spoke + 1)] }
-        for ring in 1..<rings {
-            for spoke in 0..<spokes {
-                indices += [v(ring, spoke), v(ring + 1, spoke), v(ring + 1, spoke + 1),
-                            v(ring, spoke), v(ring + 1, spoke + 1), v(ring, spoke + 1)]
-            }
-        }
-        let fill = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices)],
-                               elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
-        fill.firstMaterial = material(color, opacity: 0.11)
-        let node = SCNNode(geometry: fill)
-        let edge = (0...spokes).map { vertices[Int(v(rings, $0))] }
-        if let outline = ribbon(edge, width: 0.004) {
-            outline.firstMaterial = material(color, opacity: 0.7)
-            node.addChildNode(SCNNode(geometry: outline))
-        }
-        return node
+        let angle = GroundTrack.footprintAngle(height: now.height)
+        material.setValue(NSValue(scnVector3: point(Geodetic(latitude: now.latitude, longitude: now.longitude), radius: 1)),
+                          forKey: "footprintCenter")
+        material.setValue(NSNumber(value: cos(angle.radians)), forKey: "footprintCos")
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        #if os(iOS)
+        PlatformColor(track.color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #else
+        (PlatformColor(track.color).usingColorSpace(.sRGB) ?? .white).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        material.setValue(NSValue(scnVector3: SCNVector3(red, green, blue)), forKey: "footprintColor")
     }
 }
