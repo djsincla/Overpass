@@ -70,6 +70,15 @@ public enum Geodesy {
         return 2 * meanRadius * asin(min(1, h.squareRoot()))
     }
 
+    /// The point `angle` degrees of arc from `start` along `bearing` (degrees east of north), on a sphere.
+    public static func destination(from start: Geodetic, bearing: Double, angle: Double) -> Geodetic {
+        let lat1 = start.latitude.radians, lon1 = start.longitude.radians
+        let theta = bearing.radians, delta = angle.radians
+        let lat2 = asin(sin(lat1) * cos(delta) + cos(lat1) * sin(delta) * cos(theta))
+        let lon2 = lon1 + atan2(sin(theta) * sin(delta) * cos(lat1), cos(delta) - sin(lat1) * sin(lat2))
+        return Geodetic(latitude: lat2.degrees, longitude: wrap180(lon2.degrees))
+    }
+
     /// Initial bearing from `a` to `b`, degrees east of north.
     public static func bearing(from a: Geodetic, to b: Geodetic) -> Double {
         let p1 = a.latitude.radians, p2 = b.latitude.radians, dl = (b.longitude - a.longitude).radians

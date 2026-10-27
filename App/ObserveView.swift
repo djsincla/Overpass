@@ -239,7 +239,14 @@ struct ObserveView: View {
             let highlighted = model.highlightedPass(at: date)
             let pass = shown.first { $0.id == highlighted?.id } ?? shown.last
             Group {
-                if view != .sky {
+                if view == .globe {
+                    EarthGlobeView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
+                                   tracks: globeTracks(shown, focus: pass, at: date),
+                                   sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
+                                   redMode: model.settings.redMode,
+                                   recentreRequest: recentreRequest,
+                                   onTapTrack: { id in if let p = shown.first(where: { $0.id == id }) { model.highlight(pass: p) } })
+                } else if view == .map {
                     GlobeView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
                               flat: view == .map,
                               tracks: globeTracks(shown, focus: pass, at: date),
@@ -259,11 +266,13 @@ struct ObserveView: View {
     private func globeTracks(_ passes: [SatellitePass], focus: SatellitePass?, at date: Date) -> [GlobeTrack] {
         passes.map { pass in
             let points = model.groundTrack(for: pass)
+            let visiblePoints = points.filter { $0.date >= pass.start.date && $0.date <= pass.end.date }
             let inWindow = points.first.map { $0.date <= date } == true && points.last.map { $0.date >= date } == true
             let now = inWindow ? model.subpoint(of: pass.noradID, at: date) : nil
             return GlobeTrack(id: pass.id, name: pass.name, color: Theme.track(model.trackIndex(pass)),
                               segments: GroundTrack.segments(points),
-                              visible: GroundTrack.segments(points.filter { $0.date >= pass.start.date && $0.date <= pass.end.date }),
+                              visible: GroundTrack.segments(visiblePoints),
+                              path: points.map(\.place), visiblePath: visiblePoints.map(\.place),
                               now: now, footprint: now.map { GroundTrack.footprint(center: $0, height: $0.height) },
                               focused: pass.id == focus?.id)
         }

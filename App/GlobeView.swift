@@ -11,6 +11,9 @@ struct GlobeTrack: Identifiable {
     let segments: [[Geodetic]]
     /// The part where it's above your horizon.
     let visible: [[Geodetic]]
+    /// The same, unsplit and with the satellite's height, for the 3D globe.
+    let path: [Geodetic]
+    let visiblePath: [Geodetic]
     /// Where it is overhead at the time shown, if that's within the track.
     let now: Geodetic?
     /// The edge of the ground it can be seen from at that moment (above the horizon).

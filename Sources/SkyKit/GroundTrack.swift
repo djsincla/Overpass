@@ -47,16 +47,11 @@ public enum GroundTrack {
     /// back as a cap: the edge in longitude order from −180° to 180°, then along the pole, since a
     /// ring around the pole has no inside on a flat map.
     public static func footprint(center: Geodetic, height: Double, points: Int = 120) -> [Geodetic] {
-        let r = Geodesy.meanRadius
-        let delta = acos(r / (r + max(height, 0)))
-        let lat1 = center.latitude.radians, lon1 = center.longitude.radians
+        let delta = footprintAngle(height: height)
         var ring: [Geodetic] = (0..<points).map { i in
-            let bearing = 2 * Double.pi * Double(i) / Double(points)
-            let lat2 = asin(sin(lat1) * cos(delta) + cos(lat1) * sin(delta) * cos(bearing))
-            let lon2 = lon1 + atan2(sin(bearing) * sin(delta) * cos(lat1), cos(delta) - sin(lat1) * sin(lat2))
-            return Geodetic(latitude: lat2.degrees, longitude: wrap180(lon2.degrees))
+            Geodesy.destination(from: center, bearing: 360 * Double(i) / Double(points), angle: delta)
         }
-        let pole: Double? = center.latitude + delta.degrees > 90 ? 90 : center.latitude - delta.degrees < -90 ? -90 : nil
+        let pole: Double? = center.latitude + delta > 90 ? 90 : center.latitude - delta < -90 ? -90 : nil
         guard let pole else { return ring }
         ring.sort { $0.longitude < $1.longitude }
         // Close the edge at ±180°, halfway between the points either side of the meridian.
@@ -67,6 +62,12 @@ public enum GroundTrack {
         return [Geodetic(latitude: pole, longitude: -180), Geodetic(latitude: edge, longitude: -180)]
             + ring
             + [Geodetic(latitude: edge, longitude: 180), Geodetic(latitude: pole, longitude: 180)]
+    }
+
+    /// The arc, in degrees from the point below, out to where a satellite at `height` km sets.
+    public static func footprintAngle(height: Double) -> Double {
+        let r = Geodesy.meanRadius
+        return acos(r / (r + max(height, 0))).degrees
     }
 
     /// The window drawn for a pass on the globe: half an orbit either side of it, so the track
