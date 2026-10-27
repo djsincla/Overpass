@@ -8,3 +8,6 @@ Overpass.xcodeproj/
 Screenshot*.png
 overpass-trace*.csv
 build/
+
+# The TestFlight tool builds on its own.
+Tools/TestFlight/.build/
