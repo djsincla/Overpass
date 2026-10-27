@@ -127,13 +127,24 @@ public struct TestFlight: Sendable {
     }
 
     /// Adds a tester to a group and sends the invitation.
+    /// Adds a tester to `group` and sends the invitation email. A tester App Store Connect already
+    /// knows is added to the group instead of created: an invite before the group had an approved
+    /// build created the tester, then failed, and every retry after that answered 409.
     public func invite(email: String, firstName: String?, lastName: String?, to group: Resource) async throws {
-        var attributes: [String: Any] = ["email": email]
-        if let firstName { attributes["firstName"] = firstName }
-        if let lastName { attributes["lastName"] = lastName }
-        guard let tester = try await client.create("betaTesters", attributes: attributes,
-                                                   relationships: ["betaGroups": ["data": [["type": "betaGroups", "id": group.id]]]]) else {
-            throw APIError(status: 0, message: "App Store Connect didn't return the new tester")
+        let tester: Resource
+        if let existing = try await client.list("betaTesters?filter[email]=\(Client.query(email))&limit=1").first {
+            try await client.send("POST", "betaGroups/\(group.id)/relationships/betaTesters",
+                                  body: ["data": [["type": "betaTesters", "id": existing.id]]])
+            tester = existing
+        } else {
+            var attributes: [String: Any] = ["email": email]
+            if let firstName { attributes["firstName"] = firstName }
+            if let lastName { attributes["lastName"] = lastName }
+            guard let created = try await client.create("betaTesters", attributes: attributes,
+                                                        relationships: ["betaGroups": ["data": [["type": "betaGroups", "id": group.id]]]]) else {
+                throw APIError(status: 0, message: "App Store Connect didn't return the new tester")
+            }
+            tester = created
         }
         try await client.create("betaTesterInvitations",
                                 relationships: ["app": Client.link("apps", app.id), "betaTester": Client.link("betaTesters", tester.id)])
