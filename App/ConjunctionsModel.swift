@@ -16,6 +16,10 @@ struct ConjunctionSettings: Codable, Equatable {
     var minimumAltitude: Double = 10
     /// Also search the satellites selected on the Observe screen, not just the space stations.
     var includeSelected = false
+    /// The space stations (ISS and Tiangong). Off, only the satellites chosen by name are searched.
+    var includeStations = true
+    /// Satellites chosen by name or catalogue number, by NORAD id.
+    var chosen: [String] = []
 }
 
 struct SearchPlace: Codable, Equatable {
@@ -72,10 +76,12 @@ final class ConjunctionsModel {
 
     var bodies: [SolarSystemBody] { (settings.moon ? [.moon] : []) + (settings.sun ? [.sun] : []) }
 
-    /// The stations from the TLE catalog, plus the Observe selection if asked.
+    /// The stations from the TLE catalog, the satellites chosen by name, and the Observe selection if asked.
     var satellites: [SatelliteTarget] {
         guard let app else { return [] }
-        var list = app.satellites.filter { Self.stationIDs[$0.noradID] != nil }
+        var list = settings.includeStations ? app.satellites.filter { Self.stationIDs[$0.noradID] != nil } : []
+        let chosen = Set(settings.chosen)
+        list += app.satellites.filter { chosen.contains($0.noradID) }
         if settings.includeSelected {
             for case .satellite(let s) in app.selectedObjects { list.append(s) }
         }
@@ -85,7 +91,41 @@ final class ConjunctionsModel {
         return unique.values.sorted { $0.name < $1.name }
     }
 
-    var stationsMissing: Bool { app?.satellites.contains { Self.stationIDs[$0.noradID] != nil } != true }
+    var stationsMissing: Bool {
+        settings.includeStations && app?.satellites.contains { Self.stationIDs[$0.noradID] != nil } != true
+    }
+
+    /// Satellites in the loaded catalogue matching `text` (name, catalogue number, or the
+    /// Objects search syntax), best first: a whole word of the name or the exact number, then a
+    /// name that starts with it, then the rest, shorter names first. "ISS" puts ISS (ZARYA) on top.
+    func matches(_ text: String, limit: Int = 8) -> [SatelliteTarget] {
+        guard let app else { return [] }
+        let query = SatelliteQuery(text)
+        guard !query.isEmpty else { return [] }
+        let needle = text.trimmingCharacters(in: .whitespaces).lowercased()
+        var seen = Set<String>()
+        let found = app.satellites.filter { s in
+            guard !settings.chosen.contains(s.noradID), seen.insert(s.noradID).inserted else { return false }
+            return query.matches(name: s.name, noradID: s.noradID, info: app.info(.satellite(s)))
+        }
+        func rank(_ s: SatelliteTarget) -> Int {
+            let name = s.name.lowercased()
+            let words = name.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+            if words.contains(needle) || s.noradID == needle { return 0 }
+            if name.hasPrefix(needle) { return 1 }
+            return 2
+        }
+        return found.sorted { (rank($0), $0.name.count, $0.name) < (rank($1), $1.name.count, $1.name) }.prefix(limit).map { $0 }
+    }
+
+    func choose(_ satellite: SatelliteTarget) {
+        if !settings.chosen.contains(satellite.noradID) { settings.chosen.append(satellite.noradID) }
+    }
+
+    func unchoose(_ noradID: String) { settings.chosen.removeAll { $0 == noradID } }
+
+    /// A chosen satellite's name, if its elements are loaded.
+    func name(of noradID: String) -> String? { app?.satellites.first { $0.noradID == noradID }?.name }
 
     func finder(around centre: Geodetic) -> ConjunctionFinder {
         var f = ConjunctionFinder(centre: centre)
@@ -122,7 +162,9 @@ final class ConjunctionsModel {
         }
         let sats = satellites
         guard !sats.isEmpty else {
-            message = "No space station elements yet: turn on the Space stations source in Objects."
+            message = settings.includeStations
+                ? "No space station elements yet: turn on the Space stations source in Objects."
+                : "Add a satellite by name, or turn on Space stations."
             return
         }
         guard !bodies.isEmpty else { return }
