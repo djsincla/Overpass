@@ -49,6 +49,8 @@ targets:
         com.apple.security.personal-information.location: true
         # The mount's USB serial port.
         com.apple.security.device.serial: true
+        # Exposure and gain on USB cameras such as the iPolar (UVC requests through IOKit).
+        com.apple.security.device.usb: true
         # Camera guiding (including an iPhone via Continuity Camera).
         com.apple.security.device.camera: true
     info:
