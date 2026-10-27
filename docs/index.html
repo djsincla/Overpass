@@ -109,9 +109,9 @@
     <div class="card">
       <h3>Tracking</h3>
       <ul>
-        <li><b>Passive</b> over WiFi: one goto, then the mount's own sidereal, lunar or solar rate, for stars, planets, the Moon, the Sun and geostationary satellites.</li>
-        <li><b>Step</b> over WiFi: a goto to where the target will be, every couple of seconds. Fine for an antenna and jumpy in a telescope.</li>
-        <li><b>Smooth</b> over USB: both axis rates varied about seven times a second against a planned track, settling to a median error of about 2″.</li>
+        <li><b>Passive</b> over WiFi or USB in Normal mode: one goto, then the mount's own sidereal, lunar or solar rate, for stars, planets, the Moon, the Sun and geostationary satellites. It isn't offered for any other satellite.</li>
+        <li><b>Step</b> over WiFi or USB in Normal mode: a goto to where the target will be, every couple of seconds. Fine for an antenna and jumpy in a telescope.</li>
+        <li><b>Smooth</b> over USB in Special Mode: both axis rates varied about seven times a second against a planned track, settling to a median error of about 2″.</li>
       </ul>
       <p style="margin-top: 8px;"><a href="https://github.com/djsincla/Overpass/blob/main/docs/Tracking-modes.md">Passive and Step in detail</a></p>
     </div>
@@ -120,16 +120,20 @@
       <p>The mount never turns through north, in either hemisphere. The HAZ46's own goto works this way, and every slew and pass is planned to match, going the long way round when it has to. When a pass reaches north the mount stops and Overpass asks whether to unwind and carry on, or does it without asking if you set that. Over USB there is an option to track up to 90° past north, with the mount unwinding when tracking ends, as long as your cables have the slack. Over-the-top flips are there for passes close to the zenith.</p>
     </div>
     <div class="card">
+      <h3>Sky, globe and map</h3>
+      <p>The Observe screen switches between the sky overhead, a 3D globe and a flat world map centred on you. Up to five passes show at once, each in its own colour: click, ⌘-click and ⇧-click in the pass list on a Mac, or Select, swipe and long-press on an iPhone or iPad. The globe has each ground track, the orbit and the satellite at its real height, and the footprint of the pass in focus, with day and night following the Sun. The globe and map are drawn from NASA's Blue Marble and Black Marble images bundled with the app, so they work in a field with no signal.</p>
+    </div>
+    <div class="card">
       <h3>Conjunctions</h3>
       <p>Space station transits of the Moon and Sun around any place you choose, out to two weeks, on a map with the band where the transit is visible and the time along its centreline. Watched events refresh their elements and recalculate as the day gets closer. This map uses Apple's MapKit on purpose: the band is a few kilometres wide and lasts under a second at any spot, so picking a road inside it takes street-level detail, and that needs a network connection while you plan.</p>
     </div>
     <div class="card">
       <h3>Also included</h3>
-      <p>A pass calculator out to fourteen days for any object, star alignment, camera guiding with an iPhone through Continuity Camera, and a red night-vision mode.</p>
+      <p>A pass calculator out to fourteen days for any object, star alignment, camera guiding with an iPhone through Continuity Camera, and a red night-vision mode that covers the globe and map as well. WWV-style ticks count down the last ten seconds before a pass starts, with a tone a minute out. The mount panel shows the mount's GPS status, and once the fix has held for half a minute it offers the mount's position as your location. On an iPhone, Look up overlays the sky, the planets and the pass on the camera as you hold the phone up. Settings export to a file for moving between a Mac and a phone.</p>
     </div>
     <div class="card">
       <h3>Connecting</h3>
-      <p>WiFi uses iOptron's normal command set on the mount's own network. USB uses Special Mode, which only works over USB; on a Mac the HAZ46 cable appears as <code>/dev/cu.PL2303G-USBtoUART210</code>. An iPhone or iPad needs a relay on the mount's USB port, such as a Raspberry Pi running <code>ser2net</code>.</p>
+      <p>WiFi uses iOptron's normal command set on the mount's own network. USB does the same in Normal mode, or switches to Special Mode for Smooth tracking, which only works over USB; on a Mac the HAZ46 cable appears as <code>/dev/cu.PL2303G-USBtoUART210</code>. Overpass always starts in Normal mode. An iPhone or iPad needs a relay on the mount's USB port for Special Mode, such as a Raspberry Pi running <code>ser2net</code>.</p>
     </div>
   </div>
 </section>
@@ -167,11 +171,11 @@
   <div class="status">
     <div class="card">
       <h3><span style="background: var(--green)"></span>Tested on a HAZ46</h3>
-      <p>The WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position.</p>
+      <p>The WiFi connection, Passive tracking of the Moon, Step tracking from a Mac and from an iPhone, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position.</p>
     </div>
     <div class="card">
       <h3><span style="background: var(--amber)"></span>Not yet tested on hardware</h3>
-      <p>The iOS build, the USB relay, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, and the fix for the 5 second timing glitch, which I ran out of battery before trying.</p>
+      <p>The USB relay, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, the GPS status with a mount that has a fix, and the fix for the 5 second timing glitch, which I ran out of battery before trying.</p>
     </div>
   </div>
 </section>
