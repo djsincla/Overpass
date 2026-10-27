@@ -550,7 +550,16 @@ final class MountSession {
 
     /// Stops everything: tracking, slews and jogs. Past north (Special mode), the mount then
     /// unwinds, unless `unwinding` is false or it was unwinding already (Stop stops that too).
-    func stopAll(unwinding: Bool = true) async {
+    func stopAll(unwinding: Bool = true, keepsTracking: Bool = true) async {
+        // The mount's own sidereal, lunar or solar tracking carries on through Stop. The HAZ46
+        // halts it along with the slew, so it's turned back on at the same rate afterwards. Only
+        // when it could be tracking by itself (Passive, or nothing running): Step's gotos and a
+        // move to a start point stop at once, as before.
+        var resume: NormalCommand.TrackingRate?
+        if keepsTracking, let normal, trackingMode == .passive || (trackingTask == nil && prepareTask == nil),
+           let state = try? await normal.trackingState(), state.system == 1 || state.system == 5 {
+            resume = NormalCommand.TrackingRate(rawValue: state.rate) ?? .sidereal
+        }
         let wasUnwinding = unwindTask != nil
         unwindTask?.cancel()
         await unwindTask?.value
@@ -569,6 +578,13 @@ final class MountSession {
         try? await normal?.stop()
         try? await special?.stop()
         status = "Stopped"
+        if let resume, let normal {
+            try? await normal.setTrackingRate(resume)
+            try? await normal.setTracking(true)
+            let name = Self.rateName(resume)
+            status = "Stopped; the mount carries on tracking at the \(name) rate"
+            log("Stop: the mount was tracking at the \(name) rate, so tracking is back on")
+        }
         if unwinding, !wasUnwinding, pastNorth != nil {
             _ = try? await readPosition()
             unwind()
@@ -621,7 +637,7 @@ final class MountSession {
             status = "Wait for the mode switch to finish"
             return
         }
-        await stopAll(unwinding: false)
+        await stopAll(unwinding: false, keepsTracking: false)
         trackingName = name
         trackingObject = object
         trackingMode = mode
@@ -664,7 +680,7 @@ final class MountSession {
 
     /// Moves the mount to where the pass will first reach the start elevation, and holds there.
     func moveToStart(of pass: SatellitePass) async {
-        await stopAll(unwinding: false)
+        await stopAll(unwinding: false, keepsTracking: false)
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
             return
@@ -770,6 +786,16 @@ final class MountSession {
             case nil: break
             }
             try await Task.sleep(for: .seconds(max(2, settings.normalModePeriod * 3)))
+        }
+    }
+
+    static func rateName(_ rate: NormalCommand.TrackingRate) -> String {
+        switch rate {
+        case .sidereal: "sidereal"
+        case .lunar: "lunar"
+        case .solar: "solar"
+        case .king: "King"
+        case .custom: "custom"
         }
     }
 
@@ -1406,7 +1432,7 @@ final class MountSession {
     /// the wrong way. Returns a report.
     func testNativeSlew() async -> String {
         guard let special else { return "Connect over USB (Special mode) first." }
-        await stopAll()
+        await stopAll(keepsTracking: false)
         var report: [String] = []
         do {
             guard let start = try await readPosition() else { return "No position from the mount." }
@@ -1774,7 +1800,7 @@ final class MountSession {
     /// the mount is still before the switch, and the session carries on in the new mode.
     func switchMode() async {
         guard state == .connected, let transport = usbTransport, let current = kind else { return }
-        await stopAll()
+        await stopAll(keepsTracking: false)
         isSwitchingMode = true
         pollTask?.cancel()
         pollTask = nil
@@ -1836,7 +1862,7 @@ final class MountSession {
     /// back to check the mount took the values as positions. Returns a report.
     func setPosition(_ pointing: Horizontal) async -> String {
         guard let special else { return "Connect over USB (Special mode) first." }
-        await stopAll()
+        await stopAll(keepsTracking: false)
         let model = settings.alignment ?? .iOptronSpecialMode
         let axes = model.axes(for: pointing)
         do {
@@ -1864,7 +1890,7 @@ final class MountSession {
     /// line also goes to the mount log.
     func testModeSwitching() async -> String {
         guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
-        await stopAll()
+        await stopAll(keepsTracking: false)
         pollTask?.cancel()
         pollTask = nil
         defer { startPolling() }

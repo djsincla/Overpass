@@ -75,6 +75,15 @@ import Testing
         #expect(transport.written == [":GLS#", ":GLS#"])
     }
 
+    @Test func parsesTrackingState() async throws {
+        // GPS 2, system 1 (tracking), rate 1 (lunar), speed 5, source 1, north.
+        let reply = "-43380000" + "45090000" + "211511" + "#"
+        let client = NormalModeClient(transport: ScriptedTransport(replies: [reply]))
+        let state = try await client.trackingState()
+        #expect(state.system == 1)
+        #expect(state.rate == 1)
+    }
+
     @Test func parsesSite() async throws {
         // Longitude −120.5°, latitude 35.25° (+90° offset), GPS fix.
         let reply = "-43380000" + "45090000" + "210511" + "#"
