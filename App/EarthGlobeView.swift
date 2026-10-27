@@ -219,7 +219,9 @@ extension EarthGlobeView: NSViewRepresentable {
         ]
         m.setValue(NSValue(scnVector3: SCNVector3(0, 0, 1)), forKey: "sunDirection")
         m.setValue(NSValue(scnVector3: SCNVector3(0, 0, 1)), forKey: "footprintCenter")
-        m.setValue(NSNumber(value: 2), forKey: "footprintCos")
+        // Floats, never a whole number: SceneKit types the argument from the first value it gets,
+        // and after NSNumber(value: 2) it dropped every later cosine.
+        m.setValue(NSNumber(value: Float(2)), forKey: "footprintCos")
         m.setValue(NSValue(scnVector3: SCNVector3(1, 1, 1)), forKey: "footprintColor")
         sphere.firstMaterial = m
         return sphere
@@ -356,13 +358,13 @@ extension EarthGlobeView: NSViewRepresentable {
     static func showFootprint(of track: GlobeTrack?, on material: SCNMaterial?) {
         guard let material else { return }
         guard let track, let now = track.now else {
-            material.setValue(NSNumber(value: 2), forKey: "footprintCos")
+            material.setValue(NSNumber(value: Float(2)), forKey: "footprintCos")
             return
         }
         let angle = GroundTrack.footprintAngle(height: now.height)
         material.setValue(NSValue(scnVector3: point(Geodetic(latitude: now.latitude, longitude: now.longitude), radius: 1)),
                           forKey: "footprintCenter")
-        material.setValue(NSNumber(value: cos(angle.radians)), forKey: "footprintCos")
+        material.setValue(NSNumber(value: Float(cos(angle.radians))), forKey: "footprintCos")
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
         #if os(iOS)
         PlatformColor(track.color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
