@@ -185,6 +185,7 @@ struct SearchControls: View {
                 .help("How high the Moon or Sun must be")
             }
             .toggleStyle(.button)
+            SatelliteChooser()
             Toggle("Also my selected satellites", isOn: $c.settings.includeSelected)
                 .font(.caption)
             Text(summary).font(.caption).foregroundStyle(.secondary)
@@ -428,5 +429,69 @@ struct ConjunctionMap: View {
             let second = Int(p.date.timeIntervalSince1970.rounded())
             return (p.date, p.centre, second % every == 0)
         }
+    }
+}
+
+/// Which satellites the conjunction search covers: the space stations, and any chosen by name
+/// or number from the loaded catalogue.
+struct SatelliteChooser: View {
+    @Environment(AppModel.self) private var model
+    @State private var text = ""
+    @FocusState private var typing: Bool
+
+    var body: some View {
+        @Bindable var c = model.conjunctions
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Space stations (ISS, Tiangong)", isOn: $c.settings.includeStations)
+                .font(.caption)
+            if !c.settings.chosen.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(c.settings.chosen, id: \.self) { id in
+                            HStack(spacing: 4) {
+                                Text(c.name(of: id).map(EventList.short) ?? "#\(id)").lineLimit(1)
+                                Button { c.unchoose(id) } label: { Image(systemName: "xmark.circle.fill") }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Remove \(c.name(of: id) ?? id)")
+                            }
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Theme.accent.opacity(0.15), in: Capsule())
+                            .help(c.name(of: id).map { "\($0), NORAD \(id)" } ?? "NORAD \(id): not in the loaded catalogue")
+                        }
+                    }
+                }
+            }
+            TextField("Add a satellite: name or number", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .focused($typing)
+                .autocorrectionDisabled()
+                .onSubmit { if let first = c.matches(text).first { add(first) } }
+            if typing || !text.isEmpty {
+                let matches = c.matches(text)
+                ForEach(matches, id: \.noradID) { s in
+                    Button { add(s) } label: {
+                        HStack {
+                            Text(s.name).lineLimit(1)
+                            Spacer()
+                            Text(s.noradID).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .font(.callout)
+                }
+                if !text.isEmpty && matches.isEmpty {
+                    Text("Nothing called that in the loaded catalogue. Turn on a source that has it under Objects.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func add(_ satellite: SatelliteTarget) {
+        model.conjunctions.choose(satellite)
+        text = ""
     }
 }
