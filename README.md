@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.3.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.3.1 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -66,7 +66,7 @@ Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step track
 
 ## Installing
 
-Download [Overpass.dmg](https://github.com/djsincla/Overpass/releases/latest/download/Overpass.dmg) from the [latest release](https://github.com/djsincla/Overpass/releases/latest), open it and drag Overpass to Applications. It is signed with my Developer ID and notarised by Apple, and needs macOS 14 or later. There is no iPhone or iPad build to download yet; those need TestFlight.
+Download [Overpass.dmg](https://github.com/djsincla/Overpass/releases/latest/download/Overpass.dmg) from the [latest release](https://github.com/djsincla/Overpass/releases/latest), open it and drag Overpass to Applications. It is signed with my Developer ID and notarised by Apple, and needs macOS 14 or later. For iPhone and iPad, [join the TestFlight beta](https://testflight.apple.com/join/nA7S2Nkn) and install it with the TestFlight app. Both are the same version.
 
 ## Releasing
 
@@ -89,9 +89,11 @@ The app is one multiplatform target (iOS 17+, macOS 14+), signed with team HG979
 swift test
 ```
 
-134 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, and the satellite catalogue and search.
+153 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, and the satellite catalogue and search.
 
 ## Version history
+
+**0.3.1**, 27 October 2026. The first version on TestFlight for iPhone and iPad as well as a Mac download. North is the HAZ46's cable stop in both hemispheres: tracking stops there and asks before unwinding, and Special mode can track up to 90° past it and unwind afterwards. Globe and world map views that work offline, with up to five tracks. The mount's GPS location. Look up on iPhone and iPad. Exposure and gain for USB guide cameras such as the iPolar. Conjunctions search by satellite name. Stop leaves the mount's own tracking running, the mount's tracking is turned off on connect, and disconnecting always returns the mount to Normal mode.
 
 **0.3.0**, 25 October 2026. Normal mode over USB, switching between Normal and Special mode without disconnecting, syncing that copes with the HAZ46's placeholder position after a mode switch, sync on the target in both modes, Passive tracking that watches the mount, a Normal-mode update setting, and a sky view you can spin and flip.
 
