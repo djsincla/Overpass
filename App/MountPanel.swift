@@ -102,6 +102,10 @@ struct MountPanel: View {
                 }
                 if let gps = mount.gpsState {
                     gpsRow(gps)
+                } else if mount.kind?.isSpecialMode == true {
+                    Label("GPS status needs Normal mode", systemImage: "location.slash")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .help("Special mode has no command for the mount's status. Switch to Normal mode to see its GPS and location.")
                 }
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
