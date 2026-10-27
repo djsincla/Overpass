@@ -178,6 +178,10 @@ struct SettingsView: View {
             Picker("Connect by", selection: $model.settings.connection) {
                 ForEach(ConnectionKind.allCases) { Text($0.rawValue).tag($0) }
             }
+            if !model.settings.connection.isSpecialMode {
+                Toggle("Turn off the mount's tracking when connecting", isOn: $model.settings.stopsMountTrackingOnConnect)
+                    .help("The mount can be tracking by itself at the sidereal, lunar or solar rate, after a goto from the hand controller or from an earlier session. On, Overpass turns that off when it connects, so the mount sits still until you track something.")
+            }
             switch model.settings.connection {
             case .wifi:
                 TextField("Mount address", text: $model.settings.wifiHost).autocorrectionDisabled()
