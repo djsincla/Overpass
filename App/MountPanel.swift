@@ -100,6 +100,23 @@ struct MountPanel: View {
                     .keyboardShortcut(.space, modifiers: [])
                     .help("Stop all motion and tracking (space)")
                 }
+                if let site = mount.site, site.hasFix || site.latitude != 0 || site.longitude != 0 {
+                    let saved = Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude)
+                    let away = Geodesy.distance(saved, Geodetic(latitude: site.latitude, longitude: site.longitude))
+                    if !model.settings.hasLocation || away > 1 {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(site.hasFix ? "Mount's GPS" : "Location set in the mount").font(.callout)
+                                Text(String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
+                                     + (model.settings.hasLocation ? String(format: " · %.0f km from yours", away) : ""))
+                                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Use") { Task { await model.useMountLocation() } }
+                                .help("Use the mount's latitude and longitude as your location")
+                        }
+                    }
+                }
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
                         Text(String(format: "%.0f° past north", past)).font(.callout).foregroundStyle(.orange)

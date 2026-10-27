@@ -26,6 +26,8 @@ struct GlobeView: View {
     let home: Geodetic
     var flat = false
     let tracks: [GlobeTrack]
+    /// Changed by the caller to bring the view back to the whole Earth.
+    var recentreRequest = 0
     var onTapTrack: ((String) -> Void)?
     @State private var position: MapCameraPosition = .automatic
 
@@ -72,17 +74,7 @@ struct GlobeView: View {
         }
         .onAppear { recentre() }
         .onChange(of: flat) { _, _ in recentre() }
-        .overlay(alignment: .bottomTrailing) {
-            Button { withAnimation { recentre() } } label: {
-                Image(systemName: "location")
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(10)
-            .help("Back to the whole Earth, centred on you")
-            .accessibilityLabel("Centre on your location")
-        }
+        .onChange(of: recentreRequest) { _, _ in withAnimation { recentre() } }
     }
 
     /// The whole Earth, centred on you.

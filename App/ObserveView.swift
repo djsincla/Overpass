@@ -16,6 +16,7 @@ struct ObserveView: View {
     @AppStorage("observe.layout") private var layout = Layout.listLeft
     /// The sky, or the Earth (as a globe or a flat map) with the ground tracks.
     @AppStorage("observe.view") private var view = SkyView.sky
+    @State private var recentreRequest = 0
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -214,6 +215,24 @@ struct ObserveView: View {
     }
 
     private var dome: some View {
+        VStack(spacing: 0) {
+        // Above the view, so it covers neither the sky's compass nor the map's own controls.
+        HStack(spacing: 8) {
+            Picker("View", selection: $view) {
+                ForEach(SkyView.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("The sky overhead, or the Earth with the ground tracks as a globe or a flat map")
+            if view != .sky {
+                Button { recentreRequest += 1 } label: { Image(systemName: "location") }
+                    .buttonStyle(.borderless)
+                    .help("Back to the whole Earth, centred on you")
+                    .accessibilityLabel("Centre on your location")
+            }
+        }
+        .padding(.vertical, 6)
         TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
             let date = model.viewDate(context.date)
             let shown = model.shownPasses(at: date)
@@ -224,6 +243,7 @@ struct ObserveView: View {
                     GlobeView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
                               flat: view == .map,
                               tracks: globeTracks(shown, focus: pass, at: date),
+                              recentreRequest: recentreRequest,
                               onTapTrack: { id in if let p = shown.first(where: { $0.id == id }) { model.highlight(pass: p) } })
                 } else {
                     sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
@@ -232,18 +252,7 @@ struct ObserveView: View {
             .overlay(alignment: .topLeading) {
                 if !model.shownTrackKeys.isEmpty { TrackLegend(passes: shown, focusID: pass?.id) }
             }
-            .overlay(alignment: .bottomTrailing) {
-                Picker("View", selection: $view) {
-                    ForEach(SkyView.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(8)
-                // Clear of the globe's own recentre button.
-                .padding(.trailing, view == .sky ? 0 : 44)
-                .help("The sky overhead, or the Earth with the ground tracks as a globe or a flat map")
-            }
+        }
         }
     }
 

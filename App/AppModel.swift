@@ -751,7 +751,8 @@ final class AppModel {
     /// The mount doesn't report a height, so that stays as it was.
     func useMountLocation() async {
         do {
-            let site = try await mount.site()
+            // As read on connecting: reading it now would only return the location Overpass set.
+            guard let site = mount.site else { throw MountSessionError.needsNormalMode }
             guard site.hasFix || site.latitude != 0 || site.longitude != 0 else {
                 message = "The mount has no GPS fix and no location set in it."
                 return

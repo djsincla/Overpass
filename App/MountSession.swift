@@ -190,6 +190,8 @@ final class MountSession {
                 if id.isSpecialMode {
                     throw MountSessionError.inSpecialMode
                 }
+                // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
+                site = try? await client.site()
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
                 await syncIfLeftSpecialMode(client)
                 normal = client
@@ -211,10 +213,14 @@ final class MountSession {
                     _ = try await special.exitSpecialMode()
                     await holdStill(normal: client)
                     let position = await waitForNormalPosition(client)
+                    // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
+                    site = try? await client.site()
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await syncAfterSwitch(client, position: position)
                     id = try await client.identify()
                 } else {
+                    // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
+                    site = try? await client.site()
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await syncIfLeftSpecialMode(client)
                 }
@@ -277,6 +283,7 @@ final class MountSession {
     }
 
     private func closeTransport() async {
+        site = nil
         await tcp?.close()
         tcp = nil
         normal = nil
@@ -367,14 +374,8 @@ final class MountSession {
                             secondary: a.axes.secondary + f * (b.axes.secondary - a.axes.secondary))
     }
 
-    /// Whether the mount's own location can be read: Normal mode, over WiFi or USB.
-    var canReadSite: Bool { normal != nil }
-
-    /// The mount's latitude and longitude: its GPS fix, or what was last set in it.
-    func site() async throws -> MountSite {
-        guard let normal else { throw MountSessionError.needsNormalMode }
-        return try await normal.site()
-    }
+    /// The mount's own location as it was when Normal mode connected, before Overpass set its own.
+    private(set) var site: MountSite?
 
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {
@@ -1730,6 +1731,8 @@ final class MountSession {
                 await holdStill(normal: normal)
                 status = "Waiting for the mount's position…"
                 let position = await waitForNormalPosition(normal)
+                // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
+                site = try? await normal.site()
                 try await normal.configure(latitude: settings.latitude, longitude: settings.longitude)
                 await syncAfterSwitch(normal, position: position)
                 self.special = nil

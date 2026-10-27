@@ -50,8 +50,8 @@ struct SettingsView: View {
                 Section("Location") {
                     Button("Use my current location") { Task { await model.useCurrentLocation() } }
                     Button("Use the mount's GPS") { Task { await model.useMountLocation() } }
-                        .disabled(!model.mount.canReadSite)
-                        .help("Reads the latitude and longitude from the mount. Connect over WiFi or USB Normal mode first.")
+                        .disabled(model.mount.site == nil)
+                        .help("The latitude and longitude the mount had when it connected, from its GPS or hand controller. Connect over WiFi or USB Normal mode first.")
                     numberField("Latitude (° north)", $model.settings.latitude)
                     numberField("Longitude (° east)", $model.settings.longitude)
                     numberField("Height (m)", $model.settings.heightMeters)
