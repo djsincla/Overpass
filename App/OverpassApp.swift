@@ -43,6 +43,7 @@ struct ContentView: View {
     var body: some View {
         TabView {
             ObserveView()
+                .modifier(SteadyToolbar())
                 .tabItem { Label("Observe", systemImage: "scope") }
             #if os(iOS)
             // Second, so it isn't one of the tabs an iPhone tucks under More.
@@ -50,12 +51,15 @@ struct ContentView: View {
                 .tabItem { Label("Look up", systemImage: "binoculars") }
             #endif
             ObjectsView()
+                .modifier(SteadyToolbar())
                 .tabItem { Label("Objects", systemImage: "checklist") }
             ConjunctionsView()
+                .modifier(SteadyToolbar())
                 .tabItem { Label("Conjunctions", systemImage: "moon.stars") }
             #if os(macOS)
             // Camera tracking needs the mount in Special mode over USB; off on iPhone and iPad for now.
             CameraTrackView()
+                .modifier(SteadyToolbar())
                 .tabItem { Label("Camera", systemImage: "camera.viewfinder") }
             #endif
             #if os(iOS)
@@ -142,6 +146,22 @@ struct Appearance: ViewModifier {
 /// Red mode: everything rendered as shades of pure red on black. Dark adaptation survives red
 /// light far better than white, which is why observatories use it. Converting to grayscale first
 /// keeps contrast for colours with no red in them (the cyan pass track would otherwise vanish).
+/// On the Mac, no per-tab title in the toolbar: the tab switcher sits beside it, so titles of
+/// different lengths (and the Camera tab's none) moved the whole toolbar on every tab change.
+struct SteadyToolbar: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if #available(macOS 15, *) {
+            content.toolbar(removing: .title)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 struct NightVision: ViewModifier {
     let enabled: Bool
 
