@@ -222,16 +222,25 @@ public actor NormalModeClient {
         return MountSite(latitude: status.latitude, longitude: status.longitude, gps: status.gps)
     }
 
-    private func status() async throws -> (longitude: Double, latitude: Double, gps: Int, system: Int) {
+    /// Whether the mount is tracking by itself, and at which rate (`:GLS#`): the system digit
+    /// (1 tracking, 5 tracking with PEC) and the rate digit (0 sidereal, 1 lunar, 2 solar, 3 King, 4 custom).
+    public func trackingState() async throws -> (system: Int, rate: Int) {
+        let status = try await status()
+        return (status.system, status.rate)
+    }
+
+    public func setTrackingRate(_ rate: NormalCommand.TrackingRate) async throws { try await ack(.trackingRate(rate)) }
+
+    private func status() async throws -> (longitude: Double, latitude: Double, gps: Int, system: Int, rate: Int) {
         let reply = try await send(.getStatus)
         // Sign, 8 longitude digits, 8 latitude digits (+90°), then GPS, system, rate, speed, time source, hemisphere.
         let body = Array(reply.dropLast())
         guard reply.hasSuffix("#"), body.count == 23, let sign = body.first, sign == "+" || sign == "-",
               let longitude = Int(String(body[1..<9])), let latitude = Int(String(body[9..<17])),
-              let gps = Int(String(body[17])), let system = Int(String(body[18])) else {
+              let gps = Int(String(body[17])), let system = Int(String(body[18])), let rate = Int(String(body[19])) else {
             throw ReplyError.malformed(reply)
         }
-        return (Centiarcsec.toDegrees(sign == "-" ? -longitude : longitude), Centiarcsec.toDegrees(latitude) - 90, gps, system)
+        return (Centiarcsec.toDegrees(sign == "-" ? -longitude : longitude), Centiarcsec.toDegrees(latitude) - 90, gps, system, rate)
     }
 
     public func isSlewing() async throws -> Bool { try await systemStatus() == 2 }
