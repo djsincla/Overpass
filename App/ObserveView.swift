@@ -110,8 +110,9 @@ struct ObserveView: View {
                         Label("Pass filters", systemImage: "line.3.horizontal.decrease.circle")
                     }
                 }
+                // With the other buttons: on a Mac, .status sits beside the tab switcher and pushes it off centre.
                 if model.isPredicting {
-                    ToolbarItem(placement: .status) { ProgressView().controlSize(.small) }
+                    ToolbarItem(placement: .primaryAction) { ProgressView().controlSize(.small) }
                 }
                 // Always reachable, however the panels are arranged or scrolled.
                 if model.mount.isTracking || model.mount.isPreparing {

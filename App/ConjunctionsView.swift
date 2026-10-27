@@ -36,8 +36,9 @@ struct ConjunctionsView: View {
                     .help("Download fresh space station elements and recalculate the watched events")
                     .disabled(c.isUpdating || c.watched.isEmpty)
                 }
+                // With the other buttons: on a Mac, .status sits beside the tab switcher and pushes it off centre.
                 if c.isSearching || c.isUpdating {
-                    ToolbarItem(placement: .status) { ProgressView().controlSize(.small) }
+                    ToolbarItem(placement: .primaryAction) { ProgressView().controlSize(.small) }
                 }
             }
             .task(id: c.settings) {

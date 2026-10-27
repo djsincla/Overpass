@@ -49,16 +49,12 @@ struct ObjectsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
-        } detail: {
-            NavigationStack {
-                detail
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
-            }
-        }
+        columns
+        #if os(macOS)
+        .searchable(text: $search, placement: .toolbar, prompt: "Name, number, launched>2020…")
+        #else
         .searchable(text: $search, placement: .sidebar, prompt: "Name, number, launched>2020…")
+        #endif
         .onAppear { if page == nil { page = Page(rawValue: savedPage) } }
         .onChange(of: page) { _, new in
             if let new { savedPage = new.rawValue }
@@ -82,26 +78,73 @@ struct ObjectsView: View {
         }
     }
 
+    /// On the Mac, the sidebar and list side by side under the window's one toolbar: a split
+    /// view gives each column its own toolbar section and centred the tab switcher over the
+    /// list instead of the window, so it moved when this tab came up.
+    @ViewBuilder
+    private var columns: some View {
+        #if os(macOS)
+        HStack(spacing: 0) {
+            sidebar
+                .listStyle(.sidebar)
+                .frame(width: 230)
+            Divider()
+            NavigationStack {
+                detail
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+            }
+        }
+        #else
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
+        } detail: {
+            NavigationStack {
+                detail
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+            }
+        }
+        #endif
+    }
+
+    /// A sidebar row that picks `page`: on the Mac, where there is no split view to navigate, a
+    /// button that sets it and shows it chosen; a navigation link elsewhere.
+    @ViewBuilder
+    private func pageRow<Label: View>(_ page: Page, @ViewBuilder label: () -> Label) -> some View {
+        #if os(macOS)
+        Button { self.page = page } label: {
+            label().frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(self.page == page ? Color.accentColor.opacity(0.28) : .clear)
+                .padding(.horizontal, 8))
+        #else
+        NavigationLink(value: page, label: label)
+        #endif
+    }
+
     // MARK: Sidebar
 
     private var sidebar: some View {
         List(selection: $page) {
             Section {
-                NavigationLink(value: Page.selected) {
+                pageRow(Page.selected) {
                     Label("Selected", systemImage: "checkmark.circle").badge(model.selected.count)
                 }
-                NavigationLink(value: Page.solarSystem) {
+                pageRow(Page.solarSystem) {
                     Label("Solar system", systemImage: "sun.max")
                         .badge(SolarSystemBody.allCases.filter { model.isSelected(SkyObject.body($0).id) }.count)
                 }
-                NavigationLink(value: Page.stars) {
+                pageRow(Page.stars) {
                     Label("Bright stars", systemImage: "sparkles")
                         .badge(BrightStars.all.filter { model.isSelected(SkyObject.star($0).id) }.count)
                 }
             }
             Section("Satellites") {
                 ForEach(model.groups.filter { $0.source.enabled }) { group in
-                    NavigationLink(value: Page.source(group.id)) {
+                    pageRow(Page.source(group.id)) {
                         Label {
                             Text(group.source.name)
                         } icon: {
@@ -267,7 +310,8 @@ struct ObjectsView: View {
 
     @ToolbarContentBuilder
     private func detailToolbar(showsSelectedOnly: Bool = true, showsAge: Bool = true) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .secondaryAction) {
+        // Primary, not secondary: on a Mac secondary items sit beside the tab switcher and push it off centre.
+        ToolbarItemGroup(placement: .primaryAction) {
             if showsSelectedOnly {
                 Toggle(isOn: $selectedOnly) { Label("Selected only", systemImage: "checkmark.circle") }
                     .onChange(of: selectedOnly) { _, _ in recentlyUnselected = [] }
