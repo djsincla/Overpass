@@ -192,6 +192,7 @@ final class MountSession {
                 }
                 // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
                 site = try? await client.site()
+                gpsState = site?.gps
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
                 await syncIfLeftSpecialMode(client)
                 normal = client
@@ -284,6 +285,8 @@ final class MountSession {
 
     private func closeTransport() async {
         site = nil
+        gpsState = nil
+        gpsFixReads = 0
         await tcp?.close()
         tcp = nil
         normal = nil
@@ -312,10 +315,18 @@ final class MountSession {
         pollTask?.cancel()
         pollTask = Task {
             var failures = 0
+            var lastGPSCheck = Date.distantPast
             while !Task.isCancelled {
                 if trackingTask == nil && prepareTask == nil && unwindTask == nil {
                     do {
-                        _ = try await readPosition()
+                        // Every 10 s in Normal mode, the GPS status instead of the position, so the
+                        // mount still gets one command per period.
+                        if let normal, Date.now.timeIntervalSince(lastGPSCheck) >= 10 {
+                            lastGPSCheck = .now
+                            updateGPS(try await normal.site())
+                        } else {
+                            _ = try await readPosition()
+                        }
                         failures = 0
                     } catch MountSessionError.pastCableStop {
                         // A held jog reached the stop: this is the backstop that ends it.
@@ -374,8 +385,35 @@ final class MountSession {
                             secondary: a.axes.secondary + f * (b.axes.secondary - a.axes.secondary))
     }
 
-    /// The mount's own location as it was when Normal mode connected, before Overpass set its own.
+    /// The mount's own location as it was when Normal mode connected, before Overpass set its own,
+    /// and later from its GPS once the fix is stable.
     private(set) var site: MountSite?
+
+    /// The mount's GPS from its last status read: 0 no GPS, 1 searching, 2 fix. Nil in Special
+    /// mode, which has no status command.
+    private(set) var gpsState: Int?
+    /// Status reads in a row with a fix, 10 s apart.
+    private var gpsFixReads = 0
+    /// A fix held for three reads, about 30 s.
+    var gpsStable: Bool { gpsFixReads >= 3 }
+
+    private func updateGPS(_ reading: MountSite) {
+        if reading.gps != gpsState { log("GPS: \(Self.gpsName(reading.gps))") }
+        gpsState = reading.gps
+        gpsFixReads = reading.hasFix ? gpsFixReads + 1 : 0
+        // With a stable fix, the mount's location is its GPS position. (If it only echoes the
+        // location Overpass set on connecting, the panel finds nothing to offer.)
+        if gpsStable { site = reading }
+    }
+
+    static func gpsName(_ state: Int) -> String {
+        switch state {
+        case 0: "no GPS"
+        case 1: "searching"
+        case 2: "fix"
+        default: "state \(state)"
+        }
+    }
 
     @discardableResult
     private func readPosition() async throws -> AxisPosition? {

@@ -100,22 +100,8 @@ struct MountPanel: View {
                     .keyboardShortcut(.space, modifiers: [])
                     .help("Stop all motion and tracking (space)")
                 }
-                if let site = mount.site, site.hasFix || site.latitude != 0 || site.longitude != 0 {
-                    let saved = Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude)
-                    let away = Geodesy.distance(saved, Geodetic(latitude: site.latitude, longitude: site.longitude))
-                    if !model.settings.hasLocation || away > 1 {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(site.hasFix ? "Mount's GPS" : "Location set in the mount").font(.callout)
-                                Text(String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
-                                     + (model.settings.hasLocation ? String(format: " · %.0f km from yours", away) : ""))
-                                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Use") { Task { await model.useMountLocation() } }
-                                .help("Use the mount's latitude and longitude as your location")
-                        }
-                    }
+                if let gps = mount.gpsState {
+                    gpsRow(gps)
                 }
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
@@ -128,6 +114,40 @@ struct MountPanel: View {
                 }
             }
         }
+    }
+
+    /// The mount's GPS, and its location to use once the fix is stable.
+    @ViewBuilder
+    private func gpsRow(_ gps: Int) -> some View {
+        let mount = model.mount
+        let color: Color = gps == 2 ? (mount.gpsStable ? Theme.target : Theme.focus) : gps == 1 ? Theme.focus : .secondary
+        let label = switch gps {
+        case 2: mount.gpsStable ? "GPS fix" : "GPS fix, settling"
+        case 1: "GPS searching"
+        default: "No GPS"
+        }
+        HStack(spacing: 8) {
+            Image(systemName: gps == 0 ? "location.slash" : "location.fill").foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.callout)
+                if let site = mount.site, gps == 2 {
+                    let saved = Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude)
+                    let away = Geodesy.distance(saved, Geodetic(latitude: site.latitude, longitude: site.longitude))
+                    Text(String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
+                         + (!model.settings.hasLocation ? "" : away < 0.1 ? " · matches yours" : away < 10 ? String(format: " · %.1f km from yours", away) : String(format: " · %.0f km from yours", away)))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if gps == 2, mount.gpsStable, let site = mount.site,
+               !model.settings.hasLocation || Geodesy.distance(Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
+                                                                Geodetic(latitude: site.latitude, longitude: site.longitude)) >= 0.1 {
+                Button("Use location") { Task { await model.useMountLocation() } }
+                    .controlSize(.small)
+                    .help("Set your location from the mount's GPS")
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var stateText: String {
