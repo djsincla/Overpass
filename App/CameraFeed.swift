@@ -54,6 +54,8 @@ final class CameraFeed {
     }
     /// Whether this camera can freeze its exposure (most webcams offer only that and auto).
     private(set) var canHoldExposure = false
+    /// Manual exposure and gain, for a USB camera that offers them (Mac only).
+    private(set) var hardware: CameraHardware?
     /// Freeze the exposure where it is, so a bright object entering the view doesn't darken the rest.
     var holdsExposure = false {
         didSet { capture.setHoldsExposure(holdsExposure) }
@@ -96,7 +98,16 @@ final class CameraFeed {
         }
         do {
             canHoldExposure = try await capture.start(deviceID: id)
-            capture.setHoldsExposure(holdsExposure && canHoldExposure)
+            hardware = AVCaptureDevice(uniqueID: id).flatMap { CameraHardware(uniqueID: $0.uniqueID, modelID: $0.modelID) }
+            if let hardware {
+                // Real exposure control replaces holding the auto exposure.
+                canHoldExposure = false
+                hardware.apply()
+                // Starting the session can put the camera back on auto a moment later.
+                Task { try? await Task.sleep(for: .seconds(1)); hardware.apply() }
+            } else {
+                capture.setHoldsExposure(holdsExposure && canHoldExposure)
+            }
             isRunning = true
         } catch {
             self.error = "Couldn't open the camera: \(error.localizedDescription)"
@@ -107,6 +118,7 @@ final class CameraFeed {
         guard isRunning else { return }
         capture.stop()
         isRunning = false
+        hardware = nil
         spot = nil
         preview = nil
     }

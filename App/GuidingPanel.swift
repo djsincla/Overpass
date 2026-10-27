@@ -69,7 +69,48 @@ struct CameraControls: View {
                 Button("Start camera") { Task { await camera.start(deviceID: model.settings.cameraDeviceID) } }
             }
             if let error = camera.error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let hardware = camera.hardware { CameraHardwareControls(hardware: hardware) }
         }
+    }
+}
+
+/// Exposure and gain for a camera that offers them. The exposure slider runs on a log scale, so
+/// a fraction of a millisecond and half a second are both easy to reach.
+struct CameraHardwareControls: View {
+    @Bindable var hardware: CameraHardware
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let range = hardware.exposureRange {
+                Toggle("Auto exposure", isOn: $hardware.autoExposure)
+                    .help("Off: set the exposure yourself. Long exposures and high gain bring up faint satellites; short ones keep the ISS or the Moon from burning out.")
+                if !hardware.autoExposure {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Exposure")
+                            Spacer()
+                            Text(Self.milliseconds(hardware.exposure)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        Slider(value: Binding(get: { log10(hardware.exposure) },
+                                              set: { hardware.exposure = Self.rounded(pow(10, $0)) }),
+                               in: log10(range.lowerBound)...log10(range.upperBound))
+                    }
+                }
+            }
+            if let range = hardware.gainRange {
+                LabeledSlider("Gain", value: $hardware.gain, in: range, step: hardware.gainStep, unit: "")
+                    .help("The camera's analogue gain. Higher is brighter and noisier.")
+            }
+        }
+    }
+
+    static func milliseconds(_ ms: Double) -> String {
+        ms < 1 ? String(format: "%.1f ms", ms) : ms < 10 ? String(format: "%.1f ms", ms) : String(format: "%.0f ms", ms)
+    }
+
+    /// To the camera's 0.1 ms steps, and to whole milliseconds above 10.
+    static func rounded(_ ms: Double) -> Double {
+        ms < 10 ? (ms * 10).rounded() / 10 : ms.rounded()
     }
 }
 

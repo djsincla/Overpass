@@ -37,6 +37,8 @@ targets:
         product: SkyKit
       - package: OverpassKit
         product: IOptronKit
+      - package: OverpassKit
+        product: UVCControl
     entitlements:
       path: App/Overpass.entitlements
       properties:
