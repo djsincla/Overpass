@@ -55,8 +55,11 @@ struct SettingsView: View {
                     numberField("Latitude (° north)", $model.settings.latitude)
                     numberField("Longitude (° east)", $model.settings.longitude)
                     numberField("Height (m)", $model.settings.heightMeters)
-                    Toggle("Location set", isOn: $model.settings.hasLocation)
                 }
+                // Typing a position counts as setting one. (A "Location set" switch used to sit
+                // here, and turning it off emptied the Observe screen.)
+                .onChange(of: model.settings.latitude) { _, _ in model.settings.hasLocation = true }
+                .onChange(of: model.settings.longitude) { _, _ in model.settings.hasLocation = true }
 
                 Section {
                     LabeledSlider("Lowest altitude", value: $model.settings.minimumAltitude, in: 0...30, step: 1, unit: "°")
