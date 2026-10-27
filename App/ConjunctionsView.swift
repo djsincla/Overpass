@@ -336,6 +336,10 @@ extension Geodetic {
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
 
+/// The transit band on an Apple map. This is the one map left on MapKit, deliberately: the band
+/// is a few kilometres wide and the transit lasts under a second at any spot, so choosing where to
+/// stand takes street-level detail. The bundled world image is about 7 km a pixel, wider than the
+/// band. MapKit needs a network connection while planning, and keeps what has been looked at.
 struct ConjunctionMap: View {
     @Environment(AppModel.self) private var model
     let event: Conjunction?
