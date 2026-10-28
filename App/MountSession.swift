@@ -1092,8 +1092,10 @@ final class MountSession {
         return h
     }
 
-    /// One goto at full speed, waited out. Any command mid-slew makes the mount hesitate, so the
-    /// app stays silent for about as long as the slew should take, then checks once a second.
+    /// One goto at full speed, waited out. With `readsDuringSlews` the position is read each
+    /// update period on the way, so the dome follows it; off, the app stays silent for about as
+    /// long as the slew should take, in case a command mid-slew makes the mount hesitate. Then it
+    /// checks once a second until the mount says it has stopped.
     private func slewAndWait(_ normal: NormalModeClient, from start: Horizontal, to target: Horizontal) async throws {
         if !maximumSpeedSet {
             try await normal.setMaximumSlewSpeed(9)
@@ -1104,9 +1106,20 @@ final class MountSession {
         slewTarget = target
         defer { slewTarget = nil }
         try await normal.slew(altitude: target.altitude, azimuth: target.azimuth)
-        try await Task.sleep(for: .seconds(Self.slewTime(from: start, to: target, stop: settings.cableStopAzimuth)))
+        let quietUntil = sent + Self.slewTime(from: start, to: target, stop: settings.cableStopAzimuth)
+        if settings.readsDuringSlews {
+            // Logged, to see from the times whether reading makes the slew stutter.
+            while Date.now < quietUntil {
+                try await Task.sleep(for: .seconds(min(max(0.5, settings.normalModePeriod), quietUntil.timeIntervalSinceNow + 0.01)))
+                let h = try await currentAltAz(normal)
+                log(String(format: "Slewing %.1f s: reads ", Date.now.timeIntervalSince(sent)) + describe(h))
+            }
+        } else {
+            try await Task.sleep(until: .now + .seconds(max(0, quietUntil.timeIntervalSinceNow)))
+        }
         let deadline = Date.now + 180
         while try await normal.isSlewing() {
+            if settings.readsDuringSlews { _ = try? await currentAltAz(normal) }
             guard Date.now < deadline else {
                 log("Goto still slewing after 180 s; giving up")
                 throw MountSessionError.couldNotReachStart
