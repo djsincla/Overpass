@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.3.2 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.4.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -94,6 +94,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.4.0**, 28 October 2026. Camera tracking on the ground, for boats, birds, cars and people, matched by their look against any background and calibrated in daylight on a mast or building. Step mode slews to a far target in one goto before it starts stepping, and Normal-mode gotos read the position on the way so the scope marker moves with the mount. Clicking a satellite on the globe or map offers the tracking target and its track, asking before it stops another target. The sky view shows a satellite only while it is on a pass the list shows, and the path drawn is always the chosen satellite's.
 
 **0.3.2**, 28 October 2026. Conjunctions follows the location in Settings, searches for places by name with Apple's map search, and on iPhone keeps the full-screen map on its side with a details card that folds away. A metric or imperial choice for every distance and height. The globe drops its orbit line, which smeared high orbits into curves through space.
 
