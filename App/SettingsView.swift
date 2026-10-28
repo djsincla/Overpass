@@ -118,6 +118,8 @@ struct SettingsView: View {
                         }
                     }
                     .help("Normal mode (WiFi or USB): how often the position is read while idle, and the shortest Step tracking interval. Sub-second commands have caused trouble on the HAZ46 in Normal mode.")
+                    Toggle("Read the position during gotos", isOn: $model.settings.readsDuringSlews)
+                        .help("Normal mode: reads where the mount points once each update period while it slews, so the scope marker moves with it. Each read is logged; turn this off if gotos stutter.")
                     Picker("Smooth tracking updates", selection: $model.settings.trackingPeriod) {
                         ForEach([0.05, 0.1, 0.2, 0.5, 1, 2], id: \.self) { period in
                             Text("Every \(period.formatted(.number.precision(.fractionLength(0...2)))) s").tag(period)

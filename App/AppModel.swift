@@ -84,6 +84,9 @@ struct Settings: Codable, Equatable {
     /// Normal mode (WiFi or USB): the shortest time between commands, for position polling and
     /// Step tracking. Sub-second updates have caused trouble on the HAZ46 in Normal mode.
     var normalModePeriod: Double = 1
+    /// Normal mode: read the position during a goto, so the dome follows the slew. Off, the app
+    /// stays silent until the slew should be over, in case a read makes the mount hesitate.
+    var readsDuringSlews = true
     /// Smooth tracking: seconds between speed updates. Each takes a position read and a speed
     /// command, about 45 ms on the HAZ46, so 0.05 runs them nearly back to back.
     var trackingPeriod: Double = 0.1
