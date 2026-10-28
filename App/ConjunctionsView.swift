@@ -112,10 +112,14 @@ struct EventList: View {
     private func row(_ event: Conjunction, watch: WatchedConjunction?) -> some View {
         if pushesDetail {
             NavigationLink {
+                // No minimum height: a phone on its side has under 320 points between the bars,
+                // and a taller map pushed the details card down behind the tab bar.
                 ConjunctionMap(event: event, previous: watch?.previous)
-                    .frame(minHeight: 320)
                     .safeAreaInset(edge: .bottom) { EventDetail(event: event, watch: watch).padding(12) }
                     .navigationTitle("\(Self.short(event.satelliteName)) × \(event.body.name)")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
             } label: { EventRow(event: event, watch: watch) }
         } else {
             EventRow(event: event, watch: watch)
