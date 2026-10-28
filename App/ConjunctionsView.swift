@@ -41,8 +41,8 @@ struct ConjunctionsView: View {
                     ToolbarItem(placement: .primaryAction) { ProgressView().controlSize(.small) }
                 }
             }
-            .task(id: c.settings) {
-                // Re-run whenever what or where changes (it takes about a second).
+            .task(id: SearchTrigger(settings: c.settings, centre: c.centre)) {
+                // Re-run whenever what or where changes, the location in Settings included (it takes about a second).
                 try? await Task.sleep(for: .milliseconds(300))
                 await c.search()
             }
@@ -50,6 +50,7 @@ struct ConjunctionsView: View {
                 // The catalog loads after launch, and again after each refresh.
                 Task { await c.search() }
             }
+            .sheet(isPresented: Bindable(c).choosingPlace) { PlaceSearch() }
             .alert("Conjunctions", isPresented: Binding(get: { c.message != nil }, set: { if !$0 { c.message = nil } })) {
                 Button("OK") { c.message = nil }
             } message: {
@@ -97,7 +98,7 @@ struct EventList: View {
 
             if c.results.isEmpty && !c.isSearching && c.lastSearch != nil {
                 Section {
-                    Text("No transits within \(Int(c.settings.radius)) km of \(c.centreName) in the next \(Int(c.settings.daysAhead)) days. Try a wider range or more days.")
+                    Text("No transits within \(model.units.distance(c.settings.radius)) of \(c.centreName) in the next \(Int(c.settings.daysAhead)) days. Try a wider range or more days.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -137,8 +138,6 @@ struct EventList: View {
 /// Where, how far, which bodies, how long ahead.
 struct SearchControls: View {
     @Environment(AppModel.self) private var model
-    @State private var query = ""
-    @State private var editingPlace = false
 
     var body: some View {
         @Bindable var c = model.conjunctions
@@ -149,27 +148,35 @@ struct SearchControls: View {
                 Text(c.centreName).font(.callout.weight(.semibold)).lineLimit(1)
                 Spacer()
                 Menu {
-                    Button("Home (from Settings)") { c.settings.place = nil }
-                    Button("Search for a place…") { editingPlace = true }
+                    Button("Home (the location in Settings)") { c.settings.place = nil }
+                    Button("Search for a place…") { c.choosingPlace = true }
                 } label: {
                     Text("Change")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
-            if editingPlace {
-                HStack {
-                    TextField("Town, address or landmark", text: $query)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(lookUp)
-                    Button("Find", action: lookUp).disabled(query.isEmpty)
+            if c.settings.place == nil {
+                if let home = c.centre {
+                    Text(String(format: "%.4f°, %.4f° · from Settings", home.latitude, home.longitude))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                } else {
+                    Text("No location yet: set one in Settings, or search for a place.")
+                        .font(.caption).foregroundStyle(Theme.setting)
                 }
             }
             HStack {
                 Picker("Range", selection: $c.settings.radius) {
-                    ForEach([10.0, 25, 50, 100, 200], id: \.self) { Text("within \(Int($0)) km").tag($0) }
+                    ForEach(model.units.radii, id: \.self) { Text("within \(model.units.distance($0))").tag($0) }
                 }
                 .labelsHidden().fixedSize()
+                // A radius from the other units (50 km is no round number of miles) moves to the nearest offered.
+                .task(id: model.settings.imperial) {
+                    let radii = model.units.radii
+                    if !radii.contains(c.settings.radius), let nearest = radii.min(by: { abs($0 - c.settings.radius) < abs($1 - c.settings.radius) }) {
+                        c.settings.radius = nearest
+                    }
+                }
                 Picker("Days", selection: $c.settings.daysAhead) {
                     ForEach([1.0, 3, 7, 14], id: \.self) { Text($0 == 1 ? "1 day" : "\(Int($0)) days").tag($0) }
                 }
@@ -196,15 +203,6 @@ struct SearchControls: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func lookUp() {
-        let text = query
-        Task {
-            await model.conjunctions.setPlace(named: text)
-            editingPlace = false
-            query = ""
-        }
     }
 
     private var summary: String {
@@ -244,7 +242,7 @@ struct EventRow: View {
                     .help(c.isWatched(event) ? "Stop watching" : "Watch: refresh the elements and recalculate as it gets closer")
                     .accessibilityLabel(c.isWatched(event) ? "Stop watching" : "Watch")
                 }
-                Text("\(EventList.short(event.satelliteName)) × \(event.body.name) · \(distanceText) · \(String(format: "%.1f km wide · %.1f s", event.width, event.duration))")
+                Text("\(EventList.short(event.satelliteName)) × \(event.body.name) · \(distanceText) · \(model.units.distance(event.width, decimals: 1)) wide · \(String(format: "%.1f s", event.duration))")
                     .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 HStack(spacing: 5) {
                     Text("\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up" + (event.illumination.map { " · \(Int(($0 * 100).rounded()))% lit" } ?? ""))
@@ -259,7 +257,7 @@ struct EventRow: View {
     }
 
     private var distanceText: String {
-        event.distance < 0.5 ? "over you" : String(format: "%.0f km %@", event.distance, compass(event.bearing))
+        event.distance < 0.5 ? "over you" : "\(model.units.distance(event.distance)) \(compass(event.bearing))"
     }
 }
 
@@ -271,7 +269,7 @@ struct EventDetail: View {
     let watch: WatchedConjunction?
 
     var body: some View {
-        let c = model.conjunctions
+        let c = model.conjunctions, units = model.units
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
@@ -281,18 +279,17 @@ struct EventDetail: View {
             }
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
                 GridRow {
-                    fact("Nearest line", String(format: "%.1f km %@ of %@", event.distance, compass(event.bearing), c.centreName.components(separatedBy: ",")[0]))
-                    fact("Band", String(format: "%.1f km wide · %.2f s", event.width, event.duration))
+                    fact("Nearest line", "\(units.distance(event.distance, decimals: 1)) \(compass(event.bearing)) of \(c.centreName.components(separatedBy: ",")[0])")
+                    fact("Band", "\(units.distance(event.width, decimals: 1)) wide · \(String(format: "%.2f s", event.duration))")
                 }
                 GridRow {
                     fact("Look", "\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up, \(compass(event.bodyAzimuth))")
-                    fact("Station", String(format: "%.0f km away", event.satelliteRange))
+                    fact("Station", "\(units.distance(event.satelliteRange)) away")
                 }
                 GridRow {
                     fact("Elements", "\(countdown(Date.now.timeIntervalSince(event.elementEpoch))) old")
                     if let drift = watch?.drift, let previous = watch?.previous {
-                        fact("Last update", String(format: "%+.1f s, %.1f km %@ since elements of %@", drift.seconds, drift.distance,
-                                                   compass(drift.bearing), previous.elementEpoch.formatted(date: .omitted, time: .shortened)))
+                        fact("Last update", String(format: "%+.1f s, ", drift.seconds) + "\(units.distance(drift.distance, decimals: 1)) \(compass(drift.bearing)) since elements of \(previous.elementEpoch.formatted(date: .omitted, time: .shortened))")
                     } else {
                         fact("Timing", "refresh near the event: element errors shift it by seconds")
                     }
@@ -410,6 +407,7 @@ struct ConjunctionMap: View {
         .onAppear { frame(centre: centre, radius: radius) }
         .onChange(of: event?.id) { _, _ in frame(centre: centre, radius: radius) }
         .onChange(of: c.settings) { _, _ in frame(centre: centre, radius: radius) }
+        .onChange(of: c.centre) { _, _ in frame(centre: centre, radius: radius) }
     }
 
     /// The search circle filling the view.
@@ -493,5 +491,79 @@ struct SatelliteChooser: View {
     private func add(_ satellite: SatelliteTarget) {
         model.conjunctions.choose(satellite)
         text = ""
+    }
+}
+
+/// What a search depends on: the Conjunctions options and where it's centred.
+private struct SearchTrigger: Equatable {
+    let settings: ConjunctionSettings
+    let centre: Geodetic?
+}
+
+/// Look up a town, address or landmark with Apple's map search and choose one of the matches
+/// as the search centre. (The address lookup it replaces found no landmarks at all.)
+struct PlaceSearch: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var found: [SearchPlace] = []
+    @State private var searching = false
+    @State private var note: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack {
+                        TextField("Town, address or landmark", text: $query)
+                            .onSubmit(find)
+                            .autocorrectionDisabled()
+                        if searching { ProgressView().controlSize(.small) }
+                    }
+                }
+                if let note {
+                    Text(note).font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(Array(found.enumerated()), id: \.offset) { _, place in
+                    Button {
+                        model.conjunctions.settings.place = place
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(place.name)
+                            Text(String(format: "%.4f°, %.4f°", place.location.latitude, place.location.longitude))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle("Search around a place")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Find", action: find).disabled(query.trimmingCharacters(in: .whitespaces).isEmpty) }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 360)
+        #endif
+    }
+
+    private func find() {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        searching = true
+        note = nil
+        Task {
+            do {
+                found = try await ConjunctionsModel.places(matching: text)
+                if found.isEmpty { note = "Nothing found for \(text)." }
+            } catch {
+                found = []
+                note = "Couldn't search for \(text): \(error.localizedDescription)"
+            }
+            searching = false
+        }
     }
 }

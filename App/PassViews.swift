@@ -230,7 +230,7 @@ struct PassDetailView: View {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                     fact("Duration", Duration.seconds(pass.duration).formatted(.time(pattern: .minuteSecond)))
                     fact("Visible", visibility)
-                    fact("Closest", "\(Int(pass.minimumRange)) km")
+                    fact("Closest", model.units.distance(pass.minimumRange))
                     fact("Nearest the Sun", "\(Int(pass.minimumSunSeparation))°")
                     fact("Fastest azimuth", String(format: "%.1f°/s", pass.peakAzimuthRate))
                     fact("Fastest altitude", String(format: "%.1f°/s", pass.peakAltitudeRate))

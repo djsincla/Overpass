@@ -548,15 +548,15 @@ enum RadarSize {
 
 enum SatelliteDimensions {
     /// "12.6 × 4.2 m, span 23.9 m"; the span only when it's wider than the body.
-    static func text(_ info: SatelliteInfo) -> String? {
+    static func text(_ info: SatelliteInfo, units: Units) -> String? {
         let body = [info.length, info.diameter].compactMap { $0 }
         guard !body.isEmpty || info.span != nil else { return nil }
-        func metres(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(0...1))) }
-        var text = body.map(metres).joined(separator: " × ")
+        let unit = units.lengthUnit
+        var text = body.map(units.lengthNumber).joined(separator: " × ")
         if let span = info.span, span > (body.max() ?? 0) {
-            text += text.isEmpty ? "span \(metres(span)) m" : " m, span \(metres(span)) m"
+            text += text.isEmpty ? "span \(units.length(span))" : " \(unit), span \(units.length(span))"
         } else if !text.isEmpty {
-            text += " m"
+            text += " \(unit)"
         }
         return text
     }

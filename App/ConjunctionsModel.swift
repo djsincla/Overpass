@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import MapKit
 import Observation
 import SkyKit
 
@@ -53,6 +54,8 @@ final class ConjunctionsModel {
     private(set) var isUpdating = false
     private(set) var lastSearch: Date?
     var message: String?
+    /// The place search sheet is showing.
+    var choosingPlace = false
 
     /// The space stations: one element set per station (docked modules share an orbit).
     static let stationIDs = ["25544": "ISS", "48274": "Tiangong (CSS)"]
@@ -135,21 +138,19 @@ final class ConjunctionsModel {
         return f
     }
 
-    /// Looks a place name up and makes it the search centre.
-    func setPlace(named query: String) async {
-        do {
-            let marks = try await CLGeocoder().geocodeAddressString(query)
-            guard let mark = marks.first, let location = mark.location else {
-                message = "Couldn't find \(query)."
-                return
-            }
-            let name = [mark.name, mark.locality, mark.administrativeArea].compactMap { $0 }
+    /// Towns, addresses and landmarks matching `query`, from Apple's map search, best first.
+    /// (CLGeocoder's address lookup found no landmarks: "Griffith Observatory" came back empty.)
+    static func places(matching query: String) async throws -> [SearchPlace] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.resultTypes = [.address, .pointOfInterest]
+        let response = try await MKLocalSearch(request: request).start()
+        return response.mapItems.prefix(10).map { item in
+            let mark = item.placemark
+            let name = [item.name, mark.locality, mark.administrativeArea, mark.country].compactMap { $0 }
                 .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.joined(separator: ", ")
-            settings.place = SearchPlace(name: name.isEmpty ? query : name,
-                                         location: Geodetic(latitude: location.coordinate.latitude,
-                                                            longitude: location.coordinate.longitude))
-        } catch {
-            message = "Couldn't look up \(query): \(error.localizedDescription)"
+            return SearchPlace(name: name.isEmpty ? query : name,
+                               location: Geodetic(latitude: mark.coordinate.latitude, longitude: mark.coordinate.longitude))
         }
     }
 
