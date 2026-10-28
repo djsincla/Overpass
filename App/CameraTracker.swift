@@ -1,17 +1,33 @@
+import CoreGraphics
 import Foundation
 import Observation
 import SkyKit
 
+/// What camera tracking looks for where you click.
+enum CameraTarget: String, CaseIterable, Identifiable {
+    /// A spot brighter or darker than plain sky: a satellite, an aircraft.
+    case sky
+    /// A patch matched by its look, against any background: a boat, a bird, a car, a person.
+    case ground
+
+    var id: Self { self }
+    var title: String { self == .sky ? "Sky" : "Ground" }
+}
+
 /// Camera tracking: click something in the camera image and the mount follows it, keeping it on
 /// the aim point. For objects with no prediction to go on (a satellite that isn't in the
-/// catalogue, an aircraft), or to point an antenna by sight.
+/// catalogue, an aircraft, a boat or a bird), or to point an antenna by sight.
 @MainActor @Observable
 final class CameraTracker {
     weak var app: AppModel?
     let camera: CameraFeed
 
     /// What's being followed in the image; nil when nothing is picked.
-    private(set) var tracker: MovingObjectTracker?
+    private(set) var tracker: (any ImageTracker)?
+    /// Sky objects or things on the ground.
+    var target = CameraTarget(rawValue: UserDefaults.standard.string(forKey: "camera.target") ?? "") ?? .sky {
+        didSet { UserDefaults.standard.set(target.rawValue, forKey: "camera.target") }
+    }
     /// Move the mount to follow it, or only follow it in the image.
     var drivesMount = true {
         didSet {
@@ -75,20 +91,57 @@ final class CameraTracker {
 
     private var latestFrame: GrayFrame?
 
+    /// The largest patch matched on the ground, pixels a side; bigger is slow and gains nothing.
+    private static let largestPatch = 160.0
+
     func pick(at point: (x: Double, y: Double), radius: Double = 30) async {
         guard let frame = latestFrame else {
             message = "Start the camera first."
             return
         }
-        guard let picked = MovingObjectTracker(frame: frame, at: point, radius: radius) else {
-            message = "Nothing stands out from the sky there. Click right on it."
+        switch target {
+        case .sky:
+            guard let picked = MovingObjectTracker(frame: frame, at: point, radius: radius) else {
+                message = "Nothing stands out from the sky there. Click right on it."
+                return
+            }
+            await start(picked, frame, picked.blob.polarity > 0 ? "Locked on a bright object." : "Locked on a dark object.")
+        case .ground:
+            // The outline of what's there if Vision finds one, else a square about the size of the click.
+            if let box = await ObjectFinder.box(around: point, in: frame) {
+                await pick(box: box, in: frame, note: "Locked on it. If it slips, drag a box around it instead.")
+            } else {
+                let side = 4 * radius
+                await pick(box: CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side), in: frame,
+                           note: "Locked on the area clicked. Drag a box around the object for a closer fit.")
+            }
+        }
+    }
+
+    /// A box dragged around something, in frame pixels.
+    func pick(box: CGRect) async {
+        guard let frame = latestFrame else {
+            message = "Start the camera first."
             return
         }
+        await pick(box: box, in: frame, note: "Locked on it.")
+    }
+
+    private func pick(box: CGRect, in frame: GrayFrame, note: String) async {
+        let width = Int(min(box.width, Self.largestPatch)), height = Int(min(box.height, Self.largestPatch))
+        guard let picked = PatchTracker(frame: frame, centre: (box.midX, box.midY), width: width, height: height) else {
+            message = "There's too little detail there to hold on to. Drag a box around the object."
+            return
+        }
+        await start(picked, frame, note)
+    }
+
+    private func start(_ picked: any ImageTracker, _ frame: GrayFrame, _ note: String) async {
         tracker = picked
         estimator.reset()
         lastFrame = frame.timestamp
         lastMountAxes = mount?.axes(at: frame.timestamp)
-        message = picked.blob.polarity > 0 ? "Locked on a bright object." : "Locked on a dark object."
+        message = note
         await followIfReady()
     }
 
@@ -137,14 +190,14 @@ final class CameraTracker {
         lastMountAxes = axes
 
         let wasLost = tracker.state == .lost
-        let seen = tracker.update(frame, mountShift: shift)
+        let found = tracker.follow(frame, mountShift: shift)
         self.tracker = tracker
 
         // Where the target is in axis coordinates: where the mount pointed plus the move that
         // would bring the target to the aim point.
-        if let seen, tracker.hits >= 2, !guiding, let calibration, let axes {
+        if found, tracker.hits >= 2, !guiding, let calibration, let axes {
             let aim = aimPoint
-            if let move = calibration.axisCorrection(offset: (seen.x - aim.x, seen.y - aim.y), altitude: altitude) {
+            if let move = calibration.axisCorrection(offset: (tracker.x - aim.x, tracker.y - aim.y), altitude: altitude) {
                 estimator.add(AxisPosition(primary: axes.primary + move.primary, secondary: axes.secondary + move.secondary),
                               at: frame.timestamp)
             }
@@ -177,10 +230,10 @@ final class CameraTracker {
 
     // MARK: Calibration
 
-    /// Calibrates on whatever is picked, which must be fixed: a star, or a distant light or mast.
+    /// Calibrates on whatever is picked, which must be fixed: a star, or a distant light, mast or building.
     func calibrate() async {
         guard let app, tracker != nil else {
-            message = "Click something that isn't moving first (a star, a distant light or mast), then calibrate."
+            message = "Click something that isn't moving first (a star, a distant light, mast or building), then calibrate."
             return
         }
         isCalibrating = true
