@@ -192,6 +192,7 @@ struct SearchControls: View {
                 .help("How high the Moon or Sun must be")
             }
             .toggleStyle(.button)
+            .buttonStyle(.bordered)
             SatelliteChooser()
             Toggle("Also my selected satellites", isOn: $c.settings.includeSelected)
                 .font(.caption)
@@ -203,11 +204,15 @@ struct SearchControls: View {
             }
         }
         .padding(.vertical, 4)
+        // Every control its own tap target. Without a style, iOS treats a list row holding
+        // buttons as one button and a tap fires them all: one tap turned off both Moon and Sun.
+        .buttonStyle(.borderless)
     }
 
     private var summary: String {
         let c = model.conjunctions
         if c.isSearching { return "Searching…" }
+        if c.bodies.isEmpty { return "Turn on the Moon or the Sun to search." }
         let names = c.satellites.map { EventList.short($0.name) }.joined(separator: ", ")
         let ages = c.satellites.map { Date.now.timeIntervalSince($0.epoch) }
         let age = ages.max().map { " · elements up to \(countdown($0)) old" } ?? ""
