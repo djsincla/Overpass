@@ -28,6 +28,8 @@ For the longest time I have been running Heavenscape SkyTrack on a Windows lapto
 
 **Conjunctions.** Space station transits of the Moon and Sun around any place you choose, out to two weeks, drawn on a map with the band where the transit is visible and the time along its centreline. Watch an event and the app refreshes the station elements and recalculates it as the day gets closer, showing how far it moved. This is the one map that uses Apple's MapKit, on purpose: the band is only a few kilometres wide and the transit lasts under a second at any one spot, so you need street-level detail to pick a road or a car park inside it. Each pixel of the bundled world image is about 7 km across, wider than the band. MapKit needs a network connection, so plan conjunctions before you leave; it keeps what you have already looked at.
 
+**Camera tracking.** Click something in the camera image and the mount follows it, for anything with no prediction to go on. In the sky it looks for a spot brighter or darker than the sky around it: a satellite missing from the catalogue, or an aircraft. On the ground it matches the patch you picked by its look, frame to frame, so it holds a boat on the water, a bird against trees, a car or a person. Drag a box around the object for the closest fit. It needs USB Special mode and a calibration, which you can do in daylight on a distant mast or building.
+
 **Also included.** A pass calculator out to fourteen days for any object, star alignment, camera guiding with an iPhone through Continuity Camera, and a red night-vision mode.
 
 ## Connecting to the mount
@@ -89,7 +91,7 @@ The app is one multiplatform target (iOS 17+, macOS 14+), signed with team HG979
 swift test
 ```
 
-153 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, and the satellite catalogue and search.
+160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
 

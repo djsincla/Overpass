@@ -45,6 +45,8 @@ struct CameraTrackView: View {
 struct CameraTrackScreen: View {
     @Environment(AppModel.self) private var model
     @State private var pinchStart: Double?
+    /// A box being dragged around something on the ground, in view points.
+    @State private var dragBox: CGRect?
 
     var body: some View {
         let tracker = model.cameraTracker
@@ -57,6 +59,9 @@ struct CameraTrackScreen: View {
                     Image(decorative: image, scale: 1).resizable().interpolation(.medium).aspectRatio(contentMode: .fit)
                 }
                 Canvas { context, _ in draw(&context, layout) }
+                if let dragBox {
+                    Rectangle().path(in: dragBox).stroke(Theme.target, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                }
                 VStack {
                     HStack(alignment: .top) {
                         CameraImageControls(camera: camera).padding(10)
@@ -78,6 +83,19 @@ struct CameraTrackScreen: View {
                 // About 30 points on screen, however far it's zoomed.
                 Task { await tracker.click(at: point, radius: max(6, 30 / layout.scale)) }
             }
+            // On the ground, a box dragged around the object fits it closer than a click can.
+            .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .local)
+                .onChanged { value in
+                    dragBox = CGRect(x: min(value.startLocation.x, value.location.x), y: min(value.startLocation.y, value.location.y),
+                                     width: abs(value.location.x - value.startLocation.x), height: abs(value.location.y - value.startLocation.y))
+                }
+                .onEnded { _ in
+                    defer { dragBox = nil }
+                    guard camera.isRunning, let box = dragBox, layout.scale > 0 else { return }
+                    let a = layout.frame(CGPoint(x: box.minX, y: box.minY)) ?? layout.clamped(CGPoint(x: box.minX, y: box.minY))
+                    let b = layout.frame(CGPoint(x: box.maxX, y: box.maxY)) ?? layout.clamped(CGPoint(x: box.maxX, y: box.maxY))
+                    Task { await tracker.pick(box: CGRect(x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y)) }
+                }, including: tracker.target == .ground ? .all : .subviews)
             .gesture(MagnifyGesture()
                 .onChanged { value in
                     let start = pinchStart ?? camera.zoom
@@ -107,7 +125,7 @@ struct CameraTrackScreen: View {
             case .lost: return "Lost it. Click it again to pick it up."
             }
         }
-        return "Click on a moving object to track it"
+        return tracker.target == .ground ? "Click on something to track it, or drag a box around it" : "Click on a moving object to track it"
     }
 
     private func draw(_ context: inout GraphicsContext, _ layout: FrameLayout) {
@@ -134,9 +152,16 @@ struct CameraTrackScreen: View {
         let r = t.searchRadius * layout.scale
         context.stroke(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)),
                        with: .color(color.opacity(0.3)), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-        let half = max(10, Double(t.blob.area).squareRoot() * layout.scale + 6)
-        context.stroke(Path(CGRect(x: p.x - half, y: p.y - half, width: 2 * half, height: 2 * half)),
-                       with: .color(color), lineWidth: 2)
+        let box: CGRect
+        if let spot = t as? MovingObjectTracker {
+            let half = max(10, Double(spot.blob.area).squareRoot() * layout.scale + 6)
+            box = CGRect(x: p.x - half, y: p.y - half, width: 2 * half, height: 2 * half)
+        } else {
+            // The patch being matched, as it is.
+            let w = max(20, t.size.width * layout.scale), h = max(20, t.size.height * layout.scale)
+            box = CGRect(x: p.x - w / 2, y: p.y - h / 2, width: w, height: h)
+        }
+        context.stroke(Path(box), with: .color(color), lineWidth: 2)
         if t.hasVelocity {
             var arrow = Path()
             arrow.move(to: p)
@@ -169,6 +194,12 @@ struct FrameLayout {
         CGPoint(x: origin.x + p.x * scale, y: origin.y + p.y * scale)
     }
 
+    /// The frame pixel nearest a point in the view, inside the part shown.
+    func clamped(_ point: CGPoint) -> (x: Double, y: Double) {
+        let x = (point.x - origin.x) / max(scale, 1e-9), y = (point.y - origin.y) / max(scale, 1e-9)
+        return (min(max(x, shown.minX), shown.maxX), min(max(y, shown.minY), shown.maxY))
+    }
+
     /// The frame pixel under a point in the view, or nil outside the image.
     func frame(_ point: CGPoint) -> (x: Double, y: Double)? {
         guard scale > 0 else { return nil }
@@ -187,6 +218,16 @@ struct CameraTrackControls: View {
         let mount = model.mount
         Card(title: "Camera tracking", systemImage: "camera.viewfinder") {
             CameraControls()
+
+            Picker("Track", selection: $tracker.target) {
+                ForEach(CameraTarget.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .help("Sky: a satellite or aircraft, a spot against plain sky. Ground: a boat, bird, car or person, matched by its look against any background.")
+            if tracker.target == .ground {
+                Text("Click it, or drag a box around it. A box that fits it closely holds best; one that's mostly water or field follows the water.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             HStack {
                 Toggle("Move the mount", isOn: $tracker.drivesMount)
