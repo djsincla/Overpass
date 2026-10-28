@@ -138,7 +138,7 @@ struct MountPanel: View {
                     let saved = Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude)
                     let away = Geodesy.distance(saved, Geodetic(latitude: site.latitude, longitude: site.longitude))
                     Text(String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
-                         + (!model.settings.hasLocation ? "" : away < 0.1 ? " · matches yours" : away < 10 ? String(format: " · %.1f km from yours", away) : String(format: " · %.0f km from yours", away)))
+                         + (!model.settings.hasLocation ? "" : away < 0.1 ? " · matches yours" : " · \(model.units.distance(away, decimals: away < 10 ? 1 : 0)) from yours"))
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
             }

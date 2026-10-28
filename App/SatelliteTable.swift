@@ -10,7 +10,7 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
 
     var id: Self { self }
 
-    var title: String {
+    func title(_ units: Units) -> String {
         switch self {
         case .name: "Name"
         case .number: "Number"
@@ -19,19 +19,20 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         case .owner: "Owner"
         case .launched: "Launched"
         case .period: "Period min"
-        case .perigee: "Perigee km"
-        case .apogee: "Apogee km"
+        case .perigee: "Perigee \(units.distanceUnit)"
+        case .apogee: "Apogee \(units.distanceUnit)"
         case .inclination: "Incl."
-        case .dimensions: "L × D m"
-        case .span: "Span m"
+        case .dimensions: "L × D \(units.lengthUnit)"
+        case .span: "Span \(units.lengthUnit)"
         case .rcs: "RCS m²"
         case .size: "Size"
         case .age: "TLE age"
         }
     }
 
-    var help: String {
-        switch self {
+    func help(_ units: Units) -> String {
+        let distance = units.imperial ? "miles" : "km", length = units.imperial ? "feet" : "metres"
+        return switch self {
         case .name: "Name in the TLE source"
         case .number: "NORAD catalogue number"
         case .cospar: "International designator: launch year, launch number and piece"
@@ -39,11 +40,11 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         case .owner: "Owner or operator country code"
         case .launched: "Launch date"
         case .period: "Orbital period, minutes"
-        case .perigee: "Lowest height above the surface, km"
-        case .apogee: "Highest height above the surface, km"
+        case .perigee: "Lowest height above the surface, \(distance)"
+        case .apogee: "Highest height above the surface, \(distance)"
         case .inclination: "Orbital inclination, degrees"
-        case .dimensions: "Length × diameter, metres (GCAT)"
-        case .span: "Span across solar panels or booms, metres (GCAT)"
+        case .dimensions: "Length × diameter, \(length) (GCAT)"
+        case .span: "Span across solar panels or booms, \(length) (GCAT)"
         case .rcs: "Radar cross-section, m², where published"
         case .size: "Small, medium or large: from the radar cross-section, or else the largest dimension"
         case .age: "Age of the orbital elements"
@@ -88,11 +89,12 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         return allCases.filter { $0 != .name && shown.contains($0) }
     }
 
-    func text(_ sat: SatelliteTarget, _ info: SatelliteInfo?) -> String {
+    func text(_ sat: SatelliteTarget, _ info: SatelliteInfo?, _ units: Units) -> String {
         func number(_ v: Double?, _ digits: Int) -> String {
             v.map { $0.formatted(.number.precision(.fractionLength(digits)).grouping(.never)) } ?? "–"
         }
-        func metres(_ v: Double?) -> String { v.map { $0.formatted(.number.precision(.fractionLength(0...1))) } ?? "–" }
+        func metres(_ v: Double?) -> String { v.map(units.lengthNumber) ?? "–" }
+        func km(_ v: Double?) -> String { number(v.map { units.imperial ? $0 / Units.kmPerMile : $0 }, 0) }
         switch self {
         case .name: return sat.name
         case .number: return sat.noradID
@@ -101,8 +103,8 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         case .owner: return info?.owner ?? "–"
         case .launched: return info?.launchDate ?? "–"
         case .period: return number(info?.period, 1)
-        case .perigee: return number(info?.perigee, 0)
-        case .apogee: return number(info?.apogee, 0)
+        case .perigee: return km(info?.perigee)
+        case .apogee: return km(info?.apogee)
         case .inclination: return info?.inclination.map { String(format: "%.1f°", $0) } ?? "–"
         case .dimensions:
             let parts = [info?.length, info?.diameter].compactMap { $0 }
@@ -162,6 +164,7 @@ struct ColumnSort: Codable, Equatable {
 
 /// The column titles for one source; clicking one sorts by it, clicking again reverses.
 struct SatelliteColumnHeader: View {
+    @Environment(AppModel.self) private var model
     let columns: [SatelliteColumn]
     @Binding var sort: ColumnSort
 
@@ -183,15 +186,15 @@ struct SatelliteColumnHeader: View {
             if active { sort.ascending.toggle() } else { sort = ColumnSort(column: column, ascending: true) }
         } label: {
             HStack(spacing: 2) {
-                Text(column.title).lineLimit(1).minimumScaleFactor(0.8)
+                Text(column.title(model.units)).lineLimit(1).minimumScaleFactor(0.8)
                 if active { Image(systemName: sort.ascending ? "chevron.up" : "chevron.down").font(.caption2.bold()) }
             }
             .foregroundStyle(active ? Color.accentColor : .secondary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(column.help)
-        .accessibilityLabel(column.title)
+        .help(column.help(model.units))
+        .accessibilityLabel(column.title(model.units))
         .accessibilityValue(active ? (sort.ascending ? "Sorted ascending" : "Sorted descending") : "")
         .accessibilityHint("Sorts by this column")
     }
@@ -199,6 +202,7 @@ struct SatelliteColumnHeader: View {
 
 /// One satellite as a row of columns, lined up with `SatelliteColumnHeader`.
 struct SatelliteColumnRow: View {
+    @Environment(AppModel.self) private var model
     let satellite: SatelliteTarget
     let info: SatelliteInfo?
     let columns: [SatelliteColumn]
@@ -213,7 +217,7 @@ struct SatelliteColumnRow: View {
                 .frame(minWidth: 120, maxWidth: SatelliteColumn.nameWidth, alignment: .leading)
                 .help(satellite.name)
             ForEach(columns) { column in
-                Text(column.text(satellite, info))
+                Text(column.text(satellite, info, model.units))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(column == .age && satellite.elementAge() > 3 * 86_400 ? .orange : .secondary)
                     .lineLimit(1)

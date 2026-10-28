@@ -24,6 +24,9 @@ struct Settings: Codable, Equatable {
     var heightMeters: Double = 0
     var hasLocation = false
     var refraction = true
+    /// Miles and feet instead of kilometres and metres, for what's shown. The first launch
+    /// follows the system's measurement setting.
+    var imperial = Locale.current.measurementSystem == .us
 
     var minimumAltitude: Double = 0
     var darkSkySunAltitude: Double = -6
@@ -813,11 +816,15 @@ final class AppModel {
         imported.redMode = mine.redMode
         imported.alwaysDark = mine.alwaysDark
         imported.redAppIcon = mine.redAppIcon
+        imported.imperial = mine.imperial
         imported.tracksLog = mine.tracksLog
         settings = imported
         return String(format: "Imported: location %.3f°, %.3f°, cable margin %.0f°.",
                       imported.latitude, imported.longitude, imported.cableMargin)
     }
+
+    /// How distances and heights are shown.
+    var units: Units { Units(imperial: settings.imperial) }
 
     static func load<T: Codable>(_ key: String, default value: T) -> T {
         guard let stored = UserDefaults.standard.data(forKey: key) else { return value }

@@ -35,6 +35,10 @@ struct SettingsView: View {
                 Section {
                     Toggle("Always dark", isOn: $model.settings.alwaysDark)
                     Toggle("Red mode", isOn: $model.settings.redMode)
+                    Picker("Units", selection: $model.settings.imperial) {
+                        Text("Metric (km, m)").tag(false)
+                        Text("Imperial (mi, ft)").tag(true)
+                    }
                     #if os(iOS)
                     Toggle("Red app icon", isOn: $model.settings.redAppIcon)
                         .onChange(of: model.settings.redAppIcon) { _, red in AppIcon.setRed(red) }
@@ -54,7 +58,12 @@ struct SettingsView: View {
                         .help("The latitude and longitude the mount had when it connected, from its GPS or hand controller. Connect over WiFi or USB Normal mode first.")
                     numberField("Latitude (° north)", $model.settings.latitude)
                     numberField("Longitude (° east)", $model.settings.longitude)
-                    numberField("Height (m)", $model.settings.heightMeters)
+                    if model.settings.imperial {
+                        numberField("Height (ft)", Binding(get: { model.settings.heightMeters / Units.metresPerFoot },
+                                                           set: { model.settings.heightMeters = $0 * Units.metresPerFoot }))
+                    } else {
+                        numberField("Height (m)", $model.settings.heightMeters)
+                    }
                 }
                 // Typing a position counts as setting one. (A "Location set" switch used to sit
                 // here, and turning it off emptied the Observe screen.)
