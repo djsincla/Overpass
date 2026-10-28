@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.3.1 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.3.2 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -92,6 +92,8 @@ swift test
 153 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, and the satellite catalogue and search.
 
 ## Version history
+
+**0.3.2**, 28 October 2026. Conjunctions follows the location in Settings, searches for places by name with Apple's map search, and on iPhone keeps the full-screen map on its side with a details card that folds away. A metric or imperial choice for every distance and height. The globe drops its orbit line, which smeared high orbits into curves through space.
 
 **0.3.1**, 27 October 2026. The first version on TestFlight for iPhone and iPad as well as a Mac download. North is the HAZ46's cable stop in both hemispheres: tracking stops there and asks before unwinding, and Special mode can track up to 90° past it and unwind afterwards. Globe and world map views that work offline, with up to five tracks. The mount's GPS location. Look up on iPhone and iPad. Exposure and gain for USB guide cameras such as the iPolar. Conjunctions search by satellite name. Stop leaves the mount's own tracking running, the mount's tracking is turned off on connect, and disconnecting always returns the mount to Normal mode.
 
