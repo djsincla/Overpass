@@ -84,6 +84,9 @@ struct Settings: Codable, Equatable {
     /// Normal mode (WiFi or USB): the shortest time between commands, for position polling and
     /// Step tracking. Sub-second updates have caused trouble on the HAZ46 in Normal mode.
     var normalModePeriod: Double = 1
+    /// Normal mode: read the position during a goto, so the dome follows the slew. Off, the app
+    /// stays silent until the slew should be over, in case a read makes the mount hesitate.
+    var readsDuringSlews = true
     /// Smooth tracking: seconds between speed updates. Each takes a position read and a speed
     /// command, about 45 ms on the HAZ46, so 0.05 runs them nearly back to back.
     var trackingPeriod: Double = 0.1
@@ -303,6 +306,10 @@ final class AppModel {
         if let key = highlightedPassKey,
            let pass = passes.first(where: { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }),
            pass.end.date > date { return pass }
+        // A chosen satellite keeps its own path: its next pass, never another satellite's.
+        if let id = highlightedObjectID, id.hasPrefix("sat:") {
+            return currentOrNextPass(String(id.dropFirst(4)), at: date)
+        }
         return passes.filter { $0.end.date > date }.min { $0.start.date < $1.start.date }
     }
 
@@ -314,10 +321,11 @@ final class AppModel {
         if !isShown(pass) { shownTrackKeys = [PassKey(pass)] }
     }
 
-    /// Highlights an object, and for a satellite its next pass.
+    /// Highlights an object, and for a satellite the pass it's on, or its next (by time: the
+    /// list's own order may be by height or brightness).
     func highlight(objectID: String) {
         highlightedObjectID = objectID
-        if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > viewDate() }) {
+        if objectID.hasPrefix("sat:"), let pass = currentOrNextPass(String(objectID.dropFirst(4)), at: viewDate()) {
             highlight(pass: pass)
         }
     }
@@ -432,7 +440,7 @@ final class AppModel {
             let now = viewDate()
             let highlighted = highlightedPass(at: now)
             let pass = highlighted?.noradID == s.noradID ? highlighted
-                : passes.first { $0.noradID == s.noradID && $0.end.date > now }
+                : currentOrNextPass(s.noradID, at: now)
             targetPassKey = pass.map { ($0.noradID, $0.start.date) }
         } else {
             targetPassKey = nil
@@ -543,12 +551,15 @@ final class AppModel {
         object.apparentMagnitude(observer: settings.observer, at: AstroTime(date))
     }
 
-    /// Selected objects currently above the horizon.
+    /// Selected objects currently above the horizon. A satellite only while it's on a pass the
+    /// list shows: one the filters leave out isn't drawn either, so the sky matches the list.
     func liveObjects(at date: Date) -> [LiveObject] {
         let observer = settings.observer
         let time = AstroTime(date)
         return selectedObjects.compactMap { object in
             guard let h = try? observer.look(at: object.target, time), h.altitude > 0 else { return nil }
+            if case .satellite(let s) = object,
+               !passes.contains(where: { $0.noradID == s.noradID && $0.start.date <= date && $0.end.date > date }) { return nil }
             let sunlit: Bool = if case .satellite(let s) = object { (try? s.isSunlit(at: time)) ?? false } else { true }
             return LiveObject(id: object.id, name: object.name, position: h, sunlit: sunlit)
         }

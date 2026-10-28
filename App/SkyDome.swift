@@ -240,6 +240,8 @@ struct SkyDome: View {
             }
             context.fill(Path(ellipseIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size)),
                          with: .color(color))
+            // A selected body is labelled with the other selected objects; twice reads as a smudge.
+            guard !liveObjects.contains(where: { $0.id == "body:\(body.rawValue)" }) else { continue }
             context.draw(Text(body.name).font(.caption2).foregroundStyle(color.opacity(0.8)),
                          at: CGPoint(x: p.x, y: p.y + size / 2 + 7))
         }

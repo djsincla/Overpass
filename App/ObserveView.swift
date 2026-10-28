@@ -17,6 +17,10 @@ struct ObserveView: View {
     /// The sky, or the Earth (as a globe or a flat map) with the ground tracks.
     @AppStorage("observe.view") private var view = SkyView.sky
     @State private var recentreRequest = 0
+    /// A satellite clicked on the globe or map, with its choices showing.
+    @State private var clickedPass: SatellitePass?
+    /// A new target that needs the current tracking stopped first.
+    @State private var replacingTarget: SatellitePass?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -246,13 +250,13 @@ struct ObserveView: View {
                                    sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
                                    redMode: model.settings.redMode,
                                    recentreRequest: recentreRequest,
-                                   onTapTrack: { id in if let p = shown.first(where: { $0.id == id }) { model.highlight(pass: p) } })
+                                   onTapTrack: { id in clicked(shown.first { $0.id == id }) })
                 } else if view == .map {
                     FlatMapView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
                                 tracks: globeTracks(shown, focus: pass, at: date),
                                 sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
                                 recentreRequest: recentreRequest,
-                              onTapTrack: { id in if let p = shown.first(where: { $0.id == id }) { model.highlight(pass: p) } })
+                              onTapTrack: { id in clicked(shown.first { $0.id == id }) })
                 } else {
                     sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
                 }
@@ -261,6 +265,21 @@ struct ObserveView: View {
                 if !model.shownTrackKeys.isEmpty { TrackLegend(passes: shown, focusID: pass?.id) }
             }
         }
+        }
+        .confirmationDialog(clickedPass?.name ?? "", isPresented: Binding(get: { clickedPass != nil }, set: { if !$0 { clickedPass = nil } }),
+                            titleVisibility: .visible, presenting: clickedPass) { clickChoices($0) }
+        .alert("Stop tracking \(model.mount.trackingName ?? "the current target")?",
+               isPresented: Binding(get: { replacingTarget != nil }, set: { if !$0 { replacingTarget = nil } }),
+               presenting: replacingTarget) { pass in
+            Button("Stop and target \(pass.name)", role: .destructive) {
+                Task {
+                    await model.mount.stopAll()
+                    model.setTarget(pass: pass)
+                }
+            }
+            Button("Keep tracking", role: .cancel) {}
+        } message: { pass in
+            Text("The mount is following \(model.mount.trackingName ?? "another target"). Stopping it makes \(pass.name) the tracking target.")
         }
     }
 
@@ -292,6 +311,35 @@ struct ObserveView: View {
                     menu: { AnyView(domeMenu($0)) })
     }
 
+    private func clicked(_ pass: SatellitePass?) {
+        guard let pass else { return }
+        model.highlight(pass: pass)
+        clickedPass = pass
+    }
+
+    /// The globe and map's choices for a clicked satellite, as in its menu in the pass list.
+    @ViewBuilder
+    private func clickChoices(_ pass: SatellitePass) -> some View {
+        let mount = model.mount
+        let busy = mount.isTracking || mount.isPreparing
+        if model.targetPassID == pass.id {
+            if busy { Button("Stop tracking", role: .destructive) { Task { await mount.stopAll() } } }
+            Button("Untrack") { Task { await model.untrack() } }
+        } else if pass.end.date > model.viewDate() {
+            Button("Set as tracking target") {
+                if busy {
+                    // After this dialog has gone, or the next one may not show.
+                    Task { try? await Task.sleep(for: .milliseconds(350)); replacingTarget = pass }
+                } else {
+                    model.setTarget(pass: pass)
+                }
+            }
+        }
+        Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
+        Button("Pass calculator…") { model.calculatorObjectID = "sat:\(pass.noradID)" }
+        Button("Cancel", role: .cancel) {}
+    }
+
     /// Right-click on anything in the sky: track it, target it, select it, or plan around it.
     @ViewBuilder
     private func domeMenu(_ id: String) -> some View {
@@ -318,7 +366,7 @@ struct ObserveView: View {
         }
         Divider()
         Button("Highlight") { model.highlight(objectID: id) }
-        if let pass = model.passes.first(where: { "sat:\($0.noradID)" == id && $0.end.date > model.viewDate() }) {
+        if id.hasPrefix("sat:"), let pass = model.currentOrNextPass(String(id.dropFirst(4)), at: model.viewDate()) {
             Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
         }
         Button(model.isSelected(id) ? "Remove from selection" : "Add to selection") { model.toggle(id) }
