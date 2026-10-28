@@ -16,12 +16,23 @@ struct ConjunctionsView: View {
                     ResizableSplit(axis: .horizontal, fraction: $listFraction, range: 0.25...0.6) {
                         EventList(selectedID: $selectedID)
                     } second: {
-                        ConjunctionMap(event: selected, previous: selectedWatch?.previous)
-                            .overlay(alignment: .bottom) {
-                                if let event = selected {
-                                    EventDetail(event: event, watch: selectedWatch).padding(12)
+                        if proxy.size.height < 560, let event = selected {
+                            // Wide but short (a phone on its side): the details beside the map, not over it.
+                            HStack(spacing: 0) {
+                                ConjunctionMap(event: event, previous: selectedWatch?.previous)
+                                ScrollView {
+                                    EventDetail(event: event, watch: selectedWatch).padding(8)
                                 }
+                                .frame(width: min(320, proxy.size.width * 0.32))
                             }
+                        } else {
+                            ConjunctionMap(event: selected, previous: selectedWatch?.previous)
+                                .overlay(alignment: .bottom) {
+                                    if let event = selected {
+                                        EventDetail(event: event, watch: selectedWatch).padding(12)
+                                    }
+                                }
+                        }
                     }
                 } else {
                     EventList(selectedID: $selectedID, pushesDetail: true)
@@ -276,28 +287,33 @@ struct EventDetail: View {
     var body: some View {
         let c = model.conjunctions, units = model.units
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
-                Spacer()
-                Text(event.closest, format: .dateTime.month().day().hour().minute().second())
-                    .font(.headline.monospacedDigit())
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
+                    Spacer()
+                    Text(event.closest, format: .dateTime.month().day().hour().minute().second())
+                        .font(.headline.monospacedDigit())
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
+                    Text(event.closest, format: .dateTime.month().day().hour().minute().second())
+                        .font(.headline.monospacedDigit())
+                }
             }
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
-                GridRow {
-                    fact("Nearest line", "\(units.distance(event.distance, decimals: 1)) \(compass(event.bearing)) of \(c.centreName.components(separatedBy: ",")[0])")
-                    fact("Band", "\(units.distance(event.width, decimals: 1)) wide · \(String(format: "%.2f s", event.duration))")
-                }
-                GridRow {
-                    fact("Look", "\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up, \(compass(event.bodyAzimuth))")
-                    fact("Station", "\(units.distance(event.satelliteRange)) away")
-                }
-                GridRow {
-                    fact("Elements", "\(countdown(Date.now.timeIntervalSince(event.elementEpoch))) old")
-                    if let drift = watch?.drift, let previous = watch?.previous {
-                        fact("Last update", String(format: "%+.1f s, ", drift.seconds) + "\(units.distance(drift.distance, decimals: 1)) \(compass(drift.bearing)) since elements of \(previous.elementEpoch.formatted(date: .omitted, time: .shortened))")
-                    } else {
-                        fact("Timing", "refresh near the event: element errors shift it by seconds")
+            let facts = facts(c, units)
+            // Two facts a row where there's room, one under another in a narrow column.
+            ViewThatFits(in: .horizontal) {
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+                    ForEach(0..<(facts.count + 1) / 2, id: \.self) { row in
+                        GridRow {
+                            fact(facts[2 * row])
+                            if 2 * row + 1 < facts.count { fact(facts[2 * row + 1]) }
+                        }
                     }
+                }
+                .frame(minWidth: 380, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(facts.indices, id: \.self) { fact(facts[$0]) }
                 }
             }
             if event.body == .sun {
@@ -324,6 +340,26 @@ struct EventDetail: View {
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .frame(maxWidth: 560)
+    }
+
+    private func facts(_ c: ConjunctionsModel, _ units: Units) -> [(label: String, value: String)] {
+        var list = [
+            ("Nearest line", "\(units.distance(event.distance, decimals: 1)) \(compass(event.bearing)) of \(c.centreName.components(separatedBy: ",")[0])"),
+            ("Band", "\(units.distance(event.width, decimals: 1)) wide · \(String(format: "%.2f s", event.duration))"),
+            ("Look", "\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up, \(compass(event.bodyAzimuth))"),
+            ("Station", "\(units.distance(event.satelliteRange)) away"),
+            ("Elements", "\(countdown(Date.now.timeIntervalSince(event.elementEpoch))) old"),
+        ]
+        if let drift = watch?.drift, let previous = watch?.previous {
+            list.append(("Last update", String(format: "%+.1f s, ", drift.seconds) + "\(units.distance(drift.distance, decimals: 1)) \(compass(drift.bearing)) since elements of \(previous.elementEpoch.formatted(date: .omitted, time: .shortened))"))
+        } else {
+            list.append(("Timing", "refresh near the event: element errors shift it by seconds"))
+        }
+        return list
+    }
+
+    private func fact(_ item: (label: String, value: String)) -> some View {
+        fact(item.label, item.value)
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
