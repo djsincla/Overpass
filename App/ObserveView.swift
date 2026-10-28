@@ -366,7 +366,7 @@ struct ObserveView: View {
         }
         Divider()
         Button("Highlight") { model.highlight(objectID: id) }
-        if let pass = model.passes.first(where: { "sat:\($0.noradID)" == id && $0.end.date > model.viewDate() }) {
+        if id.hasPrefix("sat:"), let pass = model.currentOrNextPass(String(id.dropFirst(4)), at: model.viewDate()) {
             Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
         }
         Button(model.isSelected(id) ? "Remove from selection" : "Add to selection") { model.toggle(id) }

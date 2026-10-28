@@ -225,6 +225,9 @@ final class AppModel {
     /// Launch, orbit, radar and physical size by catalogue number (CelesTrak SATCAT and GCAT).
     private(set) var satelliteInfo: [String: SatelliteInfo] = [:]
     private(set) var passes: [SatellitePass] = []
+    /// Passes worked out for a satellite someone picked, that the list's filters left out: the
+    /// one it's on now in daylight with Visible only, say. Its path is drawn from these.
+    private var chosenPasses: [SatellitePass] = []
     private(set) var isPredicting = false
     private(set) var isRefreshing = false
     /// Checking selected satellites for ones that never rise here.
@@ -301,8 +304,13 @@ final class AppModel {
     /// The highlighted pass if it hasn't finished, otherwise the next one.
     func highlightedPass(at date: Date) -> SatellitePass? {
         if let key = highlightedPassKey,
-           let pass = passes.first(where: { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }),
+           let pass = knownPass(where: { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }),
            pass.end.date > date { return pass }
+        // A chosen satellite keeps its own path: its next pass, never another satellite's.
+        if let id = highlightedObjectID, id.hasPrefix("sat:") {
+            let noradID = String(id.dropFirst(4))
+            return (passes + chosenPasses).filter { $0.noradID == noradID && $0.end.date > date }.min { $0.start.date < $1.start.date }
+        }
         return passes.filter { $0.end.date > date }.min { $0.start.date < $1.start.date }
     }
 
@@ -314,12 +322,33 @@ final class AppModel {
         if !isShown(pass) { shownTrackKeys = [PassKey(pass)] }
     }
 
-    /// Highlights an object, and for a satellite its next pass.
+    /// Highlights an object, and for a satellite the pass it's on, or its next.
     func highlight(objectID: String) {
         highlightedObjectID = objectID
-        if objectID.hasPrefix("sat:"), let pass = passes.first(where: { "sat:\($0.noradID)" == objectID && $0.end.date > viewDate() }) {
+        if objectID.hasPrefix("sat:"), let pass = chosenPass(String(objectID.dropFirst(4)), at: viewDate()) {
             highlight(pass: pass)
         }
+    }
+
+    /// The pass to draw for a satellite someone picked: the one it's on at `date` if it's up, even
+    /// when the list's filters left that pass out, else its next. (By time: the list's own order
+    /// may be by height or brightness.)
+    func chosenPass(_ noradID: String, at date: Date) -> SatellitePass? {
+        let known = (passes + chosenPasses).filter { $0.noradID == noradID && $0.end.date > date }.min { $0.start.date < $1.start.date }
+        if let known, known.start.date <= date { return known }
+        guard let satellite = satelliteByID[noradID], let h = try? settings.observer.look(at: satellite, AstroTime(date)),
+              h.altitude > 0 else { return known }
+        var predictor = PassPredictor(observer: settings.observer)
+        predictor.darkSkySunAltitude = settings.darkSkySunAltitude
+        guard let now = (try? predictor.passes(of: satellite, from: date - 3600, to: date + 3600))?
+            .first(where: { $0.start.date <= date && $0.end.date > date }) else { return known }
+        chosenPasses.removeAll { $0.noradID == noradID || $0.end.date < .now - 3600 }
+        chosenPasses.append(now)
+        return now
+    }
+
+    private func knownPass(where match: (SatellitePass) -> Bool) -> SatellitePass? {
+        passes.first(where: match) ?? chosenPasses.first(where: match)
     }
 
     // MARK: Shown tracks
@@ -342,7 +371,7 @@ final class AppModel {
 
     /// The shown passes still to finish at `date`; with none chosen, the highlighted pass.
     func shownPasses(at date: Date) -> [SatellitePass] {
-        let found = shownTrackKeys.compactMap { key in passes.first(where: key.matches) }.filter { $0.end.date > date }
+        let found = shownTrackKeys.compactMap { key in knownPass(where: key.matches) }.filter { $0.end.date > date }
         if found.isEmpty, let pass = highlightedPass(at: date) { return [pass] }
         return found
     }
@@ -420,7 +449,7 @@ final class AppModel {
 
     var targetPass: SatellitePass? {
         guard let key = targetPassKey else { return nil }
-        return passes.first { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }
+        return knownPass { $0.noradID == key.noradID && abs($0.start.date.timeIntervalSince(key.start)) < 60 }
     }
 
     /// Locks in the highlighted object (and its pass) as the tracking target. Refused while tracking.
@@ -432,7 +461,7 @@ final class AppModel {
             let now = viewDate()
             let highlighted = highlightedPass(at: now)
             let pass = highlighted?.noradID == s.noradID ? highlighted
-                : passes.first { $0.noradID == s.noradID && $0.end.date > now }
+                : chosenPass(s.noradID, at: now)
             targetPassKey = pass.map { ($0.noradID, $0.start.date) }
         } else {
             targetPassKey = nil
