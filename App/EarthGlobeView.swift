@@ -5,8 +5,9 @@ import SwiftUI
 /// The Earth in 3D, drawn here rather than by MapKit, so it works with no network and shows the
 /// poles. NASA imagery bundled with the app (public domain): Blue Marble (December 2004) by day
 /// and Black Marble (2016) city lights by night, both 5400×2700, with the boundary following the
-/// Sun. Each shown pass has its ground track on the surface, its orbit at the satellite's real
-/// height, the satellite with a line down to the point below it, and its footprint.
+/// Sun. Each shown pass has its ground track on the surface, the satellite at its real height
+/// with a line down to the point below it, and its footprint. No orbit line: drawn Earth-fixed,
+/// a high orbit (CXO's takes 64 hours) smeared into long curves through space.
 struct EarthGlobeView {
     let home: Geodetic
     let tracks: [GlobeTrack]
@@ -26,7 +27,7 @@ struct EarthGlobeView {
         weak var view: SCNView?
         var onTapTrack: ((String) -> Void)?
         var lastRecentre = 0
-        /// The static part of each track (ground track and orbit), rebuilt only when it changes.
+        /// The static part of each track (the ground track), rebuilt only when it changes.
         var built: [String: (key: String, node: SCNNode)] = [:]
 
         override init() {
@@ -295,7 +296,7 @@ extension EarthGlobeView: NSViewRepresentable {
                            elements: [SCNGeometryElement(indices: indices, primitiveType: .triangleStrip)])
     }
 
-    /// The ground track on the surface (thick where it's above your horizon) and the orbit at height.
+    /// The ground track on the surface, thick where it's above your horizon.
     static func staticTrack(_ track: GlobeTrack) -> SCNNode {
         let node = SCNNode()
         let color = PlatformColor(track.color)
@@ -308,11 +309,6 @@ extension EarthGlobeView: NSViewRepresentable {
         let visible = track.visiblePath.map { point($0, radius: lift + 0.0005) }
         if let g = ribbon(visible, width: track.focused ? 0.016 : 0.011) {
             g.firstMaterial = material(color)
-            node.addChildNode(SCNNode(geometry: g))
-        }
-        let orbit = track.path.map { point($0) }
-        if let g = ribbon(orbit, width: 0.004) {
-            g.firstMaterial = material(color, opacity: 0.4)
             node.addChildNode(SCNNode(geometry: g))
         }
         return node
