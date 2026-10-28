@@ -23,8 +23,8 @@ settings:
     SWIFT_VERSION: "6.0"
     # The version: bump MARKETING_VERSION per release, CURRENT_PROJECT_VERSION per build
     # (packaging/release.sh reads them from here).
-    MARKETING_VERSION: "0.3.2"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "9"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 targets:
