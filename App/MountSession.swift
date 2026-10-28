@@ -1113,6 +1113,8 @@ final class MountSession {
                 try await Task.sleep(for: .seconds(min(max(0.5, settings.normalModePeriod), quietUntil.timeIntervalSinceNow + 0.01)))
                 let h = try await currentAltAz(normal)
                 log(String(format: "Slewing %.1f s: reads ", Date.now.timeIntervalSince(sent)) + describe(h))
+                // There already: the mount says when it has stopped, below.
+                if angularSeparation(h.unitVector, target.unitVector) < 0.05 { break }
             }
         } else {
             try await Task.sleep(until: .now + .seconds(max(0, quietUntil.timeIntervalSinceNow)))
