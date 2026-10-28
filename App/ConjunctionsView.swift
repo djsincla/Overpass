@@ -12,27 +12,18 @@ struct ConjunctionsView: View {
         let c = model.conjunctions
         NavigationStack {
             GeometryReader { proxy in
-                if proxy.size.width > 760 {
+                // List and map side by side where there's room both ways. A phone on its side keeps
+                // the phone layout: tap an event for the map full screen.
+                if proxy.size.width > 760 && proxy.size.height >= 560 {
                     ResizableSplit(axis: .horizontal, fraction: $listFraction, range: 0.25...0.6) {
                         EventList(selectedID: $selectedID)
                     } second: {
-                        if proxy.size.height < 560, let event = selected {
-                            // Wide but short (a phone on its side): the details beside the map, not over it.
-                            HStack(spacing: 0) {
-                                ConjunctionMap(event: event, previous: selectedWatch?.previous)
-                                ScrollView {
-                                    EventDetail(event: event, watch: selectedWatch).padding(8)
+                        ConjunctionMap(event: selected, previous: selectedWatch?.previous)
+                            .overlay(alignment: .bottom) {
+                                if let event = selected {
+                                    EventDetail(event: event, watch: selectedWatch).padding(12)
                                 }
-                                .frame(width: min(320, proxy.size.width * 0.32))
                             }
-                        } else {
-                            ConjunctionMap(event: selected, previous: selectedWatch?.previous)
-                                .overlay(alignment: .bottom) {
-                                    if let event = selected {
-                                        EventDetail(event: event, watch: selectedWatch).padding(12)
-                                    }
-                                }
-                        }
                     }
                 } else {
                     EventList(selectedID: $selectedID, pushesDetail: true)
@@ -283,63 +274,86 @@ struct EventDetail: View {
     @Environment(AppModel.self) private var model
     let event: Conjunction
     let watch: WatchedConjunction?
+    /// Folded to its title line, so the map has the room. Kept between events and launches.
+    @AppStorage("conjunctions.detailCollapsed") private var collapsed = false
 
     var body: some View {
         let c = model.conjunctions, units = model.units
         VStack(alignment: .leading, spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
-                    Spacer()
-                    Text(event.closest, format: .dateTime.month().day().hour().minute().second())
-                        .font(.headline.monospacedDigit())
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
-                    Text(event.closest, format: .dateTime.month().day().hour().minute().second())
-                        .font(.headline.monospacedDigit())
-                }
-            }
-            let facts = facts(c, units)
-            // Two facts a row where there's room, one under another in a narrow column.
-            ViewThatFits(in: .horizontal) {
-                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
-                    ForEach(0..<(facts.count + 1) / 2, id: \.self) { row in
-                        GridRow {
-                            fact(facts[2 * row])
-                            if 2 * row + 1 < facts.count { fact(facts[2 * row + 1]) }
-                        }
-                    }
-                }
-                .frame(minWidth: 380, alignment: .leading)
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(facts.indices, id: \.self) { fact(facts[$0]) }
-                }
-            }
-            if event.body == .sun {
-                Label("Only with a proper full-aperture solar filter on the scope and finder.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption.weight(.semibold)).foregroundStyle(Theme.scope)
-            }
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                title
                 Button {
-                    let item = MKMapItem(placemark: MKPlacemark(coordinate: event.closestPoint.coordinate))
-                    item.name = "\(EventList.short(event.satelliteName)) × \(event.body.name) \(event.closest.formatted(date: .omitted, time: .standard))"
-                    item.openInMaps()
-                } label: { Label("Open in Maps", systemImage: "map") }
-                Spacer()
-                if let watch {
-                    Button("Stop watching") { c.unwatch(watch.id) }
-                } else {
-                    Button { c.watch(event) } label: { Label("Watch", systemImage: "star") }
-                        .buttonStyle(.borderedProminent)
+                    withAnimation(.snappy) { collapsed.toggle() }
+                } label: {
+                    Image(systemName: collapsed ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                        .font(.title3).symbolRenderingMode(.hierarchical)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.borderless)
+                .help(collapsed ? "Show the details" : "Hide the details")
+                .accessibilityLabel(collapsed ? "Show details" : "Hide details")
             }
-            .controlSize(.small)
+            if !collapsed { details(c, units) }
         }
         .font(.callout)
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .frame(maxWidth: 560)
+    }
+
+    private var title: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
+                Spacer()
+                Text(event.closest, format: .dateTime.month().day().hour().minute().second())
+                    .font(.headline.monospacedDigit())
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(EventList.short(event.satelliteName)) × \(event.body.name)").font(.headline)
+                Text(event.closest, format: .dateTime.month().day().hour().minute().second())
+                    .font(.headline.monospacedDigit())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func details(_ c: ConjunctionsModel, _ units: Units) -> some View {
+        let facts = facts(c, units)
+        // Two facts a row where there's room, one under another in a narrow column.
+        ViewThatFits(in: .horizontal) {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+                ForEach(0..<(facts.count + 1) / 2, id: \.self) { row in
+                    GridRow {
+                        fact(facts[2 * row])
+                        if 2 * row + 1 < facts.count { fact(facts[2 * row + 1]) }
+                    }
+                }
+            }
+            .frame(minWidth: 380, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(facts.indices, id: \.self) { fact(facts[$0]) }
+            }
+        }
+        if event.body == .sun {
+            Label("Only with a proper full-aperture solar filter on the scope and finder.", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold)).foregroundStyle(Theme.scope)
+        }
+        HStack {
+            Button {
+                let item = MKMapItem(placemark: MKPlacemark(coordinate: event.closestPoint.coordinate))
+                item.name = "\(EventList.short(event.satelliteName)) × \(event.body.name) \(event.closest.formatted(date: .omitted, time: .standard))"
+                item.openInMaps()
+            } label: { Label("Open in Maps", systemImage: "map") }
+            Spacer()
+            if let watch {
+                Button("Stop watching") { c.unwatch(watch.id) }
+            } else {
+                Button { c.watch(event) } label: { Label("Watch", systemImage: "star") }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .controlSize(.small)
     }
 
     private func facts(_ c: ConjunctionsModel, _ units: Units) -> [(label: String, value: String)] {
