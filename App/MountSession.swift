@@ -895,6 +895,18 @@ final class MountSession {
                     try await goto(normal, to: ahead, from: here)
                     continue
                 }
+                if angularSeparation(here.unitVector, aim.unitVector) > Self.stepCatchUp {
+                    // Far off (just started, or another target before this one): one goto at full
+                    // speed, waited out. A step every second restarts the slew each time, so the
+                    // mount lurches all the way there.
+                    var ahead = aim
+                    for _ in 0..<3 {
+                        ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth))
+                    }
+                    status = "Slewing to \(object.name) at full speed…"
+                    try await goto(normal, to: ahead, from: here)
+                    continue
+                }
                 do {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
                     log("Step to " + describe(aim) + ", mount read " + describe(here))
@@ -910,6 +922,9 @@ final class MountSession {
             if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
         }
     }
+
+    /// Further than this from the target, degrees, Step mode slews there in one goto before stepping.
+    static let stepCatchUp = 3.0
 
     /// Set once per connection: gotos at the mount's maximum speed.
     private var maximumSpeedSet = false
