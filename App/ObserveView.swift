@@ -610,7 +610,10 @@ struct ObjectPositionRow: View {
         HStack(spacing: 10) {
             ObjectBadge(object: object)
             VStack(alignment: .leading, spacing: 1) {
-                Text(object.name).font(.body.weight(.medium)).lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(object.name).font(.body.weight(.medium)).lineLimit(1).layoutPriority(1)
+                    if case .satellite(let s) = object { SourceTag(noradID: s.noradID) }
+                }
                 Brightness(object: object, date: date)
             }
             Spacer()

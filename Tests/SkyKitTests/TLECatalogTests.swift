@@ -48,6 +48,9 @@ func tempDirectory() -> URL {
         #expect(entries["25544"]?.sourceIDs == ["a", "b"])
         // Day 265 element set beats day 264.
         #expect(entries["25544"]?.satellite.epoch == TLEParser.parse(issNewer)[0].epoch)
+        // Its elements come from b, which had the newer set; Hubble only from a.
+        #expect(entries["25544"]?.sourceID == "b")
+        #expect(entries["20580"]?.sourceID == "a")
         #expect(await catalog.satellites(in: "b").map(\.noradID) == ["25544"])
 
         // A fresh catalog on the same directory works offline from the cache.

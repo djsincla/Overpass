@@ -55,6 +55,8 @@ public enum TLECatalogError: Error, Equatable {
 public struct CatalogEntry: Sendable {
     public let satellite: SatelliteTarget
     public var sourceIDs: Set<String>
+    /// The source whose elements are in use: the newest of those that list it.
+    public var sourceID: String
 }
 
 /// Loads, caches and refreshes TLE databases, merging them by catalogue number.
@@ -205,9 +207,9 @@ public actor TLECatalog {
                 if var existing = merged[sat.noradID] {
                     existing.sourceIDs.insert(source.id)
                     merged[sat.noradID] = sat.epoch > existing.satellite.epoch
-                        ? CatalogEntry(satellite: sat, sourceIDs: existing.sourceIDs) : existing
+                        ? CatalogEntry(satellite: sat, sourceIDs: existing.sourceIDs, sourceID: source.id) : existing
                 } else {
-                    merged[sat.noradID] = CatalogEntry(satellite: sat, sourceIDs: [source.id])
+                    merged[sat.noradID] = CatalogEntry(satellite: sat, sourceIDs: [source.id], sourceID: source.id)
                 }
             }
         }
