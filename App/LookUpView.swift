@@ -16,20 +16,25 @@ struct LookUpView: View {
     @AppStorage("lookUp.camera") private var showsCamera = true
 
     var body: some View {
+        // The whole screen, under the notch and the tab bar, so the sky is drawn to the same size
+        // and centre as the camera picture. The card and buttons keep to the safe area.
         GeometryReader { proxy in
+            let size = proxy.size
+            let insets = proxy.safeAreaInsets
+            let camera = showsCamera && self.camera.isRunning
+            let shift = Self.horizonShift(size, cameraAspect: camera ? self.camera.aspect : nil)
             ZStack {
-                if showsCamera && camera.isRunning {
-                    SkyCameraPreview(session: camera.session).ignoresSafeArea()
+                if camera {
+                    SkyCameraPreview(session: self.camera.session, shift: shift)
                 } else {
-                    Theme.space.ignoresSafeArea()
+                    Theme.space
                 }
                 if let rotation = motion.rotation {
-                    let size = proxy.size
                     let sky = PhoneSkyProjection(rotation: rotation,
                                                  focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height),
-                                                                                 fieldOfView: camera.fieldOfView),
+                                                                                 fieldOfView: self.camera.fieldOfView),
                                                  width: size.width, height: size.height,
-                                                 orientation: Self.orientation)
+                                                 orientation: Self.orientation, verticalShift: shift)
                     let date = model.viewDate()
                     let pass = model.highlightedPass(at: date)
                     let live = model.liveObjects(at: date)
@@ -41,6 +46,7 @@ struct LookUpView: View {
                                      usesTrueNorth: motion.usesTrueNorth)
                     }
                     .padding()
+                    .padding(EdgeInsets(top: insets.top, leading: insets.leading, bottom: insets.bottom, trailing: insets.trailing))
                 } else {
                     VStack(spacing: 12) {
                         ProgressView()
@@ -52,9 +58,8 @@ struct LookUpView: View {
                     .padding()
                 }
             }
-            // The camera picture and the background run under the tab bar by themselves; the
-            // card stays above it. Ignoring the safe area here put the card behind the tab bar.
         }
+        .ignoresSafeArea()
         .onAppear {
             motion.start()
             if showsCamera { camera.start() }
@@ -85,6 +90,17 @@ struct LookUpView: View {
     }
 
     /// Which way the interface is turned, for which way is up on the screen.
+    /// In landscape, how far down to slide the picture and the sky, so the horizon sits about a
+    /// third of the way up with the phone held level rather than halfway: a sixth of the height,
+    /// or as much as the camera picture has cropped off below (it fills the screen's width).
+    static func horizonShift(_ size: CGSize, cameraAspect: Double?) -> Double {
+        guard size.width > size.height else { return 0 }
+        let wanted = size.height / 6
+        guard let cameraAspect else { return wanted }
+        let spare = (size.width / cameraAspect - size.height) / 2
+        return max(0, min(wanted, spare))
+    }
+
     private static var orientation: PhoneSkyProjection.Orientation {
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         return switch scene?.effectiveGeometry.interfaceOrientation {
@@ -247,7 +263,7 @@ private struct LookUpOverlay: View {
             return
         }
         let angle = sky.turn(towards: goal.position)
-        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+        let centre = CGPoint(x: sky.opticalCentre.x, y: sky.opticalCentre.y)
         // As far towards the edge as fits, along the direction to turn.
         let reach = min(size.width, size.height) / 2 - 50
         let tip = CGPoint(x: centre.x + cos(angle) * reach, y: centre.y - sin(angle) * reach)
@@ -261,7 +277,7 @@ private struct LookUpOverlay: View {
     }
 
     private func drawReticle(_ context: inout GraphicsContext, _ size: CGSize) {
-        let c = CGPoint(x: size.width / 2, y: size.height / 2)
+        let c = CGPoint(x: sky.opticalCentre.x, y: sky.opticalCentre.y)
         var cross = Path()
         for (dx, dy) in [(1.0, 0.0), (-1, 0), (0, 1), (0, -1)] {
             cross.move(to: CGPoint(x: c.x + dx * 6, y: c.y + dy * 6))
@@ -405,6 +421,8 @@ final class SkyCamera {
     private(set) var isRunning = false
     /// Across the picture's long side, degrees. A typical wide camera until the real one is known.
     private(set) var fieldOfView = 65.0
+    /// The picture's long side over its short side.
+    private(set) var aspect = 4.0 / 3
     @ObservationIgnored private var configured = false
 
     func start() {
@@ -414,10 +432,14 @@ final class SkyCamera {
                 guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                       let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) else { return }
                 session.beginConfiguration()
-                session.sessionPreset = .high
+                // The whole 4:3 sensor: more sky above and below than 16:9, and room to slide the
+                // picture down in landscape.
+                session.sessionPreset = session.canSetSessionPreset(.photo) ? .photo : .high
                 session.addInput(input)
                 session.commitConfiguration()
                 fieldOfView = Double(device.activeFormat.videoFieldOfView)
+                let d = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+                if d.width > 0, d.height > 0 { aspect = Double(max(d.width, d.height)) / Double(min(d.width, d.height)) }
                 configured = true
             }
             // AVCaptureSession isn't Sendable, but starting and stopping it off the main thread is
@@ -438,13 +460,29 @@ final class SkyCamera {
 /// The camera picture, filling the screen.
 private struct SkyCameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    /// How far down the picture's centre sits, in points.
+    var shift = 0.0
 
     final class PreviewView: UIView {
-        override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-        var preview: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        let preview = AVCaptureVideoPreviewLayer()
+        var shift = 0.0 { didSet { if shift != oldValue { setNeedsLayout() } } }
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            layer.addSublayer(preview)
+            clipsToBounds = true
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            // Taller than the view by twice the shift and starting at its top, so its middle sits
+            // `shift` below the view's. The picture fills the width either way, so it keeps its scale.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            preview.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height + 2 * shift)
+            CATransaction.commit()
             // Keep the picture upright as the interface turns.
             guard let connection = preview.connection, let scene = window?.windowScene else { return }
             let angle: CGFloat = switch scene.effectiveGeometry.interfaceOrientation {
@@ -464,6 +502,6 @@ private struct SkyCameraPreview: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: PreviewView, context: Context) {}
+    func updateUIView(_ view: PreviewView, context: Context) { view.shift = shift }
 }
 #endif
