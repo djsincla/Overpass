@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.4.1 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.4.2 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -94,6 +94,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.4.2**, 28 October 2026. Look Up on iPhone: the satellite card sits above the tab bar and folds to one line, and in landscape the horizon sits a third of the way up with the phone held level. The sky is drawn over the whole screen, matching the camera picture, which now uses the whole 4:3 sensor.
 
 **0.4.1**, 28 October 2026. Two quick presses of Track could leave a tracking loop running that Stop couldn't reach; a start now gives way to any start or Stop that comes in while it waits on the mount. When the mount and Overpass disagree about where the scope points, Overpass asks which is right, or takes a position typed in, rather than choosing one. Set position works in Normal mode, and a Normal-mode sync waits for the mount to show the new position before checking it.
 
