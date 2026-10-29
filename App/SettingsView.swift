@@ -251,14 +251,15 @@ struct SettingsView: View {
                 }
             }
             HStack {
-                Text("Set position")
+                Text("Set position").fixedSize()
                 Spacer()
+                // In a form, a field's title shows as a label beside it, which wrapped in 80 points.
                 TextField("Azimuth", value: $setAzimuth, format: .number.precision(.fractionLength(0...3)))
-                    .frame(width: 80).multilineTextAlignment(.trailing)
-                Text("az")
+                    .labelsHidden().frame(width: 80).multilineTextAlignment(.trailing)
+                Text("az").fixedSize()
                 TextField("Altitude", value: $setAltitude, format: .number.precision(.fractionLength(0...3)))
-                    .frame(width: 80).multilineTextAlignment(.trailing)
-                Text("alt")
+                    .labelsHidden().frame(width: 80).multilineTextAlignment(.trailing)
+                Text("alt").fixedSize()
                 Button("Set") {
                     busy = true
                     Task {
