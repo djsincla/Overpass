@@ -15,51 +15,52 @@ struct LookUpView: View {
     @State private var camera = SkyCamera()
     @AppStorage("lookUp.camera") private var showsCamera = true
 
+    /// The whole screen's size, from the layer that ignores the safe area.
+    @State private var screen = CGSize.zero
+
     var body: some View {
-        // The whole screen, under the notch and the tab bar, so the sky is drawn to the same size
-        // and centre as the camera picture. The card and buttons keep to the safe area.
-        GeometryReader { proxy in
-            let size = proxy.size
-            let insets = proxy.safeAreaInsets
-            let camera = showsCamera && self.camera.isRunning
-            let shift = Self.horizonShift(size, cameraAspect: camera ? self.camera.aspect : nil)
-            ZStack {
-                if camera {
-                    SkyCameraPreview(session: self.camera.session, shift: shift)
-                } else {
-                    Theme.space
-                }
-                if let rotation = motion.rotation {
-                    let sky = PhoneSkyProjection(rotation: rotation,
-                                                 focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height),
-                                                                                 fieldOfView: self.camera.fieldOfView),
-                                                 width: size.width, height: size.height,
-                                                 orientation: Self.orientation, verticalShift: shift)
-                    let date = model.viewDate()
-                    let pass = model.highlightedPass(at: date)
-                    let live = model.liveObjects(at: date)
-                    LookUpOverlay(sky: sky, date: date, pass: pass, observer: model.settings.observer, live: live)
-                    VStack {
-                        topBar
-                        Spacer()
-                        LookUpStatus(sky: sky, date: date, pass: pass, live: live,
-                                     usesTrueNorth: motion.usesTrueNorth)
+        let date = model.viewDate()
+        let pass = model.highlightedPass(at: date)
+        let live = model.liveObjects(at: date)
+        ZStack {
+            // The whole screen, under the notch and the tab bar, so the sky is drawn to the same
+            // size and centre as the camera picture.
+            GeometryReader { proxy in
+                ZStack {
+                    if cameraShown {
+                        SkyCameraPreview(session: camera.session, shift: shift(proxy.size))
+                    } else {
+                        Theme.space
                     }
-                    .padding()
-                    .padding(EdgeInsets(top: insets.top, leading: insets.leading, bottom: insets.bottom, trailing: insets.trailing))
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text(motion.unavailable ? "This device has no motion sensors to tell where it's pointing."
-                                                : "Finding which way the phone points…")
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
+                    if let sky = projection(proxy.size) {
+                        LookUpOverlay(sky: sky, date: date, pass: pass, observer: model.settings.observer, live: live)
                     }
-                    .padding()
                 }
             }
+            .ignoresSafeArea()
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
+
+            // The card and buttons in their own layer, which keeps to the safe area: padding the
+            // full-screen layer by its insets didn't work, as a view ignoring the safe area reads
+            // them as zero, and the card went under the tab bar.
+            if let sky = projection(screen) {
+                VStack {
+                    topBar
+                    Spacer()
+                    LookUpStatus(sky: sky, date: date, pass: pass, live: live, usesTrueNorth: motion.usesTrueNorth)
+                }
+                .padding()
+            } else if motion.rotation == nil {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text(motion.unavailable ? "This device has no motion sensors to tell where it's pointing."
+                                            : "Finding which way the phone points…")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                }
+                .padding()
+            }
         }
-        .ignoresSafeArea()
         .onAppear {
             motion.start()
             if showsCamera { camera.start() }
@@ -90,6 +91,18 @@ struct LookUpView: View {
     }
 
     /// Which way the interface is turned, for which way is up on the screen.
+    private var cameraShown: Bool { showsCamera && camera.isRunning }
+
+    private func shift(_ size: CGSize) -> Double { Self.horizonShift(size, cameraAspect: cameraShown ? camera.aspect : nil) }
+
+    /// Where the sky lands on a screen this size, once the phone's attitude is known.
+    private func projection(_ size: CGSize) -> PhoneSkyProjection? {
+        guard let rotation = motion.rotation, size.width > 0, size.height > 0 else { return nil }
+        return PhoneSkyProjection(rotation: rotation,
+                                  focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height), fieldOfView: camera.fieldOfView),
+                                  width: size.width, height: size.height, orientation: Self.orientation, verticalShift: shift(size))
+    }
+
     /// In landscape, how far down to slide the picture and the sky, so the horizon sits about a
     /// third of the way up with the phone held level rather than halfway: a sixth of the height,
     /// or as much as the camera picture has cropped off below (it fills the screen's width).
