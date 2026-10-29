@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.4.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.4.1 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -94,6 +94,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.4.1**, 28 October 2026. Two quick presses of Track could leave a tracking loop running that Stop couldn't reach; a start now gives way to any start or Stop that comes in while it waits on the mount. When the mount and Overpass disagree about where the scope points, Overpass asks which is right, or takes a position typed in, rather than choosing one. Set position works in Normal mode, and a Normal-mode sync waits for the mount to show the new position before checking it.
 
 **0.4.0**, 28 October 2026. Camera tracking on the ground, for boats, birds, cars and people, matched by their look against any background and calibrated in daylight on a mast or building. Step mode slews to a far target in one goto before it starts stepping, and Normal-mode gotos read the position on the way so the scope marker moves with the mount. Clicking a satellite on the globe or map offers the tracking target and its track, asking before it stops another target. The sky view shows a satellite only while it is on a pass the list shows, and the path drawn is always the chosen satellite's.
 
