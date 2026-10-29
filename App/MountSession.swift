@@ -553,7 +553,19 @@ final class MountSession {
 
     /// Stops everything: tracking, slews and jogs. Past north (Special mode), the mount then
     /// unwinds, unless `unwinding` is false or it was unwinding already (Stop stops that too).
+    /// Counts requests to start or stop moving the mount. A start waits for the mount while it
+    /// stops what was running; if another start or a Stop came in meanwhile, it gives up rather
+    /// than run alongside. Two starts two seconds apart (28 Oct 2026) both ran: the second found
+    /// nothing to stop, the first was left with nothing holding it, and Stop couldn't reach it.
+    private var motionRequests = 0
+
     func stopAll(unwinding: Bool = true, keepsTracking: Bool = true) async {
+        await stopAll(unwinding: unwinding, keepsTracking: keepsTracking, request: nil)
+    }
+
+    /// `request` is the start this is part of, which mustn't cancel itself; nil for a Stop.
+    private func stopAll(unwinding: Bool, keepsTracking: Bool, request: Int?) async {
+        if request == nil { motionRequests += 1 }
         // The mount's own sidereal, lunar or solar tracking carries on through Stop. The HAZ46
         // halts it along with the slew, so it's turned back on at the same rate afterwards. Only
         // when it could be tracking by itself (Passive, or nothing running): Step's gotos and a
@@ -640,7 +652,16 @@ final class MountSession {
             status = "Wait for the mode switch to finish"
             return
         }
-        await stopAll(unwinding: false, keepsTracking: false)
+        motionRequests += 1
+        let request = motionRequests
+        await stopAll(unwinding: false, keepsTracking: false, request: request)
+        guard request == motionRequests else {
+            log("Tracking \(name) not started: another start or a Stop came first")
+            return
+        }
+        // Nothing may be left running with no handle on it.
+        trackingTask?.cancel()
+        prepareTask?.cancel()
         trackingName = name
         trackingObject = object
         trackingMode = mode
@@ -683,13 +704,18 @@ final class MountSession {
 
     /// Moves the mount to where the pass will first reach the start elevation, and holds there.
     func moveToStart(of pass: SatellitePass) async {
-        await stopAll(unwinding: false, keepsTracking: false)
+        motionRequests += 1
+        let request = motionRequests
+        await stopAll(unwinding: false, keepsTracking: false, request: request)
+        guard request == motionRequests else { return }
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
             return
         }
         status = "Moving to start point"
         log("Move to start of \(pass.name): " + describe(point.position) + " at \(point.date.formatted(date: .omitted, time: .standard))")
+        trackingTask?.cancel()
+        prepareTask?.cancel()
         prepareTask = Task {
             do {
                 if let normal {
