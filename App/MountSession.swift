@@ -957,6 +957,97 @@ final class MountSession {
         return carryOn
     }
 
+    // MARK: When the mount and the record disagree
+
+    /// Where the scope points, when the mount's reading and Overpass's record disagree.
+    enum PositionChoice: Equatable {
+        case mount, record
+        case entered(Horizontal)
+    }
+
+    struct PositionQuestion: Equatable {
+        var mount: Horizontal
+        var record: Horizontal
+        var recordDate: Date
+    }
+
+    /// Waiting to be told where the scope points; answered with `answerPosition`.
+    private(set) var positionQuestion: PositionQuestion?
+    private var positionAnswer: PositionChoice?
+
+    func answerPosition(_ choice: PositionChoice) {
+        // The first answer counts: closing the sheet afterwards mustn't replace it.
+        if positionQuestion != nil, positionAnswer == nil { positionAnswer = choice }
+    }
+
+    /// The mount's reading if it agrees with Overpass's record (within 0.5°), or there's no
+    /// record; otherwise asks which is right. Each has been the wrong one: the record after the
+    /// hand controller moved the mount unseen (27 Oct 2026), the mount after leaving Special
+    /// mode, when it reported an old position (28 Oct 2026).
+    private func confirmPosition(_ reading: Horizontal) async -> Horizontal {
+        guard let known = knownPointing, angularSeparation(known.horizontal.unitVector, reading.unitVector) > 0.5 else { return reading }
+        log("The mount reads " + describe(reading) + ", Overpass's record is " + describe(known.horizontal) + "; asking which is right")
+        positionAnswer = nil
+        positionQuestion = PositionQuestion(mount: reading, record: known.horizontal, recordDate: known.date)
+        let before = status
+        status = "The mount and Overpass disagree about where the scope points: waiting for an answer"
+        defer { positionQuestion = nil }
+        while positionAnswer == nil, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(200)) }
+        status = before
+        switch positionAnswer ?? .mount {
+        case .mount:
+            log("Going by the mount's reading")
+            return reading
+        case .record:
+            log("Going by Overpass's record")
+            return known.horizontal
+        case .entered(let h):
+            log("Going by the position entered: " + describe(h))
+            return h
+        }
+    }
+
+    /// Normal mode: syncs the mount on `sky` and reads it back. Nil when it took; otherwise what went wrong.
+    private func syncNormal(_ normal: NormalModeClient, to sky: Horizontal) async -> String? {
+        do {
+            try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
+            let after = try await normal.altAz()
+            let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
+            let off = angularSeparation(reads.unitVector, sky.unitVector)
+            log("Normal-mode sync on " + describe(sky) + ": the mount now reads " + describe(reads))
+            guard off < 0.1 else { return String(format: "the mount now reads %@, %.2f° away", describe(reads), off) }
+            recordHeld = false
+            normalNeedsSync = false
+            remember(sky, now: true)
+            return nil
+        } catch {
+            return "the sync failed: \(describe(error))"
+        }
+    }
+
+    /// Special mode: sets the axes to read `pointing` and reads them back. Nil when it took.
+    private func syncSpecial(_ special: MountClient, to pointing: Horizontal) async -> String? {
+        let model = settings.alignment ?? .iOptronSpecialMode
+        let axes = model.axes(for: pointing)
+        do {
+            let before = try await special.positions()
+            try await special.sync(primary: axes.primary, secondary: axes.secondary)
+            let after = try await special.positions()
+            log(String(format: "Set position to %@: P0 %+.4f° P1 %+.4f° → sent %+.4f° %+.4f° → read %+.4f° %+.4f°",
+                       describe(pointing), before.primary, before.secondary, axes.primary, axes.secondary, after.primary, after.secondary))
+            guard abs(wrap180(after.primary - axes.primary)) < 0.05, abs(after.secondary - axes.secondary) < 0.05 else {
+                return String(format: "the mount didn't take the position as sent: sent P0 %+.3f° P1 %+.3f°, it now reads P0 %+.3f° P1 %+.3f° (it read %+.3f° %+.3f° before). Nothing else was changed; this is in the mount log",
+                              axes.primary, axes.secondary, after.primary, after.secondary, before.primary, before.secondary)
+            }
+            unwrapper = AxisUnwrapper(raw: after.primary, model: model, limits: settings.limits)
+            recordHeld = false
+            remember(pointing, now: true)
+            return nil
+        } catch {
+            return "couldn't set the position: \(describe(error))"
+        }
+    }
+
     /// The azimuth axis reading (sense × primary) the mount may cover in Special mode.
     private var cableRange: ClosedRange<Double> {
         let model = settings.alignment ?? AlignmentModel()
@@ -1680,12 +1771,16 @@ final class MountSession {
             // It may still be moving at the last speeds set, if Overpass quit or crashed mid-track.
             try? await client.stop()
             let identity = try await client.identify()
-            if let known = knownPointing, let raw = try? await client.positions() {
+            if knownPointing != nil, let raw = try? await client.positions() {
                 let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
-                let off = angularSeparation(here.unitVector, known.horizontal.unitVector)
-                status = off > 0.5
-                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; align, or check nothing moved it", off)
-                    : "Special mode: the axes agree with where Overpass last saw the scope"
+                let chosen = await confirmPosition(here)
+                if chosen == here {
+                    status = "Special mode: the axes agree with where Overpass last saw the scope"
+                } else if let problem = await syncSpecial(client, to: chosen) {
+                    status = "Couldn't set the position chosen: \(problem)."
+                } else {
+                    status = "Special mode: the axes now read " + describe(chosen)
+                }
             }
             return identity
         }
@@ -1696,20 +1791,21 @@ final class MountSession {
         if let reading { log(String(format: "Entering Special mode: :GAC# az %.3f° alt %.3f°", reading.azimuth, reading.altitude)) }
         let identity = try await client.enterSpecialMode()
         await holdStill(special: client)
-        // No sync: until the mount's sync commands are understood, only compare and report.
+        // No sync unless asked: when the axes and the record disagree, the user says which is right.
         if let raw = try? await client.positions() {
             let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
             log(String(format: "In Special mode: P0 %+.4f° P1 %+.4f° = ", raw.primary, raw.secondary) + describe(here)
                 + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
-            if let known = knownPointing {
-                let off = angularSeparation(here.unitVector, known.horizontal.unitVector)
-                status = off > 0.5
-                    ? String(format: "The mount's axes are %.1f° from where Overpass last saw the scope; going by the axes", off)
-                    : "Special mode: the axes agree with where Overpass last saw the scope"
+            let chosen = await confirmPosition(here)
+            if chosen == here {
+                if knownPointing != nil { status = "Special mode: the axes agree with where Overpass last saw the scope" }
+                recordHeld = false
+                remember(here, now: true)
+            } else if let problem = await syncSpecial(client, to: chosen) {
+                status = "Couldn't set the position chosen: \(problem)."
+            } else {
+                status = "Special mode: the axes now read " + describe(chosen)
             }
-            // The axes are the mount's own reading: they win over a record that may be stale.
-            recordHeld = false
-            remember(here, now: true)
         }
         return identity
     }
@@ -1776,33 +1872,18 @@ final class MountSession {
         // record could be stale (the hand controller, or a failed switch, moves the mount
         // unseen), and syncing on a stale record moved the alignment 35° (27 Oct 2026). Normal
         // mode still needs a sync before it tracks; on its own reading that changes nothing.
-        var name = "the scope's position"
-        var sky = position
-        if let known = knownPointing?.horizontal, angularSeparation(known.unitVector, position.unitVector) > 0.5 {
-            log("Overpass's record (" + describe(known) + ") differs from the mount's reading; the mount's reading is used")
-        }
+        var sky = await confirmPosition(position)
+        var name = sky == position ? "the scope's position" : "the position chosen"
         if let target = app?.targetObject, let h = try? settings.observer.look(at: target.target, AstroTime(.now)),
            angularSeparation(h.unitVector, sky.unitVector) < 0.5 {
             name = target.name
             sky = h
         }
-        do {
-            try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
-            let after = try await normal.altAz()
-            let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
-            let off = angularSeparation(reads.unitVector, sky.unitVector)
-            log("Sync after switching to Normal mode, on \(name): mount read " + describe(position) + ", sent " + describe(sky)
-                + ", now reads " + describe(reads))
-            if off < 0.1 {
-                recordHeld = false
-                normalNeedsSync = false
-                remember(sky, now: true)
-                status = "Normal mode, synced on \(name)"
-            } else {
-                status = String(format: "Normal mode: synced on %@, but the mount now reads %@, %.2f° away. In the mount log.", name, describe(reads), off)
-            }
-        } catch {
-            status = "Normal mode, but the sync failed: \(describe(error))"
+        log("Sync after switching to Normal mode, on \(name): mount read " + describe(position) + ", sending " + describe(sky))
+        if let problem = await syncNormal(normal, to: sky) {
+            status = "Normal mode, synced on \(name), but \(problem). In the mount log."
+        } else {
+            status = "Normal mode, synced on \(name)"
         }
     }
 
@@ -1894,28 +1975,19 @@ final class MountSession {
     /// Special mode: sets the axes so the scope reads `pointing` (`:S0`/`:S1`), then reads them
     /// back to check the mount took the values as positions. Returns a report.
     func setPosition(_ pointing: Horizontal) async -> String {
-        guard let special else { return "Connect over USB (Special mode) first." }
+        guard special != nil || normal != nil else { return "Connect the mount first." }
         await stopAll(keepsTracking: false)
-        let model = settings.alignment ?? .iOptronSpecialMode
-        let axes = model.axes(for: pointing)
-        do {
-            let before = try await special.positions()
-            try await special.sync(primary: axes.primary, secondary: axes.secondary)
-            let after = try await special.positions()
-            log(String(format: "Set position to %@: P0 %+.4f° P1 %+.4f° → sent %+.4f° %+.4f° → read %+.4f° %+.4f°",
-                       describe(pointing), before.primary, before.secondary, axes.primary, axes.secondary, after.primary, after.secondary))
-            guard abs(wrap180(after.primary - axes.primary)) < 0.05, abs(after.secondary - axes.secondary) < 0.05 else {
-                return String(format: "The mount didn't take the position as sent: sent P0 %+.3f° P1 %+.3f°, it now reads P0 %+.3f° P1 %+.3f° (it read %+.3f° %+.3f° before). Nothing else was changed; this is in the mount log.",
-                              axes.primary, axes.secondary, after.primary, after.secondary, before.primary, before.secondary)
-            }
-            unwrapper = AxisUnwrapper(raw: after.primary, model: model, limits: settings.limits)
-            recordHeld = false
-            remember(pointing, now: true)
+        if let special {
+            if let problem = await syncSpecial(special, to: pointing) { return problem.prefix(1).uppercased() + problem.dropFirst() + "." }
             _ = try? await readPosition()
             return "The axes now read " + describe(pointing) + "."
-        } catch {
-            return "Couldn't set the position: \(describe(error))"
         }
+        if let normal {
+            if let problem = await syncNormal(normal, to: pointing) { return "Couldn't set it: \(problem)." }
+            _ = try? await readPosition()
+            return "The mount now reads " + describe(pointing) + "."
+        }
+        return "Connect the mount first."
     }
 
     /// Switches Special → Normal → Special without moving or syncing anything, reading the
@@ -1971,11 +2043,12 @@ final class MountSession {
         guard let p = try? await client.altAz() else { return }
         let reading = Horizontal(azimuth: p.azimuth, altitude: p.altitude)
         log("Normal mode: :GAC# " + describe(reading) + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
-        guard let known = knownPointing else { return }
-        let off = angularSeparation(reading.unitVector, known.horizontal.unitVector)
-        if off > 0.5 {
-            status = String(format: "The mount reads %@, %.1f° from where Overpass last saw the scope (%@)",
-                            describe(reading), off, describe(known.horizontal))
+        let chosen = await confirmPosition(reading)
+        guard chosen != reading else { return }
+        if let problem = await syncNormal(client, to: chosen) {
+            status = "Couldn't set the position chosen: \(problem). In the mount log."
+        } else {
+            status = "The mount now reads " + describe(chosen)
         }
     }
 
