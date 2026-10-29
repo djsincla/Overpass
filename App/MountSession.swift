@@ -1011,10 +1011,20 @@ final class MountSession {
     private func syncNormal(_ normal: NormalModeClient, to sky: Horizontal) async -> String? {
         do {
             try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
-            let after = try await normal.altAz()
-            let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
-            let off = angularSeparation(reads.unitVector, sky.unitVector)
-            log("Normal-mode sync on " + describe(sky) + ": the mount now reads " + describe(reads))
+            // The HAZ46 takes the sync, but for a moment still reports the old position: read
+            // straight away, every sync looked as if it had failed, showing the one before it
+            // (28 Oct 2026). Read until it shows, for up to 3 s.
+            let sent = Date.now
+            var reads = Horizontal(azimuth: .nan, altitude: .nan)
+            var off = Double.infinity
+            repeat {
+                let after = try await normal.altAz()
+                reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
+                off = angularSeparation(reads.unitVector, sky.unitVector)
+                if off < 0.1 { break }
+                try await Task.sleep(for: .milliseconds(300))
+            } while Date.now.timeIntervalSince(sent) < 3
+            log(String(format: "Normal-mode sync on %@: after %.1f s the mount reads %@", describe(sky), Date.now.timeIntervalSince(sent), describe(reads)))
             guard off < 0.1 else { return String(format: "the mount now reads %@, %.2f° away", describe(reads), off) }
             recordHeld = false
             normalNeedsSync = false
@@ -1697,20 +1707,11 @@ final class MountSession {
                 await holdStill(normal: normal)
                 let before = try await normal.altAz()
                 let sky = try observer.look(at: object.target, AstroTime(.now))
-                try await normal.sync(altitude: sky.altitude, azimuth: sky.azimuth)
-                let after = try await normal.altAz()
-                let reads = Horizontal(azimuth: after.azimuth, altitude: after.altitude)
-                let off = angularSeparation(reads.unitVector, sky.unitVector)
-                log(String(format: "Sync on %@ (Normal mode): :GAC# az %.3f° alt %.3f° → sent ", object.name, before.azimuth, before.altitude)
-                    + describe(sky) + " → reads " + describe(reads))
-                if off < 0.1 {
-                    recordHeld = false
-                    normalNeedsSync = false
-                    remember(sky, now: true)
-                    status = "Synced on \(object.name)"
+                log(String(format: "Sync on %@ (Normal mode): :GAC# az %.3f° alt %.3f°", object.name, before.azimuth, before.altitude))
+                if let problem = await syncNormal(normal, to: sky) {
+                    status = "Synced on \(object.name), but \(problem). In the mount log."
                 } else {
-                    status = String(format: "Synced on %@, but the mount now reads %@, %.2f° from it. In the mount log.",
-                                    object.name, describe(reads), off)
+                    status = "Synced on \(object.name)"
                 }
                 _ = try? await currentAltAz(normal)
             }
