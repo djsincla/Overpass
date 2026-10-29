@@ -225,6 +225,8 @@ final class AppModel {
     private(set) var groups: [SourceGroup] = []
     private(set) var satellites: [SatelliteTarget] = []
     private var satelliteByID: [String: SatelliteTarget] = [:]
+    /// By NORAD id: the source whose elements are in use, and every enabled source listing it.
+    private var satelliteSources: [String: (used: String, all: Set<String>)] = [:]
     /// Launch, orbit, radar and physical size by catalogue number (CelesTrak SATCAT and GCAT).
     private(set) var satelliteInfo: [String: SatelliteInfo] = [:]
     private(set) var passes: [SatellitePass] = []
@@ -675,6 +677,7 @@ final class AppModel {
         sourceStatus = await catalog.status
         satellites = await catalog.satellites
         satelliteByID = Dictionary(satellites.map { ($0.noradID, $0) }, uniquingKeysWith: { a, _ in a })
+        satelliteSources = await catalog.entries.mapValues { ($0.sourceID, $0.sourceIDs) }
         var built: [SourceGroup] = []
         for source in sources {
             built.append(SourceGroup(source: source, status: sourceStatus[source.id],
@@ -684,6 +687,12 @@ final class AppModel {
     }
 
     // MARK: Prediction
+
+    /// Where a satellite's elements come from: the source in use, and the others that list it too.
+    func origin(of noradID: String) -> (name: String, others: [String])? {
+        guard let entry = satelliteSources[noradID], let used = sources.first(where: { $0.id == entry.used }) else { return nil }
+        return (used.name, sources.filter { $0.id != entry.used && entry.all.contains($0.id) }.map(\.name))
+    }
 
     /// Selected satellites: passes are only predicted for what the user picked.
     var predictionTargets: [SatelliteTarget] {

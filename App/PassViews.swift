@@ -45,7 +45,10 @@ struct PassRow: View {
         do {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(pass.name).font(.headline).lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(pass.name).font(.headline).lineLimit(1).layoutPriority(1)
+                        SourceTag(noradID: pass.noradID)
+                    }
                     Text("\(pass.start.date, format: .dateTime.weekday().hour().minute()) · \(Duration.seconds(pass.duration).formatted(.time(pattern: .minuteSecond))) · \(compass(pass.start.position.azimuth)) → \(compass(pass.end.position.azimuth))")
                         .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                     HStack(spacing: 5) {
@@ -81,6 +84,25 @@ struct PassRow: View {
             }
             .padding(.vertical, 3)
             .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// Where a satellite's elements come from, in small type after its name: "Amateur radio", with
+/// "+1" when another source lists it too. It gives way before the name does when space is short.
+struct SourceTag: View {
+    @Environment(AppModel.self) private var model
+    let noradID: String
+
+    var body: some View {
+        if let origin = model.origin(of: noradID) {
+            Text(origin.others.isEmpty ? origin.name : "\(origin.name) +\(origin.others.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(origin.others.isEmpty ? "Elements from \(origin.name)"
+                      : "Elements from \(origin.name), the newest; also in " + origin.others.joined(separator: ", "))
+                .accessibilityLabel("from \(origin.name)")
         }
     }
 }
