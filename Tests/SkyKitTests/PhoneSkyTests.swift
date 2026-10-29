@@ -27,6 +27,20 @@ private func rotation(aim: Horizontal) -> [[Double]] {
         #expect(abs(c.azimuth - 120) < 1e-9 && abs(c.altitude - 35) < 1e-9)
     }
 
+    /// Held level with the picture slid down a sixth of the screen, the horizon sits a third of the
+    /// way up, and everything else moves the same amount.
+    @Test func shiftedDownTheHorizonIsLower() throws {
+        let aim = Horizontal(azimuth: 200, altitude: 0)
+        var sky = projection(aim)
+        let before = try #require(sky.point(Horizontal(azimuth: 205, altitude: 12)))
+        sky.verticalShift = size.h / 6
+        let horizon = try #require(sky.point(aim))
+        #expect(abs(horizon.y - size.h * 2 / 3) < 1e-6 && abs(horizon.x - size.w / 2) < 1e-6)
+        #expect(sky.opticalCentre.y == horizon.y)
+        let after = try #require(sky.point(Horizontal(azimuth: 205, altitude: 12)))
+        #expect(abs(after.y - before.y - size.h / 6) < 1e-6 && abs(after.x - before.x) < 1e-6)
+    }
+
     @Test func eastIsRightAndHigherIsUp() throws {
         let sky = projection(Horizontal(azimuth: 0, altitude: 0))
         let right = try #require(sky.point(Horizontal(azimuth: 10, altitude: 0)))

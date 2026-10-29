@@ -22,14 +22,20 @@ public struct PhoneSkyProjection: Sendable {
     public var width: Double
     public var height: Double
     public var orientation: Orientation
+    /// How far below the screen's middle the camera's centre is drawn, in points. In landscape the
+    /// picture is cropped top and bottom, so it can slide down to put the horizon lower; the sky
+    /// slides with it.
+    public var verticalShift = 0.0
 
-    public init(rotation: [[Double]], focal: Double, width: Double, height: Double, orientation: Orientation) {
+    public init(rotation: [[Double]], focal: Double, width: Double, height: Double, orientation: Orientation,
+                verticalShift: Double = 0) {
         precondition(rotation.count == 3 && rotation.allSatisfy { $0.count == 3 })
         self.rotation = rotation
         self.focal = focal
         self.width = width
         self.height = height
         self.orientation = orientation
+        self.verticalShift = verticalShift
     }
 
     /// The focal length for a camera whose field of view spans `degrees` across the screen's long side.
@@ -65,8 +71,11 @@ public struct PhoneSkyProjection: Sendable {
         guard d.z < -1e-6 else { return nil }
         let s = screenAxes(d)
         let t = focal / -d.z
-        return (width / 2 + s.right * t, height / 2 - s.up * t)
+        return (width / 2 + s.right * t, height / 2 + verticalShift - s.up * t)
     }
+
+    /// Where the camera's centre is on screen: where `centre` is drawn.
+    public var opticalCentre: (x: Double, y: Double) { (width / 2, height / 2 + verticalShift) }
 
     /// Whether a sky position is on screen, with `margin` points to spare.
     public func isOnScreen(_ h: Horizontal, margin: Double = 0) -> Bool {
