@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.4.2 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.4.3 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -94,6 +94,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.4.3**, 28 October 2026. On Observe and Look Up, each satellite's name is followed in small type by the TLE source its elements come from, such as Amateur radio, with a count when other sources list it too.
 
 **0.4.2**, 28 October 2026. Look Up on iPhone: the satellite card sits above the tab bar and folds to one line, and in landscape the horizon sits a third of the way up with the phone held level. The sky is drawn over the whole screen, matching the camera picture, which now uses the whole 4:3 sensor.
 
