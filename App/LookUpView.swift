@@ -52,7 +52,8 @@ struct LookUpView: View {
                     .padding()
                 }
             }
-            .ignoresSafeArea(edges: .bottom)
+            // The camera picture and the background run under the tab bar by themselves; the
+            // card stays above it. Ignoring the safe area here put the card behind the tab bar.
         }
         .onAppear {
             motion.start()
@@ -277,6 +278,7 @@ private struct LookUpStatus: View {
     let pass: SatellitePass?
     let live: [LiveObject]
     let usesTrueNorth: Bool
+    @AppStorage("lookUp.statusCollapsed") private var collapsed = false
 
     /// The satellite now if it's up, otherwise where it will rise.
     static func goal(pass: SatellitePass?, live: [LiveObject], date: Date) -> (position: Horizontal, up: Bool)? {
@@ -289,23 +291,22 @@ private struct LookUpStatus: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let pass {
-                Text(pass.name).font(.headline)
-                if pass.start.date > date {
-                    Text("Rises in \(countdown(pass.start.date.timeIntervalSince(date))) in the \(compass(pass.start.position.azimuth)) · peaks \(Int(pass.maxAltitude))°")
-                } else if let goal = Self.goal(pass: pass, live: live, date: date), goal.up {
-                    Text("Up now · \(Int(goal.position.altitude))° in the \(compass(goal.position.azimuth)) · sets \(pass.end.date, format: .dateTime.hour().minute())")
+            // Folded, one line: the satellite and where it is, by the chevron, as in Conjunctions.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(pass?.name ?? "No passes coming up").font(.headline).lineLimit(1)
+                if collapsed, let summary { Text(summary).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
+                Spacer(minLength: 4)
+                Button {
+                    withAnimation(.snappy) { collapsed.toggle() }
+                } label: {
+                    Image(systemName: collapsed ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                        .font(.title3).symbolRenderingMode(.hierarchical)
+                        .contentShape(Rectangle())
                 }
-                if let goal = Self.goal(pass: pass, live: live, date: date), !sky.isOnScreen(goal.position, margin: 30) {
-                    Text(turnText(to: goal.position)).foregroundStyle(Theme.target)
-                }
-            } else {
-                Text("No passes coming up. Select satellites in Objects.")
+                .buttonStyle(.borderless)
+                .accessibilityLabel(collapsed ? "Show details" : "Hide details")
             }
-            let c = sky.centre
-            Text(String(format: "Pointing az %.0f° alt %.0f°", c.azimuth, c.altitude) + (usesTrueNorth ? "" : " · magnetic north"))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.white.opacity(0.7))
+            if !collapsed { details }
         }
         .font(.subheadline)
         .foregroundStyle(.white)
@@ -313,6 +314,36 @@ private struct LookUpStatus: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
         .padding(.bottom, 8)
+    }
+
+    /// Up now, or when it rises: for the folded card.
+    private var summary: String? {
+        guard let pass else { return nil }
+        if pass.start.date > date { return "rises in \(countdown(pass.start.date.timeIntervalSince(date)))" }
+        if let goal = Self.goal(pass: pass, live: live, date: date), goal.up {
+            return "up \(Int(goal.position.altitude))° \(compass(goal.position.azimuth))"
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private var details: some View {
+        if let pass {
+            if pass.start.date > date {
+                Text("Rises in \(countdown(pass.start.date.timeIntervalSince(date))) in the \(compass(pass.start.position.azimuth)) · peaks \(Int(pass.maxAltitude))°")
+            } else if let goal = Self.goal(pass: pass, live: live, date: date), goal.up {
+                Text("Up now · \(Int(goal.position.altitude))° in the \(compass(goal.position.azimuth)) · sets \(pass.end.date, format: .dateTime.hour().minute())")
+            }
+            if let goal = Self.goal(pass: pass, live: live, date: date), !sky.isOnScreen(goal.position, margin: 30) {
+                Text(turnText(to: goal.position)).foregroundStyle(Theme.target)
+            }
+        } else {
+            Text("Select satellites in Objects.")
+        }
+        let c = sky.centre
+        Text(String(format: "Pointing az %.0f° alt %.0f°", c.azimuth, c.altitude) + (usesTrueNorth ? "" : " · magnetic north"))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.7))
     }
 
     /// "Turn right 40°, up 15°", from where the camera points.
