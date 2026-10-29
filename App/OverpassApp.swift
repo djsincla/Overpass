@@ -78,6 +78,12 @@ struct ContentView: View {
         } message: {
             Text(model.mount.unwindQuestion ?? "")
         }
+        .sheet(isPresented: Binding(get: { model.mount.positionQuestion != nil },
+                                    set: { if !$0 { model.mount.answerPosition(.mount) } })) {
+            if let question = model.mount.positionQuestion {
+                PositionQuestionView(question: question).environment(model)
+            }
+        }
         .modifier(Appearance(dark: model.settings.alwaysDark || model.settings.redMode))
         .modifier(NightVision(enabled: model.settings.redMode))
         .task {

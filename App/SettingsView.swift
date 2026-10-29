@@ -248,32 +248,32 @@ struct SettingsView: View {
                     if let modeTest {
                         Text(modeTest).font(.caption.monospacedDigit()).textSelection(.enabled)
                     }
-                    HStack {
-                        Text("Set position")
-                        Spacer()
-                        TextField("Azimuth", value: $setAzimuth, format: .number.precision(.fractionLength(0...3)))
-                            .frame(width: 80).multilineTextAlignment(.trailing)
-                        Text("az")
-                        TextField("Altitude", value: $setAltitude, format: .number.precision(.fractionLength(0...3)))
-                            .frame(width: 80).multilineTextAlignment(.trailing)
-                        Text("alt")
-                        Button("Set") {
-                            busy = true
-                            Task {
-                                positionResult = await model.mount.setPosition(Horizontal(azimuth: setAzimuth, altitude: setAltitude))
-                                busy = false
-                            }
-                        }
-                        .disabled(busy || !connected)
-                    }
-                    .help("Tells the mount where the scope actually points, in degrees, when you know it (a park position, or from a trace). Nothing moves.")
-                    .onAppear {
-                        if let known = model.mount.knownPointing { setAzimuth = known.azimuth; setAltitude = known.altitude }
-                    }
-                    if let positionResult {
-                        Text(positionResult).font(.caption).textSelection(.enabled)
+                }
+            }
+            HStack {
+                Text("Set position")
+                Spacer()
+                TextField("Azimuth", value: $setAzimuth, format: .number.precision(.fractionLength(0...3)))
+                    .frame(width: 80).multilineTextAlignment(.trailing)
+                Text("az")
+                TextField("Altitude", value: $setAltitude, format: .number.precision(.fractionLength(0...3)))
+                    .frame(width: 80).multilineTextAlignment(.trailing)
+                Text("alt")
+                Button("Set") {
+                    busy = true
+                    Task {
+                        positionResult = await model.mount.setPosition(Horizontal(azimuth: setAzimuth, altitude: setAltitude))
+                        busy = false
                     }
                 }
+                .disabled(busy || model.mount.state != .connected)
+            }
+            .help("Tells the mount where the scope actually points, in degrees, when you know it: a park position, or the altitude read off the tube and the azimuth from a compass. In Normal mode it syncs the mount; in Special mode it sets the axes. Nothing moves.")
+            .onAppear {
+                if let known = model.mount.knownPointing { setAzimuth = known.azimuth; setAltitude = known.altitude }
+            }
+            if let positionResult {
+                Text(positionResult).font(.caption).textSelection(.enabled)
             }
         } header: {
             Text("Mount connection")
