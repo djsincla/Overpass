@@ -251,14 +251,15 @@ struct SettingsView: View {
                 }
             }
             HStack {
-                Text("Set position")
+                Text("Set position").fixedSize()
                 Spacer()
+                // In a form, a field's title shows as a label beside it, which wrapped in 80 points.
                 TextField("Azimuth", value: $setAzimuth, format: .number.precision(.fractionLength(0...3)))
-                    .frame(width: 80).multilineTextAlignment(.trailing)
-                Text("az")
+                    .labelsHidden().frame(width: 80).multilineTextAlignment(.trailing)
+                Text("az").fixedSize()
                 TextField("Altitude", value: $setAltitude, format: .number.precision(.fractionLength(0...3)))
-                    .frame(width: 80).multilineTextAlignment(.trailing)
-                Text("alt")
+                    .labelsHidden().frame(width: 80).multilineTextAlignment(.trailing)
+                Text("alt").fixedSize()
                 Button("Set") {
                     busy = true
                     Task {
@@ -270,7 +271,8 @@ struct SettingsView: View {
             }
             .help("Tells the mount where the scope actually points, in degrees, when you know it: a park position, or the altitude read off the tube and the azimuth from a compass. In Normal mode it syncs the mount; in Special mode it sets the axes. Nothing moves.")
             .onAppear {
-                if let known = model.mount.knownPointing { setAzimuth = known.azimuth; setAltitude = known.altitude }
+                // Adding 0 turns the mount's -0.000 into 0, which the field showed as "-0".
+                if let known = model.mount.knownPointing { setAzimuth = known.azimuth + 0; setAltitude = known.altitude + 0 }
             }
             if let positionResult {
                 Text(positionResult).font(.caption).textSelection(.enabled)
