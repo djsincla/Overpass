@@ -322,7 +322,8 @@ private struct LookUpStatus: View {
         VStack(alignment: .leading, spacing: 4) {
             // Folded, one line: the satellite and where it is, by the chevron, as in Conjunctions.
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(pass?.name ?? "No passes coming up").font(.headline).lineLimit(1)
+                Text(pass?.name ?? "No passes coming up").font(.headline).lineLimit(1).layoutPriority(1)
+                if let pass { SourceTag(noradID: pass.noradID, onDark: true) }
                 if collapsed, let summary { Text(summary).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
                 Spacer(minLength: 4)
                 Button {

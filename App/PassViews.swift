@@ -93,12 +93,14 @@ struct PassRow: View {
 struct SourceTag: View {
     @Environment(AppModel.self) private var model
     let noradID: String
+    /// On Look Up's dark card, over the camera picture.
+    var onDark = false
 
     var body: some View {
         if let origin = model.origin(of: noradID) {
             Text(origin.others.isEmpty ? origin.name : "\(origin.name) +\(origin.others.count)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(onDark ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .help(origin.others.isEmpty ? "Elements from \(origin.name)"
                       : "Elements from \(origin.name), the newest; also in " + origin.others.joined(separator: ", "))
