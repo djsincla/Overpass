@@ -38,6 +38,14 @@ struct SkyDome: View {
     @State private var twistStart: Double?
 
     var body: some View {
+        // The buttons get their own strip above the sky, so they never cover the horizon or labels.
+        VStack(spacing: 2) {
+            controls.frame(maxWidth: .infinity, alignment: .trailing)
+            sky
+        }
+    }
+
+    private var sky: some View {
         GeometryReader { proxy in
             let geometry = DomeGeometry(size: proxy.size, rotation: rotation, flipped: flipped)
             Canvas { context, _ in
@@ -65,7 +73,6 @@ struct SkyDome: View {
             })
             .simultaneousGesture(spin(geometry))
             .simultaneousGesture(twist)
-            .overlay(alignment: .topTrailing) { controls }
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location):
@@ -151,7 +158,7 @@ struct SkyDome: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .padding(8)
+        .padding(.horizontal, 8)
     }
 
     private func compassName(_ azimuth: Double) -> String {
