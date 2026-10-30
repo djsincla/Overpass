@@ -174,7 +174,7 @@ final class MountSession {
     // MARK: Connection
 
     func connect() async {
-        await disconnect()
+        await disconnect(releasingTarget: false)
         let s = settings
         state = .connecting
         status = ""
@@ -254,8 +254,11 @@ final class MountSession {
         }
     }
 
-    func disconnect() async {
+    /// Also lets go of the tracking target, so nothing is left armed for the next connection;
+    /// except when reconnecting, which keeps what was chosen beforehand.
+    func disconnect(releasingTarget: Bool = true) async {
         await stopAll()
+        if releasingTarget { app?.clearTarget() }
         pollTask?.cancel()
         pollTask = nil
         // Always back to Normal mode: Special mode survives power cycles, and left on it would
@@ -343,6 +346,8 @@ final class MountSession {
                         if failures >= 3 {
                             status = describe(error)
                             state = .failed("Lost contact with the mount: \(describe(error))")
+                            log("Lost contact with the mount: \(describe(error))")
+                            app?.clearTarget()
                             return
                         }
                     }
@@ -672,12 +677,14 @@ final class MountSession {
         let label = mode.map { "\(name) (\($0))" } ?? name
         log("Tracking \(label) started" + (skyPosition.map { " at " + describe($0) } ?? ""))
         trackingTask = Task {
+            var lostContact = false
             do {
                 try await run()
             } catch is CancellationError {
             } catch {
+                lostContact = error is TransportError
                 status = describe(error)
-                log("Tracking \(label) stopped: \(describe(error))")
+                log("Tracking \(label) stopped: \(describe(error))" + (lostContact ? " Letting go of the target." : ""))
                 try? await normal?.stop()
                 try? await special?.stop()
             }
@@ -687,8 +694,9 @@ final class MountSession {
                 trackingObject = nil
                 trackingMode = nil
                 tracksCamera = false
+                if lostContact { app?.clearTarget() }
                 // Ended by itself (pass over, or stopped at the overtravel limit): unwind.
-                if pastNorth != nil { unwind() }
+                else if pastNorth != nil { unwind() }
             }
         }
     }
@@ -729,9 +737,13 @@ final class MountSession {
             } catch is CancellationError {
             } catch {
                 status = describe(error)
-                log("Move to start stopped: \(describe(error))")
+                log("Move to start stopped: \(describe(error))" + (error is TransportError ? " Letting go of the target." : ""))
                 try? await normal?.stop()
                 try? await special?.stop()
+                if error is TransportError, !Task.isCancelled {
+                    prepareTask = nil
+                    app?.clearTarget()
+                }
             }
             if !Task.isCancelled { prepareTask = nil }
         }
