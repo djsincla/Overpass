@@ -75,29 +75,52 @@ struct PassCalculatorView: View {
                     ForEach(choices) { Text($0.name).tag($0.id) }
                 }
                 .labelsHidden()
-                .fixedSize()
-                Spacer()
+                .lineLimit(1)
+                Spacer(minLength: 0)
                 if computing { ProgressView().controlSize(.small) }
             }
-            HStack(spacing: 12) {
-                Picker("Days", selection: $days) {
-                    ForEach([1.0, 3, 7, 14], id: \.self) { Text($0 == 1 ? "1 day" : "\(Int($0)) days").tag($0) }
+            // One row where it fits; on an iPhone it wraps onto more lines rather than
+            // pushing the row past both edges of the screen.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { daysPicker; peakPicker; visibleToggle }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) { daysPicker; peakPicker }
+                    visibleToggle
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                Picker("Peaks at least", selection: $minimumPeak) {
-                    ForEach([0.0, 10, 20, 30, 45, 60], id: \.self) { Text("Peaks ≥ \(Int($0))°").tag($0) }
-                }
-                .fixedSize()
-                if object?.isSatellite == true {
-                    Toggle("Visible only", isOn: $visibleOnly).fixedSize()
+                VStack(alignment: .leading, spacing: 8) {
+                    daysPicker
+                    HStack(spacing: 12) { peakPicker; visibleToggle }
                 }
             }
             .font(.callout)
             Text(summary).font(.caption).foregroundStyle(.secondary)
         }
         .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var daysPicker: some View {
+        Picker("Days", selection: $days) {
+            ForEach([1.0, 3, 7, 14], id: \.self) { Text($0 == 1 ? "1 day" : "\(Int($0)) days").tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var peakPicker: some View {
+        Picker("Peaks at least", selection: $minimumPeak) {
+            ForEach([0.0, 10, 20, 30, 45, 60], id: \.self) { Text("Peaks ≥ \(Int($0))°").tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var visibleToggle: some View {
+        if object?.isSatellite == true {
+            Toggle("Visible only", isOn: $visibleOnly).fixedSize()
+        }
     }
 
     private var summary: String {
