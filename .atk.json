@@ -1,4 +1,5 @@
 {
-  "bundleID" : "com.dwaynesinclair.overpass",
-  "group" : "Field testers"
+  "bundleID": "com.dwaynesinclair.overpass",
+  "generate": "xcodegen -q",
+  "group": "Field testers"
 }
