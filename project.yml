@@ -31,7 +31,12 @@ targets:
   Overpass:
     type: application
     supportedDestinations: [iOS, macOS]
-    sources: [App]
+    sources:
+      - App
+      # Gives the app a page in the iPad's Settings, where the driver's switch appears. Without
+      # one, iPadOS sometimes leaves the switch out.
+      - path: iOS/Settings.bundle
+        destinationFilters: [iOS]
     dependencies:
       - package: OverpassKit
         product: SkyKit
@@ -39,6 +44,10 @@ targets:
         product: IOptronKit
       - package: OverpassKit
         product: UVCControl
+      # The iPad's driver for the mount's USB cable. iPadOS only.
+      - target: OverpassSerial
+        embed: true
+        platformFilters: [iOS]
     entitlements:
       path: App/Overpass.entitlements
       properties:
@@ -70,7 +79,7 @@ targets:
         NSCameraUsageDescription: >-
           Overpass uses a camera on your telescope to keep the target centred while tracking.
         NSLocalNetworkUsageDescription: >-
-          Overpass connects to your mount, or to a relay plugged into it, on your local network.
+          Overpass connects to your mount over its WiFi network.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
@@ -84,7 +93,31 @@ targets:
         "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]": com.dwaynesinclair.overpass
         "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphonesimulator*]": com.dwaynesinclair.overpass
         PRODUCT_NAME: Overpass
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": App/Overpass-iOS.entitlements
         # Notarisation needs the hardened runtime for Developer ID builds.
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
+
+  # Runs the mount's Prolific USB adapter on an iPad (M1 or later), which has no serial ports.
+  OverpassSerial:
+    type: driver-extension
+    platform: auto
+    sources:
+      - path: Driver
+        excludes: [Info.plist, "*.entitlements"]
+      - path: Sources/DriverLink/include/DriverLink.h
+        buildPhase: none
+    dependencies:
+      - sdk: DriverKit.framework
+      - sdk: USBDriverKit.framework
+    settings:
+      base:
+        SDKROOT: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "23.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwaynesinclair.overpass.serial
+        PRODUCT_NAME: OverpassSerial
+        INFOPLIST_FILE: Driver/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Driver/OverpassSerial.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: NO

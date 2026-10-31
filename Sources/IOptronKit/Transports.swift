@@ -7,8 +7,7 @@ public enum TransportError: Error, Equatable {
     case cannotOpen(String)
 }
 
-/// TCP to a serial relay on the mount's USB port, e.g. a Raspberry Pi running ser2net.
-/// Special Mode only works over USB, so this is how iPhone and iPad reach the mount.
+/// TCP to the mount's own WiFi.
 public actor TCPTransport: MountTransport {
     private let connection: NWConnection
     private var buffer = Data()
@@ -205,6 +204,85 @@ public final class SerialTransport: MountTransport, @unchecked Sendable {
             let n = Darwin.read(fd, &chunk, chunk.count)
             if n < 0 { throw TransportError.closed }
             buffer.append(contentsOf: chunk[0..<n])
+        }
+    }
+
+    private func perform<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Result { try body() }) }
+        }
+    }
+}
+#endif
+
+#if os(iOS)
+import DriverLink
+
+/// The mount's USB adapter plugged straight into an iPad, through Overpass's own driver
+/// (Driver/OverpassSerial), which sets the line to 115200 8N1.
+public final class DriverTransport: MountTransport, @unchecked Sendable {
+    private let link: OpaquePointer
+    /// All I/O happens here, so polling never ties up Swift's cooperative threads.
+    private let queue = DispatchQueue(label: "overpass.driver")
+    private var buffer = Data()
+
+    /// Whether the adapter is plugged in with the driver switched on (Settings › Overpass).
+    public static var isAvailable: Bool { driverlink_available() != 0 }
+
+    /// The USB devices the iPad sees and what claimed them, for when the cable isn't found.
+    public static func describeUSB() -> String {
+        var text = [CChar](repeating: 0, count: 8192)
+        driverlink_describe_usb(&text, UInt32(text.count))
+        return String(cString: text)
+    }
+
+    public init() throws {
+        guard let link = driverlink_open() else {
+            throw TransportError.cannotOpen("No USB adapter. Plug in the mount's cable and switch on the driver in Settings › Overpass.")
+        }
+        self.link = link
+        _ = driverlink_discard(link)
+    }
+
+    deinit { driverlink_close(link) }
+
+    public func write(_ text: String) async throws {
+        try await perform {
+            _ = driverlink_discard(self.link)
+            self.buffer.removeAll()
+            var bytes = Array(text.utf8)
+            guard driverlink_send(self.link, &bytes, UInt32(bytes.count)) == 0 else { throw TransportError.closed }
+        }
+    }
+
+    public func read(count: Int) async throws -> String {
+        try await perform {
+            try self.fill(deadline: Date() + 2) { $0.count >= count }
+            let out = self.buffer.prefix(count)
+            self.buffer.removeFirst(count)
+            return String(decoding: out, as: UTF8.self)
+        }
+    }
+
+    public func read(until terminator: Character) async throws -> String {
+        let byte = terminator.asciiValue!
+        return try await perform {
+            try self.fill(deadline: Date() + 2) { $0.contains(byte) }
+            let end = self.buffer.index(after: self.buffer.firstIndex(of: byte)!)
+            let out = self.buffer[self.buffer.startIndex..<end]
+            self.buffer.removeSubrange(self.buffer.startIndex..<end)
+            return String(decoding: out, as: UTF8.self)
+        }
+    }
+
+    /// Polls the driver's buffer every 2 ms; replies are a few bytes at 115200.
+    private func fill(deadline: Date, until done: (Data) -> Bool) throws {
+        var chunk = [UInt8](repeating: 0, count: Int(DriverLinkMaxReceive))
+        while !done(buffer) {
+            guard Date() < deadline else { throw TransportError.timedOut }
+            let n = driverlink_receive(link, &chunk, UInt32(chunk.count))
+            if n < 0 { throw TransportError.closed }
+            if n == 0 { usleep(2_000) } else { buffer.append(contentsOf: chunk[0..<Int(n)]) }
         }
     }
 

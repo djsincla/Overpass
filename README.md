@@ -36,7 +36,7 @@ For the longest time I have been running Heavenscape SkyTrack on a Windows lapto
 
 WiFi uses iOptron's normal command set on the mount's own network (10.10.100.254, port 8899 by default) and gives you Passive and Step tracking. USB in Normal mode does the same over the cable.
 
-USB uses iOptron's Special Mode, which only works over the USB port, and gives you Smooth tracking. On a Mac the HAZ46 cable appears as `/dev/cu.PL2303G-USBtoUART210` through Prolific's driver. An iPhone or iPad needs a relay on the mount's USB port, such as a Raspberry Pi Zero 2 W running `ser2net`, reached over TCP.
+USB uses iOptron's Special Mode, which only works over the USB port, and gives you Smooth tracking. On a Mac the HAZ46 cable appears as `/dev/cu.PL2303G-USBtoUART210` through Prolific's driver. An iPad with an M1 or later chip uses the same cable through Overpass's own driver for the PL2303G: switch it on in Settings › Overpass › Drivers. An iPhone can't load a USB driver, so it connects over WiFi only.
 
 Be aware that the mount stays in Special Mode across power cycles, and WiFi does not work while it is in it. Overpass puts it back in Normal mode whenever it disconnects, and when the Mac app quits.
 
@@ -64,7 +64,7 @@ Sun, Moon and planet positions follow Meeus's *Astronomical Algorithms* and are 
 
 ## Status
 
-Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position. Not yet tested on hardware: the iOS build, the USB relay, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, and the fix for the 5 second timing glitch, which I ran out of battery before trying.
+Tested on a HAZ46: the WiFi connection, Passive tracking of the Moon, Step tracking, USB Special Mode, Smooth tracking at about 2″, the north stop in both hemispheres and reading the mount's GPS position. Not yet tested on hardware: the iOS build, the iPad USB driver, camera guiding, the stop and unwind at north during a real pass, tracking past north over USB, and the fix for the 5 second timing glitch, which I ran out of battery before trying.
 
 ## Installing
 
