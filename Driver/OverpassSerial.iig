@@ -1,0 +1,33 @@
+#ifndef OverpassSerial_h
+#define OverpassSerial_h
+
+#include <Availability.h>
+#include <DriverKit/IOService.iig>
+#include <USBDriverKit/IOUSBHostDevice.iig>
+#include <USBDriverKit/IOUSBHostInterface.iig>
+#include <USBDriverKit/IOUSBHostPipe.iig>
+
+/// The mount's Prolific PL2303G USB serial adapter, for the iPad, which has no serial ports.
+/// It sets the line to 115200 8N1 and keeps a bulk read going into a ring buffer that the app
+/// drains through OverpassSerialUserClient.
+class OverpassSerial: public IOService
+{
+public:
+    virtual bool init() override;
+    virtual void free() override;
+    virtual kern_return_t Start(IOService * provider) override;
+    virtual kern_return_t Stop(IOService * provider) override;
+    virtual kern_return_t NewUserClient(uint32_t type, IOUserClient ** userClient) override;
+
+    /// Sends bytes to the mount.
+    virtual kern_return_t Send(const uint8_t * bytes, uint32_t length) LOCALONLY;
+    /// Moves up to `capacity` received bytes into `bytes` and returns how many.
+    virtual uint32_t Receive(uint8_t * bytes, uint32_t capacity) LOCALONLY;
+    /// Drops anything received and not yet read.
+    virtual void Discard() LOCALONLY;
+
+    virtual void ReadComplete(OSAction * action, IOReturn status, uint32_t actualByteCount,
+                              uint64_t completionTimestamp) TYPE(IOUSBHostPipe::CompleteAsyncIO);
+};
+
+#endif

@@ -2,15 +2,33 @@ import CoreLocation
 import Foundation
 import Observation
 import SkyKit
+#if os(iOS)
+import UIKit
+#endif
 
 enum ConnectionKind: String, Codable, CaseIterable, Identifiable {
     /// The mount's own WiFi: the normal command set. Passive and Step tracking.
     case wifi = "WiFi (Normal mode)"
     /// The mount's USB port with the normal command set: Passive and Step tracking, as over WiFi.
     case usbNormal = "USB (Normal mode)"
-    /// The mount's USB port: Special mode. Smooth tracking. On iPhone/iPad, via a TCP relay.
+    /// The mount's USB port: Special mode. Smooth tracking. On an iPad, through Overpass's driver.
     case usb = "USB (Special mode)"
     var id: Self { self }
+
+    /// What this device can use. USB on an iPad needs Overpass's driver, which only development
+    /// builds carry until Apple approves it; an iPhone can't run a USB driver at all.
+    @MainActor static var available: [ConnectionKind] {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && carriesDriver ? allCases : [.wifi]
+        #else
+        allCases
+        #endif
+    }
+
+    #if os(iOS)
+    private static let carriesDriver = FileManager.default.fileExists(
+        atPath: Bundle.main.bundleURL.appending(path: "SystemExtensions/OverpassSerial.dext").path)
+    #endif
 
     /// Special mode (Smooth tracking, axis positions) rather than the normal command set.
     var isSpecialMode: Bool { self == .usb }
@@ -60,9 +78,6 @@ struct Settings: Codable, Equatable {
     var wifiPort = 8899
     /// Mac: the USB serial device.
     var serialPath = ""
-    /// iPhone/iPad: the relay on the mount's USB port.
-    var relayHost = "raspberrypi.local"
-    var relayPort = 2000
 
     /// Night vision: the whole app in red on black, to keep dark adaptation at the eyepiece.
     var redMode = false
@@ -255,6 +270,7 @@ final class AppModel {
         var settings = Self.load("settings", default: Settings())
         // Normal mode is the default at every launch: Special mode is chosen for a session, not kept.
         if settings.connection == .usb { settings.connection = .usbNormal }
+        if !ConnectionKind.available.contains(settings.connection) { settings.connection = .wifi }
         self.settings = settings
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
@@ -814,8 +830,8 @@ final class AppModel {
         return (try? encoder.encode(SettingsFile(settings: settings))) ?? Data()
     }
 
-    /// Takes the settings from a file, keeping this device's own: how it connects (USB port,
-    /// relay), its camera, and how the screen looks.
+    /// Takes the settings from a file, keeping this device's own: how it connects (USB port),
+    /// its camera, and how the screen looks.
     func importSettings(from url: URL) -> String {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -827,8 +843,6 @@ final class AppModel {
         let mine = settings
         imported.connection = mine.connection
         imported.serialPath = mine.serialPath
-        imported.relayHost = mine.relayHost
-        imported.relayPort = mine.relayPort
         imported.cameraDeviceID = mine.cameraDeviceID
         imported.cameraCalibration = mine.cameraCalibration
         imported.cameraAimX = mine.cameraAimX

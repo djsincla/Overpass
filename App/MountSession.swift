@@ -93,7 +93,7 @@ final class MountSession {
     private var special: MountClient?
     private var tcp: TCPTransport?
     private var unwrapper: AxisUnwrapper?
-    /// The USB line (or, on iPhone and iPad, the relay), for Normal-mode commands on the way out
+    /// The USB line, for Normal-mode commands on the way out
     /// of Special mode.
     private var usbTransport: MountTransport?
 
@@ -305,15 +305,14 @@ final class MountSession {
         axisHistory = []
     }
 
-    /// The mount's USB port, or on iPhone and iPad the relay plugged into it.
+    /// The mount's USB port; on an iPad, the cable through Overpass's driver.
     private func openUSB(_ s: Settings) async throws -> MountTransport {
         #if os(macOS)
         guard !s.serialPath.isEmpty else { throw MountSessionError.noSerialPort }
         let transport = try SerialTransport(path: s.serialPath)
         #else
-        let transport = TCPTransport(host: s.relayHost, port: UInt16(s.relayPort), timeout: 3)
-        try await transport.open()
-        tcp = transport
+        let transport = try DriverTransport()
+        log("USB cable through Overpass's driver")
         #endif
         usbTransport = transport
         return transport

@@ -39,41 +39,23 @@ targets:
         product: IOptronKit
       - package: OverpassKit
         product: UVCControl
-    entitlements:
-      path: App/Overpass.entitlements
-      properties:
-        # Mac only; iOS ignores these. Sandboxed so it can go through the Mac App Store.
-        com.apple.security.app-sandbox: true
-        com.apple.security.network.client: true
-        com.apple.security.files.user-selected.read-write: true
-        com.apple.security.personal-information.location: true
-        # The mount's USB serial port.
-        com.apple.security.device.serial: true
-        # Exposure and gain on USB cameras such as the iPolar (UVC requests through IOKit).
-        com.apple.security.device.usb: true
-        # Camera guiding (including an iPhone via Continuity Camera).
-        com.apple.security.device.camera: true
-    info:
-      path: App/Info.plist
-      properties:
-        CFBundleDisplayName: Overpass
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        LSApplicationCategoryType: public.app-category.utilities
-        # Only the system's HTTPS: exempt, so TestFlight doesn't ask on every build.
-        ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: >-
-          Overpass uses your location to work out where satellites, the Sun, Moon
-          and planets appear in your sky.
-        # Without this, macOS hides iPhones (Continuity Camera) from the camera list.
-        NSCameraUseContinuityCameraDeviceType: true
-        NSCameraUsageDescription: >-
-          Overpass uses a camera on your telescope to keep the target centred while tracking.
-        NSLocalNetworkUsageDescription: >-
-          Overpass connects to your mount, or to a relay plugged into it, on your local network.
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+      # The iPad's driver for the mount's USB cable. Built here, embedded by the script below.
+      - target: OverpassSerial
+        embed: false
+        platformFilters: [iOS]
+    postBuildScripts:
+      # Until Apple approves the DriverKit entitlements (request ASTD67BKC2), only development
+      # builds carry the driver, so TestFlight builds still sign. Once approved, drop the Debug
+      # condition here and for the entitlements below.
+      - name: Embed the iPad USB driver (Debug)
+        basedOnDependencyAnalysis: false
+        script: |
+          [ "$CONFIGURATION" = Debug ] && [ "$PLATFORM_NAME" = iphoneos ] || exit 0
+          mkdir -p "$TARGET_BUILD_DIR/$WRAPPER_NAME/SystemExtensions"
+          ditto "$BUILD_DIR/$CONFIGURATION-driverkit/OverpassSerial.dext" "$TARGET_BUILD_DIR/$WRAPPER_NAME/SystemExtensions/OverpassSerial.dext"
+          # A page in the iPad's Settings, where the driver's switch appears. Without one,
+          # iPadOS sometimes leaves the switch out.
+          ditto "$SRCROOT/iOS/Settings.bundle" "$TARGET_BUILD_DIR/$WRAPPER_NAME/Settings.bundle"
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -88,3 +70,33 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
+        # The embed script writes into the app bundle; declaring its outputs would leave empty
+        # folders in Release builds, where it does nothing.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Debug:
+          "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": App/Overpass-iOS.entitlements
+
+  # Runs the mount's Prolific USB adapter on an iPad (M1 or later), which has no serial ports.
+  OverpassSerial:
+    type: driver-extension
+    platform: auto
+    sources:
+      - path: Driver
+        excludes: [Info.plist, "*.entitlements"]
+      - path: Sources/DriverLink/include/DriverLink.h
+        buildPhase: none
+    dependencies:
+      - sdk: DriverKit.framework
+      - sdk: USBDriverKit.framework
+    settings:
+      base:
+        SDKROOT: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "23.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwaynesinclair.overpass.serial
+        PRODUCT_NAME: OverpassSerial
+        INFOPLIST_FILE: Driver/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Driver/OverpassSerial.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        SKIP_INSTALL: YES

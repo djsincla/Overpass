@@ -26,6 +26,8 @@ struct SettingsView: View {
     @State private var settingsFile = JSONFile(data: Data())
     #if os(macOS)
     @State private var serialPorts: [String] = []
+    #else
+    @State private var cableFound = false
     #endif
 
     var body: some View {
@@ -187,7 +189,7 @@ struct SettingsView: View {
         @Bindable var model = model
         return Section {
             Picker("Connect by", selection: $model.settings.connection) {
-                ForEach(ConnectionKind.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(ConnectionKind.available) { Text($0.rawValue).tag($0) }
             }
             if !model.settings.connection.isSpecialMode {
                 Toggle("Turn off the mount's tracking when connecting", isOn: $model.settings.stopsMountTrackingOnConnect)
@@ -214,10 +216,18 @@ struct SettingsView: View {
                 }
                 .onAppear { serialPorts = SerialTransport.availablePorts() }
                 #else
-                TextField("Relay address", text: $model.settings.relayHost).autocorrectionDisabled()
-                LabeledContent("Relay port") {
-                    TextField("Port", value: $model.settings.relayPort, format: .number.grouping(.never))
-                        .multilineTextAlignment(.trailing)
+                // An iPad (M1 or later) runs the cable through Overpass's own driver.
+                HStack {
+                    LabeledContent("USB cable", value: cableFound ? "Found" : "Not found")
+                    Button { cableFound = DriverTransport.isAvailable } label: { Image(systemName: "arrow.clockwise") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Look for the USB cable again")
+                }
+                .onAppear { cableFound = DriverTransport.isAvailable }
+                if !cableFound {
+                    DisclosureGroup("What the iPad sees on USB") {
+                        Text(DriverTransport.describeUSB()).font(.caption.monospaced()).textSelection(.enabled)
+                    }
                 }
                 #endif
                 if model.settings.connection.isSpecialMode {
@@ -289,7 +299,7 @@ struct SettingsView: View {
                 #if os(macOS)
                 Text("Special mode over the mount's USB port: Smooth tracking, after star alignment. Special mode stays on through power cycles, and WiFi won't work while it's on.")
                 #else
-                Text("Special mode only works over USB, so an iPhone or iPad reaches it through a relay plugged into the mount, such as a Raspberry Pi running ser2net at 115200 baud.")
+                Text("Special mode over the mount's USB cable: Smooth tracking, after star alignment. The iPad needs an M1 or later chip; switch on the driver in Settings › Overpass › Drivers, then plug the cable in.")
                 #endif
             }
         }
