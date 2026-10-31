@@ -15,14 +15,20 @@ enum ConnectionKind: String, Codable, CaseIterable, Identifiable {
     case usb = "USB (Special mode)"
     var id: Self { self }
 
-    /// What this device can use. An iPhone can't run a USB driver, so it has only WiFi.
+    /// What this device can use. USB on an iPad needs Overpass's driver, which only development
+    /// builds carry until Apple approves it; an iPhone can't run a USB driver at all.
     @MainActor static var available: [ConnectionKind] {
         #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad ? allCases : [.wifi]
+        UIDevice.current.userInterfaceIdiom == .pad && carriesDriver ? allCases : [.wifi]
         #else
         allCases
         #endif
     }
+
+    #if os(iOS)
+    private static let carriesDriver = FileManager.default.fileExists(
+        atPath: Bundle.main.bundleURL.appending(path: "SystemExtensions/OverpassSerial.dext").path)
+    #endif
 
     /// Special mode (Smooth tracking, axis positions) rather than the normal command set.
     var isSpecialMode: Bool { self == .usb }
@@ -264,6 +270,7 @@ final class AppModel {
         var settings = Self.load("settings", default: Settings())
         // Normal mode is the default at every launch: Special mode is chosen for a session, not kept.
         if settings.connection == .usb { settings.connection = .usbNormal }
+        if !ConnectionKind.available.contains(settings.connection) { settings.connection = .wifi }
         self.settings = settings
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
