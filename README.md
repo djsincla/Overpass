@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.4.4 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.4.5 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -94,6 +94,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.4.5**, 30 October 2026. The USB relay is gone. An iPhone connects to the mount over WiFi, and so does an iPad for now: Overpass has its own driver for the mount's USB cable on iPads with an M1 or later chip, which reaches TestFlight once Apple approves it.
 
 **0.4.4**, 30 October 2026. Disconnecting, or losing contact with the mount, stops tracking and lets go of the target, so nothing is left set for the next connection. The sky view's rotate and flip buttons sit in a strip above the sky, clear of the horizon. On iPhone the pass calculator's controls wrap to fit the screen.
 
