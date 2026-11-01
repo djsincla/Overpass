@@ -10,6 +10,7 @@ struct MountPanel: View {
     var showsGuiding = true
     @State private var confirmingSun = false
     @State private var showingAlignment = false
+    @AppStorage("mount.showsDetails") private var showsMountDetails = false
 
     var body: some View {
         let mount = model.mount
@@ -107,6 +108,11 @@ struct MountPanel: View {
                         .font(.callout).foregroundStyle(.secondary)
                         .help("Special mode has no command for the mount's status. Switch to Normal mode to see its GPS and location.")
                 }
+                DisclosureGroup("About the mount", isExpanded: $showsMountDetails) {
+                    MountReportTable().padding(.top, 4)
+                }
+                .font(.callout)
+                .help("What the mount reported about itself on connecting: state, GPS, clock and firmware")
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
                         Text(String(format: "%.0f° past north", past)).font(.callout).foregroundStyle(.orange)

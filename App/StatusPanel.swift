@@ -279,9 +279,24 @@ private struct MountReportSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let mount = model.mount
         StatusSection("Mount") {
-            if let identity = mount.identity {
+            if model.mount.identity != nil {
+                MountReportTable()
+            } else {
+                Text("Connect to see what the mount reports about itself.").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// The mount's model, state, GPS, clock and firmware, as read on connecting.
+struct MountReportTable: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let mount = model.mount
+        if let identity = mount.identity {
+            VStack(alignment: .leading, spacing: 6) {
                 StatusTable {
                     row("Model", identity.model.name + (identity.isSpecialMode ? ", Special mode" : ", Normal mode"))
                     if let report = mount.report {
@@ -303,14 +318,9 @@ private struct MountReportSection: View {
                     }
                 }
                 .textSelection(.enabled)
-                if mount.report == nil {
-                    Text("The mount didn't answer the status commands.").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Read on connecting, before Overpass set its location and time. Firmware dates are from the mount.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            } else {
-                Text("Connect to see what the mount reports about itself.").font(.callout).foregroundStyle(.secondary)
+                Text(mount.report == nil ? "The mount didn't answer the status commands."
+                     : "Read on connecting, before Overpass set its location and time. Firmware dates are from the mount.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
