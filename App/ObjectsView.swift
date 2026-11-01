@@ -327,9 +327,13 @@ struct ObjectsView: View {
                 .labelsHidden()
                 .padding(.bottom, 4)
             } footer: {
-                Text(limited
-                     ? "\(objects.count) brighter than magnitude \(Int(catalogueLimit))\(objects.count > 2000 ? ", the first 2,000 shown" : ""). Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC."
-                     : "Numbered as on the hand controller. Search by number, such as M13 or C14. Positions and data from OpenNGC.")
+                if !limited {
+                    Text("Numbered as on the hand controller. Search by number, such as M13 or C14. Positions and data from OpenNGC.")
+                } else if objects.count > 2000 {
+                    Text("\(objects.count) brighter than magnitude \(Int(catalogueLimit)), the first 2,000 shown. Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC.")
+                } else {
+                    Text("\(objects.count) brighter than magnitude \(Int(catalogueLimit)). Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC.")
+                }
             }
         }
         .navigationTitle("Catalogues")
@@ -433,25 +437,27 @@ struct ObjectsView: View {
     /// The small line under a sky object's name: what it is, how bright, and where it is now.
     private func detail(_ object: SkyObject) -> String {
         let time = AstroTime(model.viewDate())
+        func fixed(_ x: Double, _ digits: Int) -> String { x.formatted(.number.precision(.fractionLength(digits))) }
+        func magnitude(_ m: Double) -> String { String(localized: "mag \(fixed(m, 1))", comment: "Magnitude, abbreviated") }
         var parts: [String] = []
         switch object {
         case .star(let s):
             if let d = s.designation { parts.append(d) }
-            parts.append(String(format: "mag %.1f", s.magnitude))
+            parts.append(magnitude(s.magnitude))
         case .deepSky(let d):
             parts.append(d.kind.name)
             parts.append(d.constellation)
-            if let m = d.magnitude { parts.append(String(format: "mag %.1f", m)) }
-            if let size = d.size { parts.append(size >= 60 ? String(format: "%.1f°", size / 60) : String(format: "%.0f′", size)) }
+            if let m = d.magnitude { parts.append(magnitude(m)) }
+            if let size = d.size { parts.append(size >= 60 ? fixed(size / 60, 1) + "°" : fixed(size, 0) + "′") }
         case .comet(let c):
-            if let m = c.apparentMagnitude(time) { parts.append(String(format: "mag %.1f", m)) }
+            if let m = c.apparentMagnitude(time) { parts.append(magnitude(m)) }
             let (r, delta) = c.distances(time)
-            parts.append(String(format: "%.2f AU from the Sun, %.2f AU from Earth", r, delta))
+            parts.append(String(localized: "\(fixed(r, 2)) AU from the Sun, \(fixed(delta, 2)) AU from Earth"))
         default:
             break
         }
         if let h = try? model.settings.observer.look(at: object.target, time) {
-            parts.append(h.altitude > 0 ? String(format: "%.0f° up", h.altitude) : "below the horizon")
+            parts.append(h.altitude > 0 ? String(localized: "\(fixed(h.altitude, 0))° up") : String(localized: "below the horizon"))
         }
         return parts.joined(separator: " · ")
     }
@@ -672,7 +678,7 @@ struct SourceRow: View {
                         } else if !group.source.enabled {
                             Text("Off")
                         } else if let when = group.status?.lastRefreshed {
-                            let age = group.medianAge.map { String(format: " · median TLE %.1f d", $0 / 86_400) } ?? ""
+                            let age = group.medianAge.map(medianAgeText) ?? ""
                             Text("\(group.satellites.count) satellites · updated \(when, style: .relative) ago\(age)")
                         } else {
                             Text("Downloading…")
@@ -712,7 +718,7 @@ struct SourceHeader: View {
                     if let error = group.status?.lastError {
                         Text(error).foregroundStyle(.red)
                     } else if let when = group.status?.lastRefreshed {
-                        let age = group.medianAge.map { String(format: " · median TLE %.1f d", $0 / 86_400) } ?? ""
+                        let age = group.medianAge.map(medianAgeText) ?? ""
                         let selectedCount = group.satellites.filter { model.isSelected("sat:\($0.noradID)") }.count
                         Text("\(selectedCount) of \(group.satellites.count) selected · updated \(when, style: .relative) ago\(age)")
                         if filtered {
@@ -759,6 +765,12 @@ extension SourceHeader {
     }
 }
 
+/// " · median TLE 1.4 d", appended to a source's status line.
+private func medianAgeText(_ seconds: TimeInterval) -> String {
+    " · " + String(localized: "median TLE \((seconds / 86_400).formatted(.number.precision(.fractionLength(1)))) d",
+                   comment: "Median age of a source's element sets, in days")
+}
+
 /// Radar cross-section, as published: "399 m²", "28 m²", "0.12 m²".
 enum RadarSize {
     static func format(_ squareMetres: Double) -> String {
@@ -775,7 +787,8 @@ enum SatelliteDimensions {
         let unit = units.lengthUnit
         var text = body.map(units.lengthNumber).joined(separator: " × ")
         if let span = info.span, span > (body.max() ?? 0) {
-            text += text.isEmpty ? "span \(units.length(span))" : " \(unit), span \(units.length(span))"
+            let spanText = String(localized: "span \(units.length(span))", comment: "Across a satellite's solar panels or booms")
+            text += text.isEmpty ? spanText : " \(unit), \(spanText)"
         } else if !text.isEmpty {
             text += " \(unit)"
         }
@@ -789,10 +802,11 @@ struct ElementAge: View {
 
     var body: some View {
         let days = seconds / 86_400
-        Text(days < 1 ? "\(Int(days * 24)) h" : String(format: "%.1f d", days))
+        let dayText = days.formatted(.number.precision(.fractionLength(1)))
+        Text(days < 1 ? "\(Int(days * 24)) h" : "\(dayText) d")
             .font(.caption.monospacedDigit())
             .foregroundStyle(days > 3 ? .orange : .secondary)
-            .accessibilityLabel("Elements \(String(format: "%.1f", days)) days old")
+            .accessibilityLabel("Elements \(dayText) days old")
     }
 }
 
@@ -822,7 +836,7 @@ struct AddSourceSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         if let url = URL(string: urlText.trimmingCharacters(in: .whitespaces)) {
-                            Task { await model.addSource(name: name.isEmpty ? url.host() ?? "Custom" : name, url: url) }
+                            Task { await model.addSource(name: name.isEmpty ? url.host() ?? String(localized: "Custom", comment: "Name for a TLE source added by URL without a name or host") : name, url: url) }
                         }
                         dismiss()
                     }

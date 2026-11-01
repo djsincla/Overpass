@@ -75,7 +75,7 @@ final class ConjunctionsModel {
         return Geodetic(latitude: s.latitude, longitude: s.longitude, height: s.heightMeters / 1000)
     }
 
-    var centreName: String { settings.place?.name ?? "Home" }
+    var centreName: String { settings.place?.name ?? String(localized: "Home", comment: "The location in Settings, as a search centre") }
 
     var bodies: [SolarSystemBody] { (settings.moon ? [.moon] : []) + (settings.sun ? [.sun] : []) }
 
@@ -158,14 +158,14 @@ final class ConjunctionsModel {
 
     func search() async {
         guard let centre else {
-            message = "Set your location in Settings, or choose a place to search around."
+            message = String(localized: "Set your location in Settings, or choose a place to search around.")
             return
         }
         let sats = satellites
         guard !sats.isEmpty else {
             message = settings.includeStations
-                ? "No space station elements yet: turn on the Space stations source in Objects."
-                : "Add a satellite by name, or turn on Space stations."
+                ? String(localized: "No space station elements yet: turn on the Space stations source in Objects.")
+                : String(localized: "Add a satellite by name, or turn on Space stations.")
             return
         }
         guard !bodies.isEmpty else { return }
