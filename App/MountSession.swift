@@ -74,6 +74,24 @@ final class MountSession {
     /// What tracking will actually use with this connection.
     var effectiveMode: TrackingMode { kind?.isSpecialMode == true ? .smooth : preferredMode }
 
+    /// The mode tracking `object` would use: in Normal mode, Passive whenever the mount's own
+    /// tracking suits it and Settings allows that, whatever the picker says.
+    func effectiveMode(for object: SkyObject?) -> TrackingMode {
+        let mode = effectiveMode
+        guard mode != .smooth, settings.mountTracksWhenItCan, let object, Self.mountCanTrack(object) else { return mode }
+        return .passive
+    }
+
+    /// What the mount's own sidereal, lunar or solar tracking (or one goto, for a geostationary
+    /// satellite) handles well. Not planets: sidereal rate ignores their own motion.
+    static func mountCanTrack(_ object: SkyObject) -> Bool {
+        switch object {
+        case .star: true
+        case .body(let b): b == .moon || b == .sun
+        case .satellite(let s): s.isGeostationary
+        }
+    }
+
     // Fine tuning, applied live by Step and Smooth tracking.
     /// Seconds added to "now": positive aims further along the track (fixes along-track TLE error).
     var timeOffset: TimeInterval = 0
@@ -833,6 +851,27 @@ final class MountSession {
                     throw error
                 }
                 recentred = .now
+            }
+            // The mount's own tracking would carry on through north, which its goto never turns
+            // through: stop short and go the long way round, as Step does.
+            let here = try observer.look(at: object.target, AstroTime(skyNow))
+            let soon = try observer.look(at: object.target, AstroTime(skyNow + 60))
+            if Self.turnsLongWay(from: here, to: soon, stop: s.cableStopAzimuth) {
+                try? await normal.setTracking(false)
+                log("Passive \(object.name): reaching the cable stop, the mount's tracking stopped")
+                guard try await confirmUnwind(object.name, seconds: Self.slewTime(from: here, to: soon, stop: s.cableStopAzimuth)) else {
+                    status = "Stopped at north"
+                    return
+                }
+                var ahead = soon
+                for _ in 0..<3 {
+                    ahead = try observer.look(at: object.target, AstroTime(skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) + 60))
+                }
+                log("Going the long way round to " + describe(ahead) + " from " + describe(here))
+                status = "Going the long way round (the mount won't turn through the cable stop)…"
+                try await goto(normal, to: ahead, from: here)
+                recentred = .distantPast
+                continue
             }
             let state = try? await normal.systemStatus()
             if let state, state != lastState {

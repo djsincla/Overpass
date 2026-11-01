@@ -71,6 +71,9 @@ struct Settings: Codable, Equatable {
     var maximumAzimuthRate: Double = 6
     var maximumAltitudeRate: Double = 6
     var pointingTolerance: Double = 0.1
+    /// Normal mode: stars, the Moon, the Sun and geostationary satellites go to the mount's own
+    /// tracking (Passive) even with Step chosen.
+    var mountTracksWhenItCan = true
 
     var connection = ConnectionKind.wifi
     /// iOptron's WiFi defaults; check your mount's manual.
@@ -485,7 +488,7 @@ final class AppModel {
     /// Whether `object` can be tracked now, with this connection and mode.
     func canTrack(_ object: SkyObject?) -> Bool {
         guard let object, mount.state == .connected else { return false }
-        switch (mount.kind?.isSpecialMode, mount.effectiveMode) {
+        switch (mount.kind?.isSpecialMode, mount.effectiveMode(for: object)) {
         case (false, .passive): return object.passiveTracking != nil
         case (true, _): return settings.alignment != nil
         default: return true
@@ -496,7 +499,7 @@ final class AppModel {
     /// the filter confirmation first, which callers show.
     func startTracking() async {
         guard let target = targetObject, canTrack(target) else { return }
-        await mount.track(target, mode: mount.effectiveMode, pass: targetPass)
+        await mount.track(target, mode: mount.effectiveMode(for: target), pass: targetPass)
     }
 
     /// Makes `objectID` the target and starts tracking it (from the sky view's menu).
