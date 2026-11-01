@@ -92,6 +92,9 @@ struct ContentView: View {
             #endif
             await model.start()
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.keepCurrent() } }
+        }
         #if os(iOS)
         // iOS drops the mount's connection when the phone locks or the app goes to the
         // background, and the mount carries on with its last command. Stay awake while
