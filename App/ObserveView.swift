@@ -84,7 +84,7 @@ struct ObserveView: View {
                 #if os(iOS)
                 // A little larger than the standard inline title.
                 ToolbarItem(placement: .principal) {
-                    Text("Overpass").font(.title3.weight(.semibold))
+                    Text("Overpass").font(.title2.weight(.semibold))
                 }
                 #endif
                 ToolbarItem(placement: .primaryAction) {
