@@ -14,6 +14,8 @@ What Overpass sends:
 2. A right ascension and declination goto to the same place (`:SRA`, `:Sd`, `:MS1#`), which by then is only a small correction, followed by the tracking rate (`:RT0#` sidereal, `:RT1#` lunar, `:RT2#` solar).
 3. Nothing else, apart from a status check (`:GLS#`) every few seconds. If the mount stops tracking, the tracking card says so and the mount log records it.
 
+Stop, Stop tracking and Esc turn the mount's own tracking off as well (`:Q#` then `:ST0#`), so the mount is left still. Comets are re-centred like the Moon, as often as they drift 30″ against the stars.
+
 The right ascension and declination Overpass sends are topocentric and of date, so they describe the target as seen from your location. For a star that makes no difference. For the Moon it does: parallax moves it by up to about a degree depending on where you stand, and that shift changes as the Moon crosses the sky. So for the Moon only, Overpass sends a fresh RA/Dec goto every five minutes. Between those the mount runs at the lunar rate.
 
 The mount converts RA/Dec into its own axis positions using its clock and location. Overpass sets both when it connects (`:SLO`, `:SLA`, `:SG`, `:SDS0#`, `:SUT`, in UTC with no daylight saving), so a mount that has been sitting in the shed with the wrong time is corrected before the first goto.
@@ -64,11 +66,11 @@ If WiFi drops, the mount stays where the last step left it.
 | --- | --- | --- |
 | Connection | WiFi or USB Normal mode | WiFi or USB Normal mode |
 | Who predicts the target | The mount, from its clock, location and rate | Overpass, every step |
-| Commands during tracking | A status check every few seconds; for the Moon, a goto every 5 minutes | An alt-az goto and a position read every interval |
+| Commands during tracking | A status check every few seconds; a goto every 5 minutes for the Moon, and as often as a comet drifts 30″ | An alt-az goto and a position read every interval |
 | Motion | Continuous | A jump every interval, then still |
-| Targets | Stars, planets, Moon, Sun, geostationary satellites | Anything, including low-orbit satellites |
+| Targets | Stars, deep sky objects, comets, planets, Moon, Sun, geostationary satellites | Anything, including low-orbit satellites |
 | Typical error | The mount's alignment, plus slow drift for planets | Up to about half an interval of the target's motion, plus alignment |
-| Crossing north | Not yet tested: whether the mount's own tracking turns through north is unknown | Stops and asks, then the long way round |
+| Crossing north | Overpass stops the mount's tracking a minute before and asks, then the long way round | Stops and asks, then the long way round |
 | If the connection drops | Keeps tracking | Stops at the last step |
 
 Both depend on the mount's own alignment: Passive through its RA/Dec conversion, Step through its alt-az coordinates. If the mount points a degree off on a goto from the hand controller, both modes will be a degree off too. Centre a star or the Moon and press Sync in the tracking card to fix that.

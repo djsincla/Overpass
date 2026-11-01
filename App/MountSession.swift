@@ -584,22 +584,15 @@ final class MountSession {
     /// nothing to stop, the first was left with nothing holding it, and Stop couldn't reach it.
     private var motionRequests = 0
 
-    func stopAll(unwinding: Bool = true, keepsTracking: Bool = true) async {
-        await stopAll(unwinding: unwinding, keepsTracking: keepsTracking, request: nil)
+    func stopAll(unwinding: Bool = true) async {
+        await stopAll(unwinding: unwinding, request: nil)
     }
 
     /// `request` is the start this is part of, which mustn't cancel itself; nil for a Stop.
-    private func stopAll(unwinding: Bool, keepsTracking: Bool, request: Int?) async {
+    /// Stop also turns off the mount's own sidereal, lunar or solar tracking, so after Passive
+    /// the mount is left still.
+    private func stopAll(unwinding: Bool, request: Int?) async {
         if request == nil { motionRequests += 1 }
-        // The mount's own sidereal, lunar or solar tracking carries on through Stop. The HAZ46
-        // halts it along with the slew, so it's turned back on at the same rate afterwards. Only
-        // when it could be tracking by itself (Passive, or nothing running): Step's gotos and a
-        // move to a start point stop at once, as before.
-        var resume: NormalCommand.TrackingRate?
-        if keepsTracking, let normal, trackingMode == .passive || (trackingTask == nil && prepareTask == nil),
-           let state = try? await normal.trackingState(), state.system == 1 || state.system == 5 {
-            resume = NormalCommand.TrackingRate(rawValue: state.rate) ?? .sidereal
-        }
         let wasUnwinding = unwindTask != nil
         unwindTask?.cancel()
         await unwindTask?.value
@@ -616,15 +609,9 @@ final class MountSession {
         }
         await cancelTracking()
         try? await normal?.stop()
+        try? await normal?.setTracking(false)
         try? await special?.stop()
         status = "Stopped"
-        if let resume, let normal {
-            try? await normal.setTrackingRate(resume)
-            try? await normal.setTracking(true)
-            let name = Self.rateName(resume)
-            status = "Stopped; the mount carries on tracking at the \(name) rate"
-            log("Stop: the mount was tracking at the \(name) rate, so tracking is back on")
-        }
         if unwinding, !wasUnwinding, pastNorth != nil {
             _ = try? await readPosition()
             unwind()
@@ -679,7 +666,7 @@ final class MountSession {
         }
         motionRequests += 1
         let request = motionRequests
-        await stopAll(unwinding: false, keepsTracking: false, request: request)
+        await stopAll(unwinding: false, request: request)
         guard request == motionRequests else {
             log("Tracking \(name) not started: another start or a Stop came first")
             return
@@ -734,7 +721,7 @@ final class MountSession {
     func moveToStart(of pass: SatellitePass) async {
         motionRequests += 1
         let request = motionRequests
-        await stopAll(unwinding: false, keepsTracking: false, request: request)
+        await stopAll(unwinding: false, request: request)
         guard request == motionRequests else { return }
         guard let point = startPoint(of: pass) else {
             status = "That pass is already past its start point."
@@ -1653,7 +1640,7 @@ final class MountSession {
     /// the wrong way. Returns a report.
     func testNativeSlew() async -> String {
         guard let special else { return "Connect over USB (Special mode) first." }
-        await stopAll(keepsTracking: false)
+        await stopAll()
         var report: [String] = []
         do {
             guard let start = try await readPosition() else { return "No position from the mount." }
@@ -2004,7 +1991,7 @@ final class MountSession {
     /// the mount is still before the switch, and the session carries on in the new mode.
     func switchMode() async {
         guard state == .connected, let transport = usbTransport, let current = kind else { return }
-        await stopAll(keepsTracking: false)
+        await stopAll()
         isSwitchingMode = true
         pollTask?.cancel()
         pollTask = nil
@@ -2066,7 +2053,7 @@ final class MountSession {
     /// back to check the mount took the values as positions. Returns a report.
     func setPosition(_ pointing: Horizontal) async -> String {
         guard special != nil || normal != nil else { return "Connect the mount first." }
-        await stopAll(keepsTracking: false)
+        await stopAll()
         if let special {
             if let problem = await syncSpecial(special, to: pointing) { return problem.prefix(1).uppercased() + problem.dropFirst() + "." }
             _ = try? await readPosition()
@@ -2085,7 +2072,7 @@ final class MountSession {
     /// line also goes to the mount log.
     func testModeSwitching() async -> String {
         guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
-        await stopAll(keepsTracking: false)
+        await stopAll()
         pollTask?.cancel()
         pollTask = nil
         defer { startPolling() }
