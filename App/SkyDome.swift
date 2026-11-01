@@ -350,7 +350,8 @@ struct SkyDome: View {
             let p = g.point(object.position)
             let ids = [object.id] + others.map(\.id)
             let highlighted = highlightedObjectID.map(ids.contains) ?? false
-            let color: Color = object.sunlit ? .yellow : .gray
+            // Satellites yellow when lit; anything else in its kind's colour.
+            let color: Color = object.object.flatMap { $0.isSatellite ? nil : Theme.color(of: $0) } ?? (object.sunlit ? .yellow : .gray)
             var diamond = Path()
             diamond.move(to: CGPoint(x: p.x, y: p.y - 5))
             diamond.addLine(to: CGPoint(x: p.x + 5, y: p.y))

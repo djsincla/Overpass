@@ -206,6 +206,8 @@ struct LiveObject: Identifiable {
     let name: String
     let position: Horizontal
     let sunlit: Bool
+    /// What it is, for the marker's colour.
+    var object: SkyObject?
 }
 
 @MainActor @Observable
@@ -293,6 +295,7 @@ final class AppModel {
 
     func start() async {
         Task { await loadSatelliteInfo() }
+        Task { await loadComets() }
         await reloadFromCatalog()
         schedulePrediction()
         await refreshDue()
@@ -307,7 +310,9 @@ final class AppModel {
         switch parts[0] {
         case "sat": return satelliteByID[parts[1]].map(SkyObject.satellite)
         case "body": return SolarSystemBody(rawValue: parts[1]).map(SkyObject.body)
-        case "star": return BrightStars.all.first { $0.name == parts[1] }.map(SkyObject.star)
+        case "star": return NamedStars.star(parts[1]).map(SkyObject.star)
+        case "dso": return DeepSky.object(parts[1]).map(SkyObject.deepSky)
+        case "comet": return comets.first { $0.name == parts[1] }.map(SkyObject.comet)
         default: return nil
         }
     }
@@ -570,6 +575,41 @@ final class AppModel {
         if !fresh.isEmpty { satelliteInfo = fresh }
     }
 
+    // MARK: Comets
+
+    /// From the MPC's `CometEls.txt`, the saved copy until a fresh one arrives.
+    private(set) var comets: [Comet] = []
+    /// When the saved elements were downloaded.
+    private(set) var cometsDate: Date?
+    private(set) var isLoadingComets = false
+
+    private static let cometsFile = storage.appending(path: "CometEls.txt")
+
+    /// The saved file first, then a fresh one if it's over a day old (or `force`). No user data is sent.
+    func loadComets(force: Bool = false) async {
+        let file = Self.cometsFile
+        if comets.isEmpty, let text = try? String(contentsOf: file, encoding: .utf8) {
+            comets = MPCComets.parse(text)
+            cometsDate = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
+        if !force, let cometsDate, Date.now.timeIntervalSince(cometsDate) < 86_400 { return }
+        guard !isLoadingComets else { return }
+        isLoadingComets = true
+        defer { isLoadingComets = false }
+        guard let (data, response) = try? await URLSession.shared.data(from: MPCComets.url),
+              (response as? HTTPURLResponse)?.statusCode == 200 else {
+            if force { message = "Couldn't download the comet list from the Minor Planet Center." }
+            return
+        }
+        let text = String(decoding: data, as: UTF8.self)
+        let fresh = MPCComets.parse(text)
+        guard !fresh.isEmpty else { return }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: file)
+        comets = fresh
+        cometsDate = .now
+    }
+
     // MARK: Radio
 
     /// SatNOGS transmitters by NORAD ID, loaded on demand.
@@ -615,7 +655,8 @@ final class AppModel {
             if case .satellite(let s) = object,
                !passes.contains(where: { $0.noradID == s.noradID && $0.start.date <= date && $0.end.date > date }) { return nil }
             let sunlit: Bool = if case .satellite(let s) = object { (try? s.isSunlit(at: time)) ?? false } else { true }
-            return LiveObject(id: object.id, name: object.name, position: h, sunlit: sunlit)
+            return LiveObject(id: object.id, name: object.name, position: h, sunlit: sunlit,
+                              object: object)
         }
     }
 

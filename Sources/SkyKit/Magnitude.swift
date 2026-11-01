@@ -68,6 +68,8 @@ extension SkyObject {
     public func apparentMagnitude(observer: Observer, at time: AstroTime, standardMagnitude: Double? = nil) -> Double? {
         switch self {
         case .star(let s): return s.magnitude
+        case .deepSky(let d): return d.magnitude
+        case .comet(let c): return c.apparentMagnitude(time)
         case .body(let b): return b.apparentMagnitude(time)
         case .satellite(let s):
             guard let standard = standardMagnitude else { return nil }

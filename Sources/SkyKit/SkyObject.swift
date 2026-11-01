@@ -5,13 +5,17 @@ public enum SkyObject: Identifiable, Sendable {
     case satellite(SatelliteTarget)
     case body(SolarSystemBody)
     case star(Star)
+    case deepSky(DeepSkyObject)
+    case comet(Comet)
 
-    /// Stable across launches: "sat:25544", "body:moon", "star:Vega".
+    /// Stable across launches: "sat:25544", "body:moon", "star:Vega", "dso:M31", "comet:12P/Pons-Brooks".
     public var id: String {
         switch self {
         case .satellite(let s): "sat:\(s.noradID)"
         case .body(let b): "body:\(b.rawValue)"
         case .star(let s): "star:\(s.name)"
+        case .deepSky(let d): "dso:\(d.id)"
+        case .comet(let c): "comet:\(c.name)"
         }
     }
 
@@ -20,6 +24,8 @@ public enum SkyObject: Identifiable, Sendable {
         case .satellite(let s): s.name
         case .body(let b): b.name
         case .star(let s): s.name
+        case .deepSky(let d): d.name
+        case .comet(let c): c.name
         }
     }
 
@@ -28,11 +34,18 @@ public enum SkyObject: Identifiable, Sendable {
         case .satellite(let s): s
         case .body(let b): b
         case .star(let s): s
+        case .deepSky(let d): d
+        case .comet(let c): c
         }
     }
 
     public var isSatellite: Bool {
         if case .satellite = self { return true }
+        return false
+    }
+
+    public var isComet: Bool {
+        if case .comet = self { return true }
         return false
     }
 
@@ -46,14 +59,16 @@ public enum SkyObject: Identifiable, Sendable {
         switch self {
         case .body(.sun): .solar
         case .body(.moon): .lunar
-        case .body, .star: .sidereal
+        case .body, .star, .deepSky: .sidereal
+        case .comet: .comet
         case .satellite(let s): s.isGeostationary ? .holdPosition : nil
         }
     }
 }
 
 public enum PassiveTracking: Sendable, Equatable {
-    case sidereal, lunar, solar
+    /// `comet`: sidereal rate, re-centred as the comet moves against the stars.
+    case sidereal, lunar, solar, comet
     /// Point once and stop tracking (geostationary satellites).
     case holdPosition
 }
