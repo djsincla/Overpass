@@ -254,6 +254,8 @@ final class AppModel {
     private(set) var passes: [SatellitePass] = []
     private(set) var isPredicting = false
     private(set) var isRefreshing = false
+    /// When the passes were last predicted: they cover a window from then, so they go stale.
+    private var predictedAt: Date?
     /// Checking selected satellites for ones that never rise here.
     private(set) var isPruning = false
     /// The object the pass calculator is open on.
@@ -302,6 +304,18 @@ final class AppModel {
         schedulePrediction()
         await refreshDue()
         conjunctions.startWatching()
+        // Left open for hours, or brought back after a day, the passes would all have ended.
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(15 * 60))
+            await keepCurrent()
+        }
+    }
+
+    /// Fetches elements that are due and predicts again once the passes are half an hour old.
+    /// Called every 15 minutes and whenever the app comes back to the front.
+    func keepCurrent() async {
+        guard let predictedAt, Date.now.timeIntervalSince(predictedAt) > 30 * 60, !isRefreshing else { return }
+        await refreshDue()
     }
 
     // MARK: Objects and selection
@@ -854,6 +868,7 @@ final class AppModel {
         guard !Task.isCancelled else { return }
         passes = wide ? result : result.filter { $0.end.date > now }
         predictedWide = wide
+        predictedAt = now
     }
 
     func plan(for pass: SatellitePass) -> MountPlan? {
