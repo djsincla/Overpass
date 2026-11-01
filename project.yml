@@ -100,3 +100,22 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: NO
         SKIP_INSTALL: YES
+
+  # Apple's accessibility audit over each tab, in the iOS Simulator. Run with
+  # `xcodebuild test -scheme OverpassUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  OverpassUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Overpass
+    settings:
+      base:
+        TEST_TARGET_NAME: Overpass
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwaynesinclair.overpass.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        # XCTest's audit handler isn't Sendable yet.
+        SWIFT_VERSION: "5.0"
+    scheme:
+      testTargets: [OverpassUITests]
+

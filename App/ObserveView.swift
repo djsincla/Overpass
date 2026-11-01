@@ -259,12 +259,16 @@ struct ObserveView: View {
                                    redMode: model.settings.redMode,
                                    recentreRequest: recentreRequest,
                                    onTapTrack: { id in clicked(shown.first { $0.id == id }) })
+                    .modifier(EarthDescription(title: "Globe", tracks: globeTracks(shown, focus: pass, at: date),
+                                               choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else if view == .map {
                     FlatMapView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
                                 tracks: globeTracks(shown, focus: pass, at: date),
                                 sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
                                 recentreRequest: recentreRequest,
                               onTapTrack: { id in clicked(shown.first { $0.id == id }) })
+                    .modifier(EarthDescription(title: "World map", tracks: globeTracks(shown, focus: pass, at: date),
+                                               choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else {
                     sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
                 }
@@ -794,4 +798,37 @@ struct TrackLegend: View {
 enum SkyView: String, CaseIterable, Identifiable {
     case sky = "Sky", globe = "Globe", map = "Map"
     var id: Self { self }
+}
+
+/// What VoiceOver says for the globe and the map, which are drawn: where each satellite is over
+/// the Earth, with an action per satellite to choose its pass, as tapping its track does.
+private struct EarthDescription: ViewModifier {
+    let title: String
+    let tracks: [GlobeTrack]
+    let choose: (String) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue(value)
+            .accessibilityActions {
+                ForEach(tracks) { track in
+                    Button("Choose \(track.name)") { choose(track.id) }
+                }
+            }
+    }
+
+    private var value: String {
+        let over = tracks.compactMap { track in
+            track.now.map { "\(track.name) over \(Self.place($0))" }
+        }
+        return over.isEmpty ? "No satellites shown" : over.joined(separator: ". ")
+    }
+
+    private static func place(_ p: Geodetic) -> String {
+        let lat = "\(Int(abs(p.latitude).rounded())) degrees \(p.latitude >= 0 ? "north" : "south")"
+        let lon = "\(Int(abs(p.longitude).rounded())) degrees \(p.longitude >= 0 ? "east" : "west")"
+        return "\(lat), \(lon)"
+    }
 }
