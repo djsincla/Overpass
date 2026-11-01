@@ -166,7 +166,7 @@ struct MountPanel: View {
 
     private var stateText: String {
         switch model.mount.state {
-        case .disconnected: String(localized: "\(model.settings.connection.rawValue) · not connected")
+        case .disconnected: String(localized: "\(model.settings.connection.label) · not connected")
         case .connecting: String(localized: "Connecting…")
         case .connected: model.mount.identity.map(describe) ?? String(localized: "Connected")
         case .failed(let why): why

@@ -178,7 +178,7 @@ struct FilterSheet: View {
                         Text("7 days").tag(168.0)
                     }
                     Picker("Sort by", selection: $model.filter.sort) {
-                        ForEach(FilterSettings.Sort.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(FilterSettings.Sort.allCases) { Text($0.label).tag($0) }
                     }
                 }
                 Section("Pass") {

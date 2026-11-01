@@ -267,7 +267,7 @@ struct ObserveView: View {
                                    redMode: model.settings.redMode,
                                    recentreRequest: recentreRequest,
                                    onTapTrack: { id in clicked(shown.first { $0.id == id }) })
-                    .modifier(EarthDescription(title: "Globe", tracks: globeTracks(shown, focus: pass, at: date),
+                    .modifier(EarthDescription(title: String(localized: "Globe"), tracks: globeTracks(shown, focus: pass, at: date),
                                                choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else if view == .map {
                     FlatMapView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
@@ -275,7 +275,7 @@ struct ObserveView: View {
                                 sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
                                 recentreRequest: recentreRequest,
                               onTapTrack: { id in clicked(shown.first { $0.id == id }) })
-                    .modifier(EarthDescription(title: "World map", tracks: globeTracks(shown, focus: pass, at: date),
+                    .modifier(EarthDescription(title: String(localized: "World map"), tracks: globeTracks(shown, focus: pass, at: date),
                                                choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else {
                     sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
@@ -560,7 +560,7 @@ struct SelectedObjectsList: View {
             @Bindable var model = model
             VStack(spacing: 0) {
             Picker("Sort", selection: $model.filter.objectSort) {
-                ForEach(FilterSettings.ObjectSort.allCases) { title($0).tag($0) }
+                ForEach(FilterSettings.ObjectSort.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -603,15 +603,6 @@ struct SelectedObjectsList: View {
 
     private func isTracked(_ object: SkyObject) -> Bool {
         model.mount.isTracking && model.targetObjectID == object.id
-    }
-
-    /// The raw values are saved in the filter settings, so the names shown are kept apart from them.
-    private func title(_ sort: FilterSettings.ObjectSort) -> Text {
-        switch sort {
-        case .name: Text("Name")
-        case .riseTime: Text("Rise time")
-        case .brightness: Text("Brightness")
-        }
     }
 
     private func sorted(_ objects: [SkyObject], _ date: Date) -> [SkyObject] {
@@ -860,21 +851,22 @@ private struct EarthDescription: ViewModifier {
             .accessibilityValue(value)
             .accessibilityActions {
                 ForEach(tracks) { track in
-                    Button("Choose \(track.name)") { choose(track.id) }
+                    Button(String(localized: "Choose \(track.name)")) { choose(track.id) }
                 }
             }
     }
 
     private var value: String {
         let over = tracks.compactMap { track in
-            track.now.map { "\(track.name) over \(Self.place($0))" }
+            track.now.map { String(localized: "\(track.name) over \(Self.place($0))", comment: "A satellite over a place on the Earth") }
         }
-        return over.isEmpty ? "No satellites shown" : over.joined(separator: ". ")
+        return over.isEmpty ? String(localized: "No satellites shown") : over.joined(separator: ". ")
     }
 
     private static func place(_ p: Geodetic) -> String {
-        let lat = "\(Int(abs(p.latitude).rounded())) degrees \(p.latitude >= 0 ? "north" : "south")"
-        let lon = "\(Int(abs(p.longitude).rounded())) degrees \(p.longitude >= 0 ? "east" : "west")"
-        return "\(lat), \(lon)"
+        let lat = Int(abs(p.latitude).rounded()), lon = Int(abs(p.longitude).rounded())
+        let latitude = p.latitude >= 0 ? String(localized: "\(lat) degrees north") : String(localized: "\(lat) degrees south")
+        let longitude = p.longitude >= 0 ? String(localized: "\(lon) degrees east") : String(localized: "\(lon) degrees west")
+        return String(localized: "\(latitude), \(longitude)", comment: "Latitude, longitude")
     }
 }
