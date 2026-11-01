@@ -198,7 +198,7 @@ struct SettingsView: View {
         @Bindable var model = model
         return Section {
             Picker("Connect by", selection: $model.settings.connection) {
-                ForEach(ConnectionKind.available) { Text($0.rawValue).tag($0) }
+                ForEach(ConnectionKind.available) { Text($0.label).tag($0) }
             }
             if !model.settings.connection.isSpecialMode {
                 Toggle("Turn off the mount's tracking when connecting", isOn: $model.settings.stopsMountTrackingOnConnect)
@@ -227,7 +227,7 @@ struct SettingsView: View {
                 #else
                 // An iPad (M1 or later) runs the cable through Overpass's own driver.
                 HStack {
-                    LabeledContent("USB cable", value: cableFound ? "Found" : "Not found")
+                    LabeledContent("USB cable", value: cableFound ? String(localized: "Found") : String(localized: "Not found"))
                     Button { cableFound = DriverTransport.isAvailable } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Look for the USB cable again")
@@ -314,7 +314,7 @@ struct SettingsView: View {
         }
     }
 
-    func numberField(_ title: String, _ value: Binding<Double>) -> some View {
+    func numberField(_ title: LocalizedStringKey, _ value: Binding<Double>) -> some View {
         LabeledContent(title) {
             TextField(title, value: value, format: .number.precision(.fractionLength(0...6)))
                 .multilineTextAlignment(.trailing)

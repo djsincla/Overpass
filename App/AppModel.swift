@@ -30,6 +30,15 @@ enum ConnectionKind: String, Codable, CaseIterable, Identifiable {
         atPath: Bundle.main.bundleURL.appending(path: "SystemExtensions/OverpassSerial.dext").path)
     #endif
 
+    /// What the connection pickers show. The raw value is what's saved, so it stays English.
+    var label: String {
+        switch self {
+        case .wifi: String(localized: "WiFi (Normal mode)")
+        case .usbNormal: String(localized: "USB (Normal mode)")
+        case .usb: String(localized: "USB (Special mode)")
+        }
+    }
+
     /// Special mode (Smooth tracking, axis positions) rather than the normal command set.
     var isSpecialMode: Bool { self == .usb }
     var usesUSB: Bool { self != .wifi }
@@ -173,11 +182,25 @@ struct FilterSettings: Codable, Equatable {
     enum ObjectSort: String, Codable, CaseIterable, Identifiable {
         case name = "Name", riseTime = "Rise time", brightness = "Brightness"
         var id: Self { self }
+        var label: String {
+            switch self {
+            case .name: String(localized: "Name")
+            case .riseTime: String(localized: "Rise time")
+            case .brightness: String(localized: "Brightness")
+            }
+        }
     }
 
     enum Sort: String, Codable, CaseIterable, Identifiable {
         case startTime = "Start time", maxAltitude = "Highest", duration = "Longest"
         var id: Self { self }
+        var label: String {
+            switch self {
+            case .startTime: String(localized: "Start time")
+            case .maxAltitude: String(localized: "Highest")
+            case .duration: String(localized: "Longest")
+            }
+        }
         var passSort: PassSort {
             switch self {
             case .startTime: .startTime
@@ -291,7 +314,7 @@ final class AppModel {
         do {
             catalog = try TLECatalog(directory: Self.storage.appending(path: "TLE"))
         } catch {
-            message = "Couldn't open the TLE cache: \(error.localizedDescription)"
+            message = String(localized: "Couldn't open the TLE cache: \(error.localizedDescription)")
         }
         cameraTracker = CameraTracker(camera: guider.camera)
         mount.app = self
@@ -643,7 +666,7 @@ final class AppModel {
         defer { isLoadingComets = false }
         guard let (data, response) = try? await URLSession.shared.data(from: MPCComets.url),
               (response as? HTTPURLResponse)?.statusCode == 200 else {
-            if force { message = "Couldn't download the comet list from the Minor Planet Center." }
+            if force { message = String(localized: "Couldn't download the comet list from the Minor Planet Center.") }
             return
         }
         let text = String(decoding: data, as: UTF8.self)
@@ -715,7 +738,7 @@ final class AppModel {
             return s
         }
         guard !candidates.isEmpty else {
-            message = "No selected satellites to check."
+            message = String(localized: "No selected satellites to check.")
             return
         }
         isPruning = true
@@ -727,13 +750,14 @@ final class AppModel {
         var selection = selected
         selection.subtract(never.map { "sat:\($0.noradID)" })
         selected = selection
-        let above = "above \(Int(settings.minimumAltitude))° from here in the next 7 days"
+        let lowest = Int(settings.minimumAltitude)
         if never.isEmpty {
-            message = "All \(candidates.count) selected satellites rise \(above)."
+            message = String(localized: "All \(candidates.count) selected satellites rise above \(lowest)° from here in the next 7 days.")
         } else {
             let names = never.map(\.name).sorted()
-            let list = names.prefix(10).joined(separator: ", ") + (names.count > 10 ? ", and \(names.count - 10) more" : "")
-            message = "Deselected \(never.count) of \(candidates.count) that never rise \(above): \(list)."
+            let first = names.prefix(10).joined(separator: ", ")
+            let list = names.count > 10 ? String(localized: "\(first), and \(names.count - 10) more") : first
+            message = String(localized: "Deselected \(never.count) of \(candidates.count) that never rise above \(lowest)° from here in the next 7 days: \(list).")
         }
     }
 
@@ -757,10 +781,10 @@ final class AppModel {
             try await catalog.refresh(id)
         } catch TLECatalogError.tooSoon(let next) {
             if !quietly {
-                message = "CelesTrak asks for at least 2 hours between downloads. Try again after \(next.formatted(date: .omitted, time: .shortened))."
+                message = String(localized: "CelesTrak asks for at least 2 hours between downloads. Try again after \(next.formatted(date: .omitted, time: .shortened)).")
             }
         } catch {
-            if !quietly { message = "Refresh failed: \(error.localizedDescription)" }
+            if !quietly { message = String(localized: "Refresh failed: \(error.localizedDescription)") }
         }
         await reloadFromCatalog()
         schedulePrediction()
@@ -803,7 +827,7 @@ final class AppModel {
             try FileManager.default.copyItem(at: url, to: copy)
             _ = try await catalog.importFile(copy, name: url.deletingPathExtension().lastPathComponent)
         } catch {
-            message = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+            message = String(localized: "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
         }
         await reloadFromCatalog()
         schedulePrediction()
@@ -909,7 +933,7 @@ final class AppModel {
                 }
             }
         } catch {
-            message = "Couldn't get your location: \(error.localizedDescription)"
+            message = String(localized: "Couldn't get your location: \(error.localizedDescription)")
         }
     }
 
@@ -920,18 +944,19 @@ final class AppModel {
             // As read on connecting: reading it now would only return the location Overpass set.
             guard let site = mount.site else { throw MountSessionError.needsNormalMode }
             guard site.hasFix || site.latitude != 0 || site.longitude != 0 else {
-                message = "The mount has no GPS fix and no location set in it."
+                message = String(localized: "The mount has no GPS fix and no location set in it.")
                 return
             }
             settings.latitude = site.latitude
             settings.longitude = site.longitude
             settings.hasLocation = true
-            let place = String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
+            let place = String(localized: "\(site.latitude.formatted(.number.precision(.fractionLength(4))))°, \(site.longitude.formatted(.number.precision(.fractionLength(4))))°")
             message = site.hasFix
-                ? "Location from the mount's GPS: \(place)."
-                : "The mount's GPS has no fix, so this is the location last set in the mount: \(place)."
+                ? String(localized: "Location from the mount's GPS: \(place).")
+                : String(localized: "The mount's GPS has no fix, so this is the location last set in the mount: \(place).")
         } catch {
-            message = "Couldn't read the mount's location: " + ((error as? MountSessionError)?.message ?? error.localizedDescription)
+            let reason = (error as? MountSessionError)?.message ?? error.localizedDescription
+            message = String(localized: "Couldn't read the mount's location: \(reason)")
         }
     }
 
@@ -960,7 +985,7 @@ final class AppModel {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url),
               let file = try? JSONDecoder().decode(SettingsFile.self, from: data), file.app == SettingsFile.appName else {
-            return "That isn't an Overpass settings file."
+            return String(localized: "That isn't an Overpass settings file.")
         }
         var imported = file.settings
         let mine = settings
@@ -976,8 +1001,10 @@ final class AppModel {
         imported.imperial = mine.imperial
         imported.tracksLog = mine.tracksLog
         settings = imported
-        return String(format: "Imported: location %.3f°, %.3f°, cable margin %.0f°.",
-                      imported.latitude, imported.longitude, imported.cableMargin)
+        let latitude = imported.latitude.formatted(.number.precision(.fractionLength(3)))
+        let longitude = imported.longitude.formatted(.number.precision(.fractionLength(3)))
+        let margin = imported.cableMargin.formatted(.number.precision(.fractionLength(0)))
+        return String(localized: "Imported: location \(latitude)°, \(longitude)°, cable margin \(margin)°.")
     }
 
     /// How distances and heights are shown.
