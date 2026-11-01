@@ -1,0 +1,1600 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ is centred: shift Overpass's alignment so the scope reads it. Nothing is sent to the mount." : {
+
+    },
+    "%@ is centred: tell the mount (:CM#), then read its position back to check." : {
+
+    },
+    "%@ up" : {
+
+    },
+    "%@ · %@ · %@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@ → %4$@"
+          }
+        }
+      }
+    },
+    "%@ × %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ × %2$@"
+          }
+        }
+      }
+    },
+    "%@ × %@ · %@ · %@ wide · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ × %2$@ · %3$@ · %4$@ wide · %5$@"
+          }
+        }
+      }
+    },
+    "%@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@"
+          }
+        }
+      }
+    },
+    "%@, NORAD %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, NORAD %2$@"
+          }
+        }
+      }
+    },
+    "%@.csv" : {
+
+    },
+    "%@°/s" : {
+
+    },
+    "%lld" : {
+
+    },
+    "%lld brighter than magnitude %lld%@. Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld brighter than magnitude %2$lld%3$@. Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC."
+          }
+        }
+      }
+    },
+    "%lld days" : {
+
+    },
+    "%lld more; search to narrow down" : {
+
+    },
+    "%lld of %lld selected · updated %@ ago%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld selected · updated %3$@ ago%4$@"
+          }
+        }
+      }
+    },
+    "%lld percent" : {
+
+    },
+    "%lld satellites · updated %@ ago%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld satellites · updated %2$@ ago%3$@"
+          }
+        }
+      }
+    },
+    "%lld°" : {
+
+    },
+    "%lld° %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld° %2$@"
+          }
+        }
+      }
+    },
+    "%lld° %@ · %lld° up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld° %2$@ · %3$lld° up"
+          }
+        }
+      }
+    },
+    "%lld×" : {
+
+    },
+    "1 day" : {
+
+    },
+    "12 hours" : {
+
+    },
+    "1′" : {
+
+    },
+    "3 days" : {
+
+    },
+    "5′" : {
+
+    },
+    "6 hours" : {
+
+    },
+    "7 days" : {
+
+    },
+    "8 hours" : {
+
+    },
+    "A 1500 Hz tone, the WWV time signal's hour mark" : {
+
+    },
+    "A minute before tracking starts" : {
+
+    },
+    "A pass counts as visible when the satellite is sunlit and the Sun is below this altitude for you (−6° civil, −12° nautical twilight)." : {
+
+    },
+    "A source that's on appears in the sidebar with its satellites. Turning one off keeps it here, so you can turn it back on." : {
+
+    },
+    "A tick each second, like WWV on 10 MHz, and a long 1000 Hz tone as tracking begins" : {
+
+    },
+    "About" : {
+
+    },
+    "About Overpass" : {
+
+    },
+    "About the mount" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add a TLE URL…" : {
+
+    },
+    "Add a TLE source" : {
+
+    },
+    "Add a satellite: name or number" : {
+
+    },
+    "Add to selection" : {
+
+    },
+    "Add track" : {
+
+    },
+    "Aim 0.1 s earlier along the track" : {
+
+    },
+    "Aim 0.1 s later along the track" : {
+
+    },
+    "Align" : {
+
+    },
+    "Align first…" : {
+
+    },
+    "Alignment: %@" : {
+
+    },
+    "Align…" : {
+
+    },
+    "All %lld comets, brightest first." : {
+
+    },
+    "Allow over the top" : {
+
+    },
+    "Also my selected satellites" : {
+
+    },
+    "Altitude" : {
+
+    },
+    "Always dark" : {
+
+    },
+    "Always unwind" : {
+
+    },
+    "Any TLE age" : {
+
+    },
+    "Any address that serves two- or three-line element sets, for example a CelesTrak GP query with FORMAT=tle." : {
+
+    },
+    "Any magnitude" : {
+
+    },
+    "Apache License 2.0" : {
+
+    },
+    "Appearance" : {
+
+    },
+    "Arrange the sky, the list and the mount panel" : {
+
+    },
+    "Auto" : {
+
+    },
+    "Auto exposure" : {
+
+    },
+    "Auto stretch" : {
+
+    },
+    "Az %@  Alt %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Az %1$@  Alt %2$@"
+          }
+        }
+      }
+    },
+    "Azimuth" : {
+
+    },
+    "Back to the current time (⌘0)" : {
+
+    },
+    "Back to the whole Earth, centred on you" : {
+
+    },
+    "Brighter than %lld" : {
+
+    },
+    "Brightness" : {
+
+    },
+    "Cable stop" : {
+
+    },
+    "Calibrate" : {
+
+    },
+    "Calibrating…" : {
+
+    },
+    "Camera" : {
+
+    },
+    "Camera view, following an object" : {
+
+    },
+    "Camera view, no spot found" : {
+
+    },
+    "Camera view, spot found" : {
+
+    },
+    "Camera view. Click an object to track it." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancel move" : {
+
+    },
+    "Cancel tracking" : {
+
+    },
+    "Cancel tracking or the move to the start point, and stop the mount (Esc)" : {
+
+    },
+    "Carries the location, cable stop, limits, speeds, timing and alignment to another device, by AirDrop or Files. Each device keeps its own connection, camera and appearance." : {
+
+    },
+    "Catalogue" : {
+
+    },
+    "Catalogues" : {
+
+    },
+    "Centre" : {
+
+    },
+    "Centre %@, then sync." : {
+
+    },
+    "Centre a bright star with tracking stopped; the mount nudges each axis and watches the image." : {
+
+    },
+    "Centre on your location" : {
+
+    },
+    "Change" : {
+
+    },
+    "Changes the picture only, not what's tracked" : {
+
+    },
+    "Choose satellites in the Objects tab, and their passes appear here." : {
+
+    },
+    "Choose the Moon, planets, stars or satellites in the Objects tab." : {
+
+    },
+    "Choose up to %lld passes to show" : {
+
+    },
+    "Choose…" : {
+
+    },
+    "Clear selection" : {
+
+    },
+    "Click it, or drag a box around it. A box that fits it closely holds best; one that's mostly water or field follows the water." : {
+
+    },
+    "Click something that isn't moving (a star, a distant light or mast), then calibrate: the mount nudges each axis and watches it move." : {
+
+    },
+    "Click the image…" : {
+
+    },
+    "Click where the telescope points in the image, if it isn't the centre (a finder, or a camera beside the tube)" : {
+
+    },
+    "Close" : {
+
+    },
+    "Comets" : {
+
+    },
+    "Comets predicted brighter than magnitude %lld now, brightest first. Comets often stray a magnitude or two from the prediction. Passive tracking re-centres a comet as often as it drifts 30″ against the stars." : {
+
+    },
+    "Conjunctions" : {
+
+    },
+    "Connect" : {
+
+    },
+    "Connect by" : {
+
+    },
+    "Connect to see what the mount reports about itself." : {
+
+    },
+    "Contact: %@" : {
+
+    },
+    "Contrast" : {
+
+    },
+    "Correct for refraction" : {
+
+    },
+    "Corrected for Doppler now, though it's below the horizon. From the SatNOGS DB." : {
+
+    },
+    "Corrected for Doppler now, with the shift and how fast it's changing. From the SatNOGS DB." : {
+
+    },
+    "Couldn't align" : {
+
+    },
+    "Count down the last 10 seconds" : {
+
+    },
+    "Days" : {
+
+    },
+    "Deselect all" : {
+
+    },
+    "Deselect ones that never rise here" : {
+
+    },
+    "Deselect satellites that never rise here" : {
+
+    },
+    "Deselect the %lld shown" : {
+
+    },
+    "Details" : {
+
+    },
+    "Details for %@" : {
+
+    },
+    "Digital zoom: crops the camera's full-resolution picture (pinch to zoom too on the Camera screen)" : {
+
+    },
+    "Disconnect" : {
+
+    },
+    "Divider" : {
+
+    },
+    "Done" : {
+
+    },
+    "Download fresh space station elements and recalculate the watched events" : {
+
+    },
+    "Downloading from the Minor Planet Center…" : {
+
+    },
+    "Downloading…" : {
+
+    },
+    "Earlier" : {
+
+    },
+    "East on the left again (looking up)" : {
+
+    },
+    "Eclipsed" : {
+
+    },
+    "Elements %@ days old" : {
+
+    },
+    "Elements from the Minor Planet Center, %@" : {
+
+    },
+    "Email AB6A@arrl.net with the mount log, the settings file, the time it went wrong (UTC if you can) and what you were tracking. The log has every connect, mode switch, goto, step and stop, with what the mount read back." : {
+
+    },
+    "Every %@ s" : {
+
+    },
+    "Every kind" : {
+
+    },
+    "Every pass of an object over the next two weeks" : {
+
+    },
+    "Every star with an IAU name to magnitude 4, brightest first. Passive tracking sends the mount there and lets it track at the sidereal rate." : {
+
+    },
+    "Export CSV" : {
+
+    },
+    "Export settings…" : {
+
+    },
+    "Export trace" : {
+
+    },
+    "Exposure" : {
+
+    },
+    "Exposure, brightness and contrast" : {
+
+    },
+    "Fainter comets" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Find" : {
+
+    },
+    "Finding which way the phone points…" : {
+
+    },
+    "Fine %@, %lld arc-minutes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Fine %1$@, %2$lld arc-minutes"
+          }
+        }
+      }
+    },
+    "Fine step" : {
+
+    },
+    "Fine: %lld′ %@. Shifts the tracking offsets while Step or Smooth tracking; otherwise a short slow move." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Fine: %1$lld′ %2$@. Shifts the tracking offsets while Step or Smooth tracking; otherwise a short slow move."
+          }
+        }
+      }
+    },
+    "Flip east and west" : {
+
+    },
+    "Flip east and west (as seen from above, or through a mirror diagonal)" : {
+
+    },
+    "Focal length (mm)" : {
+
+    },
+    "For debugging: keeps the last %lld minutes of tracking and adds an export button to the tracking chart, to save it as CSV" : {
+
+    },
+    "GPS status needs Normal mode" : {
+
+    },
+    "Guide" : {
+
+    },
+    "Height" : {
+
+    },
+    "Hide %@" : {
+
+    },
+    "Hide details" : {
+
+    },
+    "Hide eclipsed" : {
+
+    },
+    "Hide satellites whose elements are older than this" : {
+
+    },
+    "Hide the camera picture" : {
+
+    },
+    "Hide the details" : {
+
+    },
+    "Hide track" : {
+
+    },
+    "Highlight" : {
+
+    },
+    "Hold" : {
+
+    },
+    "Hold freezes the camera's exposure where it is, so a bright object coming into view doesn't darken everything else" : {
+
+    },
+    "Hold to move, release to stop" : {
+
+    },
+    "Home (the location in Settings)" : {
+
+    },
+    "How faint an NGC or IC object can be and still be listed" : {
+
+    },
+    "How high the Moon or Sun must be" : {
+
+    },
+    "How often Smooth tracking reads the axes and sets the speeds (Special mode). Each update takes about 45 ms on the HAZ46, so 0.05 s runs them nearly as fast as the mount answers. Longer periods hold each speed for the whole interval and correct more gently." : {
+
+    },
+    "I have a solar filter fitted" : {
+
+    },
+    "I'll use a solar filter" : {
+
+    },
+    "Image adjustments" : {
+
+    },
+    "Imperial (mi, ft)" : {
+
+    },
+    "Import a TLE file…" : {
+
+    },
+    "Import settings…" : {
+
+    },
+    "Keep a tracking log to export" : {
+
+    },
+    "Keep tracking" : {
+
+    },
+    "Kind" : {
+
+    },
+    "Later" : {
+
+    },
+    "Layout" : {
+
+    },
+    "Let go" : {
+
+    },
+    "List" : {
+
+    },
+    "Loading transmitters from SatNOGS…" : {
+
+    },
+    "Location" : {
+
+    },
+    "Look ahead" : {
+
+    },
+    "Look for USB serial ports again (after plugging the mount in)" : {
+
+    },
+    "Look for cameras again (an iPhone appears when it's nearby, locked and on the same Apple ID)" : {
+
+    },
+    "Look for the USB cable again" : {
+
+    },
+    "Look up" : {
+
+    },
+    "Looking…" : {
+
+    },
+    "Made by" : {
+
+    },
+    "Magnitude" : {
+
+    },
+    "Magnitude %@" : {
+
+    },
+    "Manage sources…" : {
+
+    },
+    "Max" : {
+
+    },
+    "Metric (km, m)" : {
+
+    },
+    "Min elevation" : {
+
+    },
+    "Mode" : {
+
+    },
+    "Moon" : {
+
+    },
+    "More" : {
+
+    },
+    "Mount" : {
+
+    },
+    "Mount address" : {
+
+    },
+    "Mount can track it" : {
+
+    },
+    "Mount connection" : {
+
+    },
+    "Move %@" : {
+
+    },
+    "Move the mount" : {
+
+    },
+    "Moves the azimuth axis about 25°, including across north, to learn how the mount's own slew counts position. Stand by the mount." : {
+
+    },
+    "NORAD %@: not in the loaded catalogue" : {
+
+    },
+    "NOW" : {
+
+    },
+    "Name" : {
+
+    },
+    "Name, number, launched>2020…" : {
+
+    },
+    "Never point a telescope, finder or camera at the Sun without a proper full-aperture solar filter. It can blind you instantly and destroy equipment." : {
+
+    },
+    "Night vision: red on black" : {
+
+    },
+    "No comet elements yet" : {
+
+    },
+    "No location yet: set one in Settings, or search for a place." : {
+
+    },
+    "No passes" : {
+
+    },
+    "No satellite in this set is up within 15° of there. The phone's compass can be well out; hold it away from metal and try again, or turn on more sources in Objects." : {
+
+    },
+    "No spot near the centre" : {
+
+    },
+    "No transits within %@ of %@ in the next %lld days. Try a wider range or more days." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No transits within %1$@ of %2$@ in the next %3$lld days. Try a wider range or more days."
+          }
+        }
+      }
+    },
+    "None of your %lld selected satellites pass in the next %lld hours with these filters." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "None of your %1$lld selected satellites pass in the next %2$lld hours with these filters."
+          }
+        }
+      }
+    },
+    "None yet" : {
+
+    },
+    "Normal mode" : {
+
+    },
+    "Normal mode (WiFi or USB): how often the position is read while idle, and the shortest Step tracking interval. Sub-second commands have caused trouble on the HAZ46 in Normal mode." : {
+
+    },
+    "Normal mode over the mount's USB port: Passive and Step tracking, as over WiFi. If the mount is in Special mode it leaves it, and its position is carried across." : {
+
+    },
+    "Normal mode over the mount's WiFi: Passive and Step tracking. Join the mount's WiFi network first. 10.10.100.254:8899 is iOptron's usual address; check your manual." : {
+
+    },
+    "Normal mode updates" : {
+
+    },
+    "Normal mode: reads where the mount points once each update period while it slews, so the scope marker moves with it. Each read is logged; turn this off if gotos stutter." : {
+
+    },
+    "Not calibrated" : {
+
+    },
+    "Not downloaded yet" : {
+
+    },
+    "Not sure? Take the mount's reading, then centre a bright star or planet and use Sync on target." : {
+
+    },
+    "Nothing called that in the loaded catalogue. Turn on a source that has it under Objects." : {
+
+    },
+    "Nothing in the next %lld days with these settings. Try a lower peak or more days." : {
+
+    },
+    "Nothing selected" : {
+
+    },
+    "Now" : {
+
+    },
+    "Numbered as on the hand controller. Search by number, such as M13 or C14. Positions and data from OpenNGC." : {
+
+    },
+    "OK" : {
+
+    },
+    "Object" : {
+
+    },
+    "Objects" : {
+
+    },
+    "Observe" : {
+
+    },
+    "Off" : {
+
+    },
+    "Off target by %lld arc-seconds" : {
+
+    },
+    "Off: set the exposure yourself. Long exposures and high gain bring up faint satellites; short ones keep the ISS or the Moon from burning out." : {
+
+    },
+    "Only point a telescope or camera at the Sun with a proper full-aperture solar filter fitted." : {
+
+    },
+    "Only with a proper full-aperture solar filter on the scope and finder." : {
+
+    },
+    "Open in Maps" : {
+
+    },
+    "Or enter it in Settings." : {
+
+    },
+    "Or enter where it points" : {
+
+    },
+    "Over the top tilts the tube past the zenith; check it clears the mount and tripod first. Speeds are assumptions until measured on your HAZ46. \"On target\" is about half your field of view." : {
+
+    },
+    "Overpass" : {
+
+    },
+    "Overpass needs your location to work out what's in your sky." : {
+
+    },
+    "Panel" : {
+
+    },
+    "Pass" : {
+
+    },
+    "Pass calculator" : {
+
+    },
+    "Pass calculator…" : {
+
+    },
+    "Pass filters" : {
+
+    },
+    "Passes" : {
+
+    },
+    "Past its start point" : {
+
+    },
+    "Peaks at least" : {
+
+    },
+    "Peaks ≥ %lld°" : {
+
+    },
+    "Pick a satellite in Passes or on the sky to see it here." : {
+
+    },
+    "Pick a star, move the scope until it's centred with the arrows, then tap Record. Two stars align the mount; three or more also show how good the alignment is." : {
+
+    },
+    "Pick satellites from a source, or the Sun, Moon, planets, stars, deep sky objects and comets. Passes are predicted for what's selected, and it's marked on the sky." : {
+
+    },
+    "Pixel size (µm)" : {
+
+    },
+    "Point at the Sun?" : {
+
+    },
+    "Port" : {
+
+    },
+    "Put north back at the top" : {
+
+    },
+    "Range" : {
+
+    },
+    "Read on connecting, before Overpass set its location and time. Firmware dates are from the mount." : {
+
+    },
+    "Read the position during gotos" : {
+
+    },
+    "Receive on" : {
+
+    },
+    "Record — it's centred" : {
+
+    },
+    "Recorded" : {
+
+    },
+    "Red app icon" : {
+
+    },
+    "Red mode" : {
+
+    },
+    "Red mode draws everything in red on black so your eyes stay dark-adapted. Also turn your screen brightness down." : {
+
+    },
+    "Refresh" : {
+
+    },
+    "Refresh %@" : {
+
+    },
+    "Refresh TLE now" : {
+
+    },
+    "Refresh USB ports" : {
+
+    },
+    "Refresh all sources" : {
+
+    },
+    "Refresh camera list" : {
+
+    },
+    "Refresh now" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove %@" : {
+
+    },
+    "Remove from selection" : {
+
+    },
+    "Reporting a problem" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset offsets" : {
+
+    },
+    "Reset rotation, %lld degrees at the top" : {
+
+    },
+    "Reset the time and position offsets" : {
+
+    },
+    "Rises in %@" : {
+
+    },
+    "Rises in %@ in the %@ · peaks %lld°" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rises in %1$@ in the %2$@ · peaks %3$lld°"
+          }
+        }
+      }
+    },
+    "STOP" : {
+
+    },
+    "SatNOGS lists no active transmitters for this satellite." : {
+
+    },
+    "Satellite tracking for iOptron alt-az mounts" : {
+
+    },
+    "Satellites" : {
+
+    },
+    "Satellites · %lld" : {
+
+    },
+    "Save the last %lld minutes of tracking as CSV" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search around a place" : {
+
+    },
+    "Search for a place…" : {
+
+    },
+    "Search matches names, numbers, owners and launch dates, and compares attributes: launched>2020, period<100, perigee>500, inc>50, rcs>10, span>20, size=large, owner=PRC, type=debris." : {
+
+    },
+    "Select" : {
+
+    },
+    "Select all %lld" : {
+
+    },
+    "Select satellites in %@" : {
+
+    },
+    "Select satellites in Objects." : {
+
+    },
+    "Select the %lld shown" : {
+
+    },
+    "Select the Sun?" : {
+
+    },
+    "Selected" : {
+
+    },
+    "Selected bodies are marked on the sky and can be tracked." : {
+
+    },
+    "Selected only" : {
+
+    },
+    "Set" : {
+
+    },
+    "Set aim point" : {
+
+    },
+    "Set as tracking target" : {
+
+    },
+    "Set position" : {
+
+    },
+    "Set target" : {
+
+    },
+    "Set the focal length and pixel size in Settings, Camera." : {
+
+    },
+    "Set to %@" : {
+
+    },
+    "Set your location from the mount's GPS" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Settings file" : {
+
+    },
+    "Share the mount log" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show all %lld" : {
+
+    },
+    "Show details" : {
+
+    },
+    "Show every comet, however faint" : {
+
+    },
+    "Show on the timeline" : {
+
+    },
+    "Show one kind of object" : {
+
+    },
+    "Show only what's selected" : {
+
+    },
+    "Show the camera picture" : {
+
+    },
+    "Show the details" : {
+
+    },
+    "Showing %lld: the rest are hidden by the filters above" : {
+
+    },
+    "Sky" : {
+
+    },
+    "Sky: a satellite or aircraft, a spot against plain sky. Ground: a boat, bird, car or person, matched by its look against any background." : {
+
+    },
+    "Slew at full speed to where the pass first reaches the start elevation, and wait there" : {
+
+    },
+    "Smooth and camera tracking carry on past north by up to the overtravel, then the mount unwinds when tracking ends. The cables need that much slack." : {
+
+    },
+    "Smooth tracking needs a star alignment: centre two or three bright stars" : {
+
+    },
+    "Smooth tracking updates" : {
+
+    },
+    "Solar system" : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "Sorted ascending" : {
+
+    },
+    "Sorted descending" : {
+
+    },
+    "Sorts by this column" : {
+
+    },
+    "Sound alerts" : {
+
+    },
+    "Source code on GitHub" : {
+
+    },
+    "Source turned off" : {
+
+    },
+    "Space stations (ISS, Tiangong)" : {
+
+    },
+    "Special mode" : {
+
+    },
+    "Special mode has no command for the mount's status. Switch to Normal mode to see its GPS and location." : {
+
+    },
+    "Special mode over the mount's USB cable: Smooth tracking, after star alignment. The iPad needs an M1 or later chip; switch on the driver in Settings › Overpass › Drivers, then plug the cable in." : {
+
+    },
+    "Special mode over the mount's USB port: Smooth tracking, after star alignment. Special mode stays on through power cycles, and WiFi won't work while it's on." : {
+
+    },
+    "Speed" : {
+
+    },
+    "Spread the picture's darkest to brightest across the full range; lifts a faint night sky" : {
+
+    },
+    "Stars" : {
+
+    },
+    "Start camera" : {
+
+    },
+    "Start tracking" : {
+
+    },
+    "Status" : {
+
+    },
+    "Status…" : {
+
+    },
+    "Stop all motion and tracking (space)" : {
+
+    },
+    "Stop and target %@" : {
+
+    },
+    "Stop camera" : {
+
+    },
+    "Stop following and stop the mount (Esc)" : {
+
+    },
+    "Stop moving to the start point (Esc)" : {
+
+    },
+    "Stop showing %@" : {
+
+    },
+    "Stop tracking" : {
+
+    },
+    "Stop tracking %@?" : {
+
+    },
+    "Stop tracking to change the target" : {
+
+    },
+    "Stop watching" : {
+
+    },
+    "Suggested now" : {
+
+    },
+    "Sun" : {
+
+    },
+    "Sunlit" : {
+
+    },
+    "Swipe along its path instead of tapping to tell close ones apart." : {
+
+    },
+    "Switch the mount to Normal mode (Passive and Step tracking) without disconnecting. Tracking stops first." : {
+
+    },
+    "Switch the mount to Special mode (Smooth tracking) without disconnecting. Tracking stops first." : {
+
+    },
+    "Switches to Normal mode and back without moving or syncing anything, reading the position at each step. Nothing moves." : {
+
+    },
+    "Sync" : {
+
+    },
+    "TLE age" : {
+
+    },
+    "TLE sources" : {
+
+    },
+    "TLE under 1 day" : {
+
+    },
+    "TLE under 3 days" : {
+
+    },
+    "TLE under 7 days" : {
+
+    },
+    "Take this track off" : {
+
+    },
+    "Tells the mount where the scope actually points, in degrees, when you know it: a park position, or the altitude read off the tube and the azimuth from a compass. In Normal mode it syncs the mount; in Special mode it sets the axes. Nothing moves." : {
+
+    },
+    "Test mode switching" : {
+
+    },
+    "Test the mount's slew" : {
+
+    },
+    "Testing the mount's slew…" : {
+
+    },
+    "The camera on the telescope, for the exposure times, frame rates and sizes on the Status panel. The pixel size is on the sensor's data sheet." : {
+
+    },
+    "The camera's analogue gain. Higher is brighter and noisier." : {
+
+    },
+    "The first alignment needs at least two stars, well apart. If you used two, one of them may be mis-centred." : {
+
+    },
+    "The latitude and longitude the mount had when it connected, from its GPS or hand controller. Connect over WiFi or USB Normal mode first." : {
+
+    },
+    "The lowest altitude Overpass will drive the mount to. Below 0° points under the horizon (from a hillside, or at the ground for testing); check the tube clears the tripod and anything around it." : {
+
+    },
+    "The lowest altitude the mount will follow down to. Below 0° is under the horizon; check the tube clears the tripod. Also in Settings." : {
+
+    },
+    "The mount and Overpass disagree by %lld°. Either can be wrong: after leaving Special mode the mount can report an old position, and Overpass doesn't see moves made with the hand controller." : {
+
+    },
+    "The mount can be tracking by itself at the sidereal, lunar or solar rate, after a goto from the hand controller or from an earlier session. On, Overpass turns that off when it connects, so the mount sits still until you track something." : {
+
+    },
+    "The mount can't follow this pass within its limits." : {
+
+    },
+    "The mount didn't answer the status commands." : {
+
+    },
+    "The mount is following %@. Stopping it makes %@ the tracking target." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The mount is following %1$@. Stopping it makes %2$@ the tracking target."
+          }
+        }
+      }
+    },
+    "The mount never turns through north, in either hemisphere. Its own goto works this way, so Overpass does the same. When tracking reaches north, the mount stops and Overpass asks whether to go the long way round and carry on. Set the cables neutral with the scope pointing the opposite way." : {
+
+    },
+    "The sky overhead, or the Earth with the ground tracks as a globe or a flat map" : {
+
+    },
+    "This camera sets its own exposure" : {
+
+    },
+    "This device has no motion sensors to tell where it's pointing." : {
+
+    },
+    "Time" : {
+
+    },
+    "To start %lld° %@ · %lld°" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "To start %1$lld° %2$@ · %3$lld°"
+          }
+        }
+      }
+    },
+    "Town, address or landmark" : {
+
+    },
+    "Track" : {
+
+    },
+    "Track %@" : {
+
+    },
+    "Track past north (Special mode)" : {
+
+    },
+    "Track the Sun from the mount panel (needs a filter)" : {
+
+    },
+    "Tracking stopped at north" : {
+
+    },
+    "Tracking target" : {
+
+    },
+    "Transmit on" : {
+
+    },
+    "Transmitter" : {
+
+    },
+    "Turn back inside the cable range. Stop interrupts it." : {
+
+    },
+    "Turn it on again in Manage sources." : {
+
+    },
+    "Turn off" : {
+
+    },
+    "Turn off the mount's tracking when connecting" : {
+
+    },
+    "Turn on the Space stations source in Objects to get the ISS and Tiangong elements." : {
+
+    },
+    "Turn on the Starlink source in Objects, Manage sources, to include them." : {
+
+    },
+    "URL" : {
+
+    },
+    "USB cable" : {
+
+    },
+    "USB port" : {
+
+    },
+    "Unflip east and west" : {
+
+    },
+    "Units" : {
+
+    },
+    "Untrack" : {
+
+    },
+    "Untrack: stop tracking and clear the target" : {
+
+    },
+    "Unwind" : {
+
+    },
+    "Unwind and carry on" : {
+
+    },
+    "Unwind at north without asking" : {
+
+    },
+    "Unwinding…" : {
+
+    },
+    "Up now · %lld° in the %@ · sets %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Up now · %1$lld° in the %2$@ · sets %3$@"
+          }
+        }
+      }
+    },
+    "Up now · sets in %@" : {
+
+    },
+    "Use alignment" : {
+
+    },
+    "Use iOptron's own axis coordinates instead of a star alignment. The mount loses its position when it changes mode, so each time it enters Special mode Overpass sets the axes to where the scope points: from the mount's Normal-mode position if it has one, otherwise from where Overpass last saw it." : {
+
+    },
+    "Use location" : {
+
+    },
+    "Use my current location" : {
+
+    },
+    "Use the highlighted object as the tracking target" : {
+
+    },
+    "Use the mount's GPS" : {
+
+    },
+    "Use the mount's own alignment" : {
+
+    },
+    "Use this" : {
+
+    },
+    "Uses the cable stop, altitude limits and axis speeds from Settings. Passes near the zenith need a fast azimuth swing, so the mount may lose them briefly at the top." : {
+
+    },
+    "Version" : {
+
+    },
+    "View" : {
+
+    },
+    "Visible only" : {
+
+    },
+    "Watch" : {
+
+    },
+    "Watch: refresh the elements and recalculate as it gets closer" : {
+
+    },
+    "Watching" : {
+
+    },
+    "Website" : {
+
+    },
+    "What the iPad sees on USB" : {
+
+    },
+    "What the mount reported about itself on connecting: state, GPS, clock and firmware" : {
+
+    },
+    "What's moving that way" : {
+
+    },
+    "What's there" : {
+
+    },
+    "When" : {
+
+    },
+    "Where are you?" : {
+
+    },
+    "Where is the scope pointing?" : {
+
+    },
+    "Working…" : {
+
+    },
+    "Zoom" : {
+
+    },
+    "alt" : {
+
+    },
+    "at %@" : {
+
+    },
+    "az" : {
+
+    },
+    "doesn't rise" : {
+
+    },
+    "every %@ s" : {
+
+    },
+    "from %@" : {
+
+    },
+    "goto" : {
+
+    },
+    "mag %@" : {
+
+    },
+    "max %lld°" : {
+
+    },
+    "no pass in %lld h" : {
+
+    },
+    "peak" : {
+
+    },
+    "rises in %@ · max %lld°" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "rises in %1$@ · max %2$lld°"
+          }
+        }
+      }
+    },
+    "within %@" : {
+
+    },
+    "· max %lld°" : {
+
+    },
+    "–" : {
+
+    },
+    "—" : {
+
+    },
+    "≥ %lld° up" : {
+
+    }
+  },
+  "version" : "1.0"
+}

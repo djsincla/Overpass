@@ -70,6 +70,9 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
+        # Strings for the catalog (App/Localizable.xcstrings): English, Spanish, German.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # The embed script writes into the app bundle; declaring its outputs would leave empty
         # folders in Release builds, where it does nothing.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
