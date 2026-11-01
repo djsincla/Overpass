@@ -40,7 +40,7 @@ struct ObserveView: View {
     }
 
     enum Panel: String, CaseIterable, Identifiable {
-        case passes = "Passes", objects = "Objects", mount = "Mount"
+        case passes = "Passes", objects = "Objects", status = "Status", mount = "Mount"
         var id: Self { self }
     }
 
@@ -200,12 +200,13 @@ struct ObserveView: View {
         }
     }
 
-    /// Passes or Objects, switched at the top.
+    /// Passes, Objects or Status, switched at the top.
     private var listPane: some View {
         VStack(spacing: 0) {
             Picker("List", selection: listBinding) {
                 Text("Passes").tag(Panel.passes)
                 Text("Objects").tag(Panel.objects)
+                Text("Status").tag(Panel.status)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -379,10 +380,10 @@ struct ObserveView: View {
             TimeBar()
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-            QuickFilters()
             switch panel {
-            case .objects: SelectedObjectsList()
-            default: PassesList()
+            case .status: StatusPanel()
+            case .objects: QuickFilters(); SelectedObjectsList()
+            default: QuickFilters(); PassesList()
             }
         }
     }

@@ -190,8 +190,8 @@ final class MountSession {
                 if id.isSpecialMode {
                     throw MountSessionError.inSpecialMode
                 }
-                // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
-                site = try? await client.site()
+                // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
+                await readReport(client)
                 gpsState = site?.gps
                 try await client.configure(latitude: s.latitude, longitude: s.longitude)
                 await stopMountTrackingIfSet(client)
@@ -215,15 +215,15 @@ final class MountSession {
                     _ = try await special.exitSpecialMode()
                     await holdStill(normal: client)
                     let position = await waitForNormalPosition(client)
-                    // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
-                    site = try? await client.site()
+                    // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
+                    await readReport(client)
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await stopMountTrackingIfSet(client)
                     await syncAfterSwitch(client, position: position)
                     id = try await client.identify()
                 } else {
-                    // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
-                    site = try? await client.site()
+                    // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
+                    await readReport(client)
                     try await client.configure(latitude: s.latitude, longitude: s.longitude)
                     await stopMountTrackingIfSet(client)
                     await syncIfLeftSpecialMode(client)
@@ -294,6 +294,8 @@ final class MountSession {
 
     private func closeTransport() async {
         site = nil
+        report = nil
+        reportDate = nil
         gpsState = nil
         gpsFixReads = 0
         await tcp?.close()
@@ -398,6 +400,25 @@ final class MountSession {
     /// The mount's own location as it was when Normal mode connected, before Overpass set its own,
     /// and later from its GPS once the fix is stable.
     private(set) var site: MountSite?
+    /// What the mount said about itself on connecting (Normal mode, or before switching to Special),
+    /// and when it was read, to compare its clock with this device's.
+    private(set) var report: MountReport?
+    private(set) var reportDate: Date?
+
+    private func readReport(_ client: NormalModeClient) async {
+        let asked = Date.now
+        report = try? await client.report()
+        reportDate = report == nil ? nil : asked
+        site = report?.site
+        if let report {
+            var line = "Mount: \(MountReport.systemName(report.system)), GPS \(Self.gpsName(report.site.gps)), time from \(MountReport.timeSourceName(report.timeSource))"
+            if let main = report.mainBoard { line += ", main board \(main)" }
+            if let hc = report.handController { line += ", hand controller \(hc)" }
+            if let a = report.azimuthBoard, let b = report.altitudeBoard { line += ", motor boards \(a) and \(b)" }
+            if let clock = report.clock { line += String(format: ", clock %+.1f s", clock.timeIntervalSince(asked)) }
+            log(line)
+        }
+    }
 
     /// The mount's GPS from its last status read: 0 no GPS, 1 searching, 2 fix. Nil in Special
     /// mode, which has no status command.
@@ -812,6 +833,27 @@ final class MountSession {
                     throw error
                 }
                 recentred = .now
+            }
+            // The mount's own tracking would carry on through north, which its goto never turns
+            // through: stop short and go the long way round, as Step does.
+            let here = try observer.look(at: object.target, AstroTime(skyNow))
+            let soon = try observer.look(at: object.target, AstroTime(skyNow + 60))
+            if Self.turnsLongWay(from: here, to: soon, stop: s.cableStopAzimuth) {
+                try? await normal.setTracking(false)
+                log("Passive \(object.name): reaching the cable stop, the mount's tracking stopped")
+                guard try await confirmUnwind(object.name, seconds: Self.slewTime(from: here, to: soon, stop: s.cableStopAzimuth)) else {
+                    status = "Stopped at north"
+                    return
+                }
+                var ahead = soon
+                for _ in 0..<3 {
+                    ahead = try observer.look(at: object.target, AstroTime(skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) + 60))
+                }
+                log("Going the long way round to " + describe(ahead) + " from " + describe(here))
+                status = "Going the long way round (the mount won't turn through the cable stop)…"
+                try await goto(normal, to: ahead, from: here)
+                recentred = .distantPast
+                continue
             }
             let state = try? await normal.systemStatus()
             if let state, state != lastState {
@@ -1825,6 +1867,8 @@ final class MountSession {
 
         let normal = NormalModeClient(transport: transport)
         await holdStill(normal: normal)
+        // Special mode has no status command, so ask while the mount still answers Normal ones.
+        await readReport(normal)
         let reading = try? await normal.altAz()
         if let reading { log(String(format: "Entering Special mode: :GAC# az %.3f° alt %.3f°", reading.azimuth, reading.altitude)) }
         let identity = try await client.enterSpecialMode()

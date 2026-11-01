@@ -10,6 +10,7 @@ struct MountPanel: View {
     var showsGuiding = true
     @State private var confirmingSun = false
     @State private var showingAlignment = false
+    @AppStorage("mount.showsDetails") private var showsMountDetails = false
 
     var body: some View {
         let mount = model.mount
@@ -45,7 +46,6 @@ struct MountPanel: View {
         } message: {
             Text("Never point a telescope, finder or camera at the Sun without a proper full-aperture solar filter. It can blind you instantly and destroy equipment.")
         }
-        .onChange(of: mount.kind) { _, _ in mount.preferredMode = modes.first ?? .step }
         // A satellite the mount can't follow by itself never shows Passive as the mode.
         .onChange(of: (model.targetObject ?? model.highlightedObject)?.id, initial: true) { _, _ in
             if !modes.contains(mount.preferredMode) { mount.preferredMode = modes.contains(.step) ? .step : modes.first ?? .step }
@@ -107,6 +107,11 @@ struct MountPanel: View {
                         .font(.callout).foregroundStyle(.secondary)
                         .help("Special mode has no command for the mount's status. Switch to Normal mode to see its GPS and location.")
                 }
+                DisclosureGroup("About the mount", isExpanded: $showsMountDetails) {
+                    MountReportTable().padding(.top, 4)
+                }
+                .font(.callout)
+                .help("What the mount reported about itself on connecting: state, GPS, clock and firmware")
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
                         Text(String(format: "%.0f° past north", past)).font(.callout).foregroundStyle(.orange)
@@ -359,15 +364,7 @@ struct MountPanel: View {
     }
 
     private func describe(_ identity: MountIdentity) -> String {
-        let name = switch identity.model {
-        case .haz31: "HAZ31"
-        case .haz46: "HAZ46"
-        case .hae29: "HAE29"
-        case .hae43: "HAE43"
-        case .azMountPro: "AZ Mount Pro"
-        case .unknown(let code): "Mount \(code)"
-        }
-        return "\(name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
+        "\(identity.model.name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
     }
 }
 

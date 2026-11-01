@@ -120,6 +120,11 @@ struct Settings: Codable, Equatable {
     /// Camera tracking's aim point, as fractions of the frame's width and height.
     var cameraAimX: Double = 0.5
     var cameraAimY: Double = 0.5
+    /// The imaging camera on the telescope, for the Status panel's exposure times.
+    var focalLength: Double = 1000
+    var pixelSize: Double = 3.76
+
+    var optics: CameraOptics { CameraOptics(focalLength: focalLength, pixelSize: pixelSize) }
 
     var observer: Observer {
         Observer(latitude: latitude, longitude: longitude, height: heightMeters, refraction: refraction)
@@ -563,6 +568,37 @@ final class AppModel {
             return info
         }.value
         if !fresh.isEmpty { satelliteInfo = fresh }
+    }
+
+    // MARK: Radio
+
+    /// SatNOGS transmitters by NORAD ID, loaded on demand.
+    private(set) var transmitters: [String: [Transmitter]] = [:]
+    @ObservationIgnored private var transmitterRequests: Set<String> = []
+
+    private static func transmittersFile(_ noradID: String) -> URL {
+        storage.appending(path: "transmitters").appending(path: "\(noradID).json")
+    }
+
+    /// The saved list first, then a fresh one if it's over a week old. Only the NORAD ID is sent.
+    func loadTransmitters(_ noradID: String) async {
+        guard !transmitterRequests.contains(noradID) else { return }
+        transmitterRequests.insert(noradID)
+        let file = Self.transmittersFile(noradID)
+        if let data = try? Data(contentsOf: file), let saved = try? SatNOGS.parseTransmitters(data) {
+            transmitters[noradID] = SatNOGS.sorted(saved)
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, Date.now.timeIntervalSince(modified) < 7 * 86_400 { return }
+        }
+        guard let (data, response) = try? await URLSession.shared.data(from: SatNOGS.transmittersURL(noradID: noradID)),
+              (response as? HTTPURLResponse)?.statusCode == 200, let fresh = try? SatNOGS.parseTransmitters(data) else {
+            // Try again next time the panel asks.
+            transmitterRequests.remove(noradID)
+            return
+        }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: file)
+        transmitters[noradID] = SatNOGS.sorted(fresh)
     }
 
     func magnitude(_ object: SkyObject, at date: Date) -> Double? {

@@ -5,7 +5,7 @@ struct AboutRows: View {
     static let author = "Dwayne Sinclair"
     static let callSign = "AB6A"
     static let email = "AB6A@arrl.net"
-    static let credits = "Orbital elements and the satellite catalogue (launch, orbit, radar cross-section) come from CelesTrak. Physical dimensions come from Jonathan McDowell's General Catalog of Artificial Space Objects (planet4589.org/space/gcat), under CC BY 4.0."
+    static let credits = "Orbital elements and the satellite catalogue (launch, orbit, radar cross-section) come from CelesTrak. Physical dimensions come from Jonathan McDowell's General Catalog of Artificial Space Objects (planet4589.org/space/gcat), under CC BY 4.0. Radio transmitters come from the SatNOGS DB (db.satnogs.org), under CC BY-SA 4.0."
 
     var body: some View {
         LabeledContent("Version", value: SettingsView.version)
