@@ -48,6 +48,11 @@ struct LookUpView: View {
                 // Tap something seen to name it; swipe along its path to tell close ones apart.
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onEnded { identify($0, size: proxy.size) })
+                // VoiceOver can't tap a point in the sky: name what the middle of the screen points at.
+                .accessibilityElement()
+                .accessibilityLabel("Sky")
+                .accessibilityHint("Point the device at a satellite, then use the Identify action")
+                .accessibilityAction(named: "Identify the satellite in the middle") { identifyCentre(size: proxy.size) }
             }
             .ignoresSafeArea()
             .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
@@ -79,6 +84,8 @@ struct LookUpView: View {
                         .foregroundStyle(.white)
                 }
                 .padding()
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                .padding()
             }
         }
         .onAppear {
@@ -107,6 +114,11 @@ struct LookUpView: View {
         let swiped = hypot(drag.translation.width, drag.translation.height) > 25
         let to = swiped ? sky.horizontal(atX: drag.location.x, y: drag.location.y) : nil
         search(Sighting(from: from, to: to, date: model.viewDate()))
+    }
+
+    private func identifyCentre(size: CGSize) {
+        guard let sky = projection(size) else { return }
+        search(Sighting(from: sky.horizontal(atX: size.width / 2, y: size.height / 2), to: nil, date: model.viewDate()))
     }
 
     /// The satellites `scope` covers, from the sources that are on.

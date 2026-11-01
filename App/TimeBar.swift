@@ -6,6 +6,12 @@ import SwiftUI
 struct TimeBar: View {
     @Environment(AppModel.self) private var model
     @State private var dragging = false
+    /// The marks' labels, 9 points at the default text size, larger with the text size setting
+    /// up to where nine labels still fit across a phone.
+    @ScaledMetric(relativeTo: .caption2) private var scaledMarkSize: CGFloat = 9
+    private var markFontSize: CGFloat { min(scaledMarkSize, 14) }
+    /// Where the labels' centres sit, under the groove.
+    private var labelY: CGFloat { 22 + markFontSize * 0.7 }
 
     /// The labelled marks, as offsets from now. One day is marked but not labelled (it would
     /// crowd the two-day label).
@@ -62,10 +68,10 @@ struct TimeBar: View {
                                 .offset(x: px - 0.5, y: 8)
                             if let label = mark.label {
                                 Text((side < 0 ? "−" : "+") + label)
-                                    .font(.system(size: 9, weight: .medium).monospacedDigit())
+                                    .font(.system(size: markFontSize, weight: .medium).monospacedDigit())
                                     .foregroundStyle(.secondary)
                                     .fixedSize()
-                                    .position(x: px, y: 28)
+                                    .position(x: px, y: labelY)
                             }
                         }
                     }
@@ -77,10 +83,10 @@ struct TimeBar: View {
                         p.closeSubpath()
                     }
                     .fill(shifted ? Color.secondary : Theme.rising)
-                    Text("NOW").font(.system(size: 9, weight: .bold)).tracking(0.5)
+                    Text("NOW").font(.system(size: markFontSize, weight: .bold)).tracking(0.5)
                         .foregroundStyle(shifted ? Color.secondary : Theme.rising)
                         .fixedSize()
-                        .position(x: centre, y: 28)
+                        .position(x: centre, y: labelY)
                     // The thumb.
                     Circle()
                         .fill(.white)
@@ -99,7 +105,7 @@ struct TimeBar: View {
                     }
                     .onEnded { _ in dragging = false })
             }
-            .frame(height: 34)
+            .frame(height: labelY + markFontSize * 0.7)
             .sensoryFeedback(.selection, trigger: shift == 0)
         }
         .accessibilityElement(children: .ignore)
