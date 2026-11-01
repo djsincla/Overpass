@@ -311,10 +311,12 @@ final class AppModel {
         }
     }
 
-    /// Fetches elements that are due and predicts again once the passes are half an hour old.
+    /// Predicts again once the passes are half an hour old, from the elements already saved, then
+    /// fetches those that are due: a slow network doesn't hold up the list.
     /// Called every 15 minutes and whenever the app comes back to the front.
     func keepCurrent() async {
         guard let predictedAt, Date.now.timeIntervalSince(predictedAt) > 30 * 60, !isRefreshing else { return }
+        await predict()
         await refreshDue()
     }
 
