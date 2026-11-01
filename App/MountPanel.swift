@@ -359,15 +359,7 @@ struct MountPanel: View {
     }
 
     private func describe(_ identity: MountIdentity) -> String {
-        let name = switch identity.model {
-        case .haz31: "HAZ31"
-        case .haz46: "HAZ46"
-        case .hae29: "HAE29"
-        case .hae43: "HAE43"
-        case .azMountPro: "AZ Mount Pro"
-        case .unknown(let code): "Mount \(code)"
-        }
-        return "\(name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
+        "\(identity.model.name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
     }
 }
 

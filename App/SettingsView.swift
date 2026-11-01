@@ -142,6 +142,15 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    TextField("Focal length (mm)", value: $model.settings.focalLength, format: .number.precision(.fractionLength(0...1)))
+                    TextField("Pixel size (µm)", value: $model.settings.pixelSize, format: .number.precision(.fractionLength(0...2)))
+                } header: {
+                    Text("Camera")
+                } footer: {
+                    Text("The camera on the telescope, for the exposure times, frame rates and sizes on the Status panel. The pixel size is on the sensor's data sheet.")
+                }
+
+                Section {
                     Button("Export settings…") {
                         settingsFile = JSONFile(data: model.settingsFile())
                         exportingSettings = true

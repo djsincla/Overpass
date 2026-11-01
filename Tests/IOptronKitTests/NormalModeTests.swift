@@ -94,6 +94,27 @@ import Testing
         #expect(site.hasFix)
     }
 
+    @Test func readsTheFullReport() async throws {
+        // GPS fix, stopped, sidereal, speed 5, time from GPS, north; then firmware and the clock.
+        let status = "-43380000" + "45090000" + "200531" + "#"
+        let transport = ScriptedTransport(replies: [status, "230512xxxxxx#", "221103221104#", "+0000" + "0846720000000" + "#"])
+        let report = try await NormalModeClient(transport: transport).report()
+        #expect(transport.written == [":GLS#", ":FW1#", ":FW2#", ":GUT#"])
+        #expect(report.site.hasFix && report.system == 0 && report.trackingRate == 0)
+        #expect(report.moveSpeed == 5 && report.timeSource == 3 && report.northernHemisphere)
+        #expect(report.mainBoard == "2023-05-12" && report.handController == nil)
+        #expect(report.azimuthBoard == "2022-11-03" && report.altitudeBoard == "2022-11-04")
+        #expect(report.utcOffsetMinutes == 0 && report.daylightSaving == false)
+        #expect(report.clock == Date(timeIntervalSince1970: 946_728_000 + 846_720_000))
+    }
+
+    @Test func reportSurvivesUnansweredExtras() async throws {
+        let status = "+00000000" + "32400000" + "010510" + "#"
+        let report = try await NormalModeClient(transport: ScriptedTransport(replies: [status, "<timeout>", "12#", "<timeout>"])).report()
+        #expect(!report.northernHemisphere && report.timeSource == 1)
+        #expect(report.mainBoard == nil && report.clock == nil)
+    }
+
     @Test func maximumSlewSpeedIsClamped() {
         #expect(NormalCommand.setMaximumSlewSpeed(9).wire == ":MSR9#")
         #expect(NormalCommand.setMaximumSlewSpeed(12).wire == ":MSR9#")
