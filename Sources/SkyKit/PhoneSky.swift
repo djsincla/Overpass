@@ -74,6 +74,26 @@ public struct PhoneSkyProjection: Sendable {
         return (width / 2 + s.right * t, height / 2 + verticalShift - s.up * t)
     }
 
+    /// The sky position under a screen point: the inverse of `point`.
+    public func horizontal(atX x: Double, y: Double) -> Horizontal {
+        let right = (x - width / 2) / focal, up = -(y - height / 2 - verticalShift) / focal
+        // Screen right and up back to device x and y (the inverse of `screenAxes`); the camera looks along -z.
+        let (dx, dy): (Double, Double) = switch orientation {
+        case .portrait: (right, up)
+        case .portraitUpsideDown: (-right, -up)
+        case .landscapeRight: (up, -right)
+        case .landscapeLeft: (-up, right)
+        }
+        let d = (dx, dy, -1.0)
+        // Device to sky is the transpose of the sky-to-device rotation.
+        let sx = rotation[0][0] * d.0 + rotation[1][0] * d.1 + rotation[2][0] * d.2
+        let sy = rotation[0][1] * d.0 + rotation[1][1] * d.1 + rotation[2][1] * d.2
+        let sz = rotation[0][2] * d.0 + rotation[1][2] * d.1 + rotation[2][2] * d.2
+        let length = (sx * sx + sy * sy + sz * sz).squareRoot()
+        return Horizontal(azimuth: normalizedDegrees(atan2(-sy, sx).degrees),
+                          altitude: asin(max(-1, min(1, sz / length))).degrees, range: 0)
+    }
+
     /// Where the camera's centre is on screen: where `centre` is drawn.
     public var opticalCentre: (x: Double, y: Double) { (width / 2, height / 2 + verticalShift) }
 

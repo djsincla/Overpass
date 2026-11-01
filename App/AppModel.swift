@@ -416,6 +416,21 @@ final class AppModel {
         }
     }
 
+    /// Takes a satellite off the sky: its shown tracks hidden, and the highlight moved to the last
+    /// track left (or cleared) if it was on this one.
+    func unhighlight(_ objectID: String) {
+        let noradID = objectID.hasPrefix("sat:") ? String(objectID.dropFirst(4)) : nil
+        if let noradID { shownTrackKeys.removeAll { $0.noradID == noradID } }
+        guard highlightedObjectID == objectID || (noradID != nil && highlightedPassKey?.noradID == noradID) else { return }
+        if let last = shownTrackKeys.last {
+            highlightedPassKey = (last.noradID, last.start)
+            highlightedObjectID = "sat:\(last.noradID)"
+        } else {
+            highlightedPassKey = nil
+            highlightedObjectID = nil
+        }
+    }
+
     func toggleTrack(_ pass: SatellitePass) {
         if isShown(pass) { hideTrack(pass) } else { showTrack(pass) }
     }
