@@ -81,6 +81,12 @@ struct ObserveView: View {
             #endif
             .toolbar {
                 @Bindable var model = model
+                #if os(iOS)
+                // A little larger than the standard inline title.
+                ToolbarItem(placement: .principal) {
+                    Text("Overpass").font(.title3.weight(.semibold))
+                }
+                #endif
                 ToolbarItem(placement: .primaryAction) {
                     Toggle(isOn: $model.settings.redMode) {
                         Label("Red mode", systemImage: "eye")
