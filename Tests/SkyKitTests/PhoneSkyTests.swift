@@ -75,3 +75,53 @@ private func rotation(aim: Horizontal) -> [[Double]] {
         [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
     }
 }
+
+@Suite struct ScreenToSkyTests {
+    @Test(arguments: [PhoneSkyProjection.Orientation.portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight])
+    func screenPointsTurnBackIntoTheSky(orientation: PhoneSkyProjection.Orientation) throws {
+        let aim = Horizontal(azimuth: 200, altitude: 40)
+        let f = PhoneSkyProjection.skyVector(aim)
+        let r = PhoneSkyProjection.skyVector(Horizontal(azimuth: aim.azimuth + 90, altitude: 0))
+        let u = (r.1 * f.2 - r.2 * f.1, r.2 * f.0 - r.0 * f.2, r.0 * f.1 - r.1 * f.0)
+        let sky = PhoneSkyProjection(rotation: [[r.0, r.1, r.2], [u.0, u.1, u.2], [-f.0, -f.1, -f.2]],
+                                     focal: PhoneSkyProjection.focal(longSide: 844, fieldOfView: 60),
+                                     width: 390, height: 844, orientation: orientation, verticalShift: 30)
+        for h in [aim, Horizontal(azimuth: 215, altitude: 52), Horizontal(azimuth: 188, altitude: 31)] {
+            let p = try #require(sky.point(h))
+            let back = sky.horizontal(atX: p.x, y: p.y)
+            #expect(angularSeparation(back.unitVector, h.unitVector) < 1e-6)
+        }
+    }
+}
+
+@Suite struct SatelliteIdentifierTests {
+    let observer = Observer(latitude: 40, longitude: -75)
+
+    @Test func findsTheISSAndUsesItsDirection() throws {
+        let iss = TLEParser.parse(issTLE)[0]
+        let pass = try #require(try PassPredictor(observer: observer).passes(of: iss, from: iss.epoch, to: iss.epoch + 2 * 86_400)
+            .first { !$0.truncated && $0.maxAltitude > 30 })
+        let date = pass.culmination.date
+        let here = try observer.look(at: iss, AstroTime(date))
+        let later = try observer.look(at: iss, AstroTime(date + 2))
+        // Pointed 3° off, the ISS is the best match.
+        let aim = Horizontal(azimuth: here.azimuth + 3 / cos(here.altitude.radians), altitude: here.altitude)
+        let tapped = SatelliteIdentifier.candidates(among: [iss], observer: observer, at: date, pointedAt: aim)
+        #expect(tapped.first?.satellite.noradID == iss.noradID)
+        #expect(abs((tapped.first?.offset ?? 0) - 3) < 0.2 && tapped.first?.directionError == nil)
+
+        // A swipe along its path agrees; one against it doesn't.
+        let along = SatelliteIdentifier.candidates(among: [iss], observer: observer, at: date, pointedAt: here, towards: later)
+        #expect((along.first?.directionError ?? 180) < 2)
+        let against = SatelliteIdentifier.candidates(among: [iss], observer: observer, at: date, pointedAt: later, towards: here)
+        #expect((against.first?.directionError ?? 0) > 170)
+        #expect((against.first?.score ?? 0) > (along.first?.score ?? 0))
+    }
+
+    @Test func nothingFarAwayOrBelowTheHorizon() throws {
+        let iss = TLEParser.parse(issTLE)[0]
+        let here = try observer.look(at: iss, AstroTime(iss.epoch))
+        let opposite = Horizontal(azimuth: here.azimuth + 180, altitude: max(10, -here.altitude))
+        #expect(SatelliteIdentifier.candidates(among: [iss], observer: observer, at: iss.epoch, pointedAt: opposite, radius: 15).isEmpty)
+    }
+}

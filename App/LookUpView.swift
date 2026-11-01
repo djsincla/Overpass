@@ -17,6 +17,10 @@ struct LookUpView: View {
 
     /// The whole screen's size, from the layer that ignores the safe area.
     @State private var screen = CGSize.zero
+    /// A tap or swipe on something seen, and the satellites that could be it.
+    @State private var sighting: Sighting?
+    @State private var statusRequest: StatusSheetRequest?
+    @AppStorage("lookUp.sightingScope") private var scope = SightingScope.brightest
 
     var body: some View {
         let date = model.viewDate()
@@ -29,13 +33,19 @@ struct LookUpView: View {
                 ZStack {
                     if cameraShown {
                         SkyCameraPreview(session: camera.session, shift: shift(proxy.size))
+                            // Taps go to the identify gesture, not the camera's own view.
+                            .allowsHitTesting(false)
                     } else {
                         Theme.space
                     }
                     if let sky = projection(proxy.size) {
-                        LookUpOverlay(sky: sky, date: date, pass: pass, observer: model.settings.observer, live: live)
+                        LookUpOverlay(sky: sky, date: date, pass: pass, observer: model.settings.observer, live: live,
+                                      sighting: sighting)
                     }
                 }
+                // Tap something seen to name it; swipe along its path to tell close ones apart.
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onEnded { identify($0, size: proxy.size) })
             }
             .ignoresSafeArea()
             .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
@@ -47,7 +57,15 @@ struct LookUpView: View {
                 VStack {
                     topBar
                     Spacer()
-                    LookUpStatus(sky: sky, date: date, pass: pass, live: live, usesTrueNorth: motion.usesTrueNorth)
+                    if let sighting {
+                        SightingCard(sighting: sighting, date: date, scope: $scope,
+                                     starlinkOn: model.groups.contains { $0.id == "celestrak-starlink" && $0.source.enabled },
+                                     status: { statusRequest = StatusSheetRequest(objectID: "sat:\($0.noradID)") },
+                                     show: { show($0) },
+                                     close: { self.sighting = nil })
+                    } else {
+                        LookUpStatus(sky: sky, date: date, pass: pass, live: live, usesTrueNorth: motion.usesTrueNorth)
+                    }
                 }
                 .padding()
             } else if motion.rotation == nil {
@@ -73,6 +91,53 @@ struct LookUpView: View {
             UIApplication.shared.isIdleTimerDisabled = model.mount.state == .connected
         }
         .onChange(of: showsCamera) { _, on in on ? camera.start() : camera.stop() }
+        .sheet(item: $statusRequest) { StatusSheet(request: $0) }
+        .onChange(of: scope) { _, _ in
+            // Search the same tap again over the new set.
+            if let sighting { search(Sighting(from: sighting.from, to: sighting.to, date: sighting.date)) }
+        }
+    }
+
+    /// Looks for the satellites near where the tap or swipe started, moving the swipe's way.
+    private func identify(_ drag: DragGesture.Value, size: CGSize) {
+        guard let sky = projection(size) else { return }
+        let from = sky.horizontal(atX: drag.startLocation.x, y: drag.startLocation.y)
+        let swiped = hypot(drag.translation.width, drag.translation.height) > 25
+        let to = swiped ? sky.horizontal(atX: drag.location.x, y: drag.location.y) : nil
+        search(Sighting(from: from, to: to, date: model.viewDate()))
+    }
+
+    /// The satellites `scope` covers, from the sources that are on.
+    private var searched: [SatelliteTarget] {
+        func group(_ id: String) -> [SatelliteTarget] { model.groups.first { $0.id == id && $0.source.enabled }?.satellites ?? [] }
+        var list: [SatelliteTarget]
+        switch scope {
+        case .brightest: list = group("celestrak-visual") + group("celestrak-stations")
+        case .starlink: list = group("celestrak-visual") + group("celestrak-stations") + group("celestrak-starlink")
+        case .all: list = model.satellites
+        }
+        var seen = Set<String>()
+        return list.filter { seen.insert($0.noradID).inserted }
+    }
+
+    private func search(_ request: Sighting) {
+        sighting = request
+        let (from, to, date) = (request.from, request.to, request.date)
+        let satellites = searched, observer = model.settings.observer
+        Task {
+            let found = await Task.detached(priority: .userInitiated) {
+                SatelliteIdentifier.candidates(among: satellites, observer: observer, at: date, pointedAt: from, towards: to)
+            }.value
+            if sighting?.id == request.id { sighting?.candidates = found }
+        }
+    }
+
+    /// Selects the satellite, so its passes are predicted, and highlights it, so its path is drawn here.
+    private func show(_ satellite: SatelliteTarget) {
+        let id = "sat:\(satellite.noradID)"
+        if !model.isSelected(id) { model.toggle(id) }
+        model.highlight(objectID: id)
+        sighting = nil
     }
 
     private var topBar: some View {
@@ -132,6 +197,7 @@ private struct LookUpOverlay: View {
     let pass: SatellitePass?
     let observer: Observer
     let live: [LiveObject]
+    var sighting: Sighting?
 
     var body: some View {
         Canvas { context, size in
@@ -142,6 +208,7 @@ private struct LookUpOverlay: View {
             drawLive(&context)
             drawTarget(&context, size)
             drawReticle(&context, size)
+            if let sighting { drawSighting(&context, sighting) }
         }
         .allowsHitTesting(false)
     }
@@ -263,6 +330,33 @@ private struct LookUpOverlay: View {
             context.fill(Path(ellipseIn: CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10)), with: .color(color))
             context.draw(Text(object.name).font(.caption.bold()).foregroundStyle(color),
                          at: CGPoint(x: p.x, y: p.y - 14))
+        }
+    }
+
+    /// Where you tapped (with the swipe's arrow), and the candidates numbered where they are now.
+    private func drawSighting(_ context: inout GraphicsContext, _ sighting: Sighting) {
+        if let p = sky.point(sighting.from) {
+            context.stroke(Path(ellipseIn: CGRect(x: p.x - 22, y: p.y - 22, width: 44, height: 44)),
+                           with: .color(Theme.focus), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+            if let to = sighting.to, let q = sky.point(to) {
+                var arrow = Path()
+                arrow.move(to: cg(p))
+                arrow.addLine(to: cg(q))
+                context.stroke(arrow, with: .color(Theme.focus), lineWidth: 2)
+                let angle = atan2(q.y - p.y, q.x - p.x)
+                var head = Path()
+                head.move(to: cg(q))
+                head.addLine(to: CGPoint(x: q.x - 10 * cos(angle - 0.4), y: q.y - 10 * sin(angle - 0.4)))
+                head.move(to: cg(q))
+                head.addLine(to: CGPoint(x: q.x - 10 * cos(angle + 0.4), y: q.y - 10 * sin(angle + 0.4)))
+                context.stroke(head, with: .color(Theme.focus), lineWidth: 2)
+            }
+        }
+        for (i, candidate) in (sighting.candidates ?? []).enumerated() {
+            guard let h = try? observer.look(at: candidate.satellite, AstroTime(date)), let p = sky.point(h) else { continue }
+            let color = candidate.sunlit ? Theme.sunlit : Theme.eclipsed
+            context.stroke(Path(ellipseIn: CGRect(x: p.x - 9, y: p.y - 9, width: 18, height: 18)), with: .color(color), lineWidth: 2)
+            context.draw(Text("\(i + 1)").font(.caption.bold()).foregroundStyle(color), at: CGPoint(x: p.x + 15, y: p.y - 12))
         }
     }
 
@@ -517,5 +611,86 @@ private struct SkyCameraPreview: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PreviewView, context: Context) { view.shift = shift }
+}
+
+/// A tap or swipe on the sky, and what was found there.
+struct Sighting: Identifiable {
+    let id = UUID()
+    let from: Horizontal
+    let to: Horizontal?
+    let date: Date
+    /// Nil while looking.
+    var candidates: [SightingCandidate]?
+}
+
+/// Which satellites a tap is matched against.
+enum SightingScope: String, CaseIterable, Identifiable {
+    case brightest = "Brightest", starlink = "+ Starlink", all = "All sources"
+    var id: Self { self }
+}
+
+/// The satellites that could be the one tapped, best match first.
+private struct SightingCard: View {
+    let sighting: Sighting
+    let date: Date
+    @Binding var scope: SightingScope
+    let starlinkOn: Bool
+    let status: (SatelliteTarget) -> Void
+    let show: (SatelliteTarget) -> Void
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(sighting.to == nil ? "What's there" : "What's moving that way").font(.headline)
+                Spacer()
+                Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    .accessibilityLabel("Close")
+            }
+            Picker("Search", selection: $scope) {
+                ForEach(SightingScope.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if scope == .starlink && !starlinkOn {
+                Text("Turn on the Starlink source in Objects, Manage sources, to include them.").font(.caption).foregroundStyle(.secondary)
+            }
+            if let candidates = sighting.candidates {
+                if candidates.isEmpty {
+                    Text("No satellite in this set is up within 15° of there. The phone's compass can be well out; hold it away from metal and try again, or turn on more sources in Objects.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(candidates.enumerated()), id: \.element.id) { i, c in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("\(i + 1)").font(.callout.bold()).foregroundStyle(c.sunlit ? Theme.sunlit : Theme.eclipsed)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(c.satellite.name).font(.callout.weight(.medium)).lineLimit(1)
+                                Text(detail(c)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Status") { status(c.satellite) }.buttonStyle(.bordered).controlSize(.small)
+                            Button("Show") { show(c.satellite) }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                    if sighting.to == nil {
+                        Text("Swipe along its path instead of tapping to tell close ones apart.").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                HStack { ProgressView(); Text("Looking…").foregroundStyle(.secondary) }
+            }
+        }
+        .padding()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func detail(_ c: SightingCandidate) -> String {
+        var parts = [String(format: "%.1f° from where you tapped", c.offset)]
+        if let e = c.directionError {
+            parts.append(e < 25 ? "moving your way" : e > 155 ? "moving the other way" : String(format: "path %.0f° off", e))
+        }
+        parts.append(c.sunlit ? "sunlit" : "in shadow")
+        return parts.joined(separator: " · ")
+    }
 }
 #endif
