@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.4.5 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.5.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -98,6 +98,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.5.0**, 1 November 2026. A Status panel on the Observe screen gives the tracking target in numbers: range and range rate, speed, height, the Maidenhead square below it, countdowns to rise, set and shadow entry, Doppler-corrected frequencies from the SatNOGS DB, exposure times for your camera, and whether the mount can keep up. The mount panel shows what the mount reports about itself on connecting, including its clock and firmware. Objects gains Messier, Caldwell, NGC and IC by the hand controller's numbers, every IAU-named star to magnitude 4, and comets from the Minor Planet Center, all tracked by the mount's own goto in Passive mode. Switching back from Special mode no longer changes Step to Passive, and Passive tracking stops before north and asks to go the long way round.
 
 **0.4.5**, 30 October 2026. The USB relay is gone. An iPhone connects to the mount over WiFi, and so does an iPad for now: Overpass has its own driver for the mount's USB cable on iPads with an M1 or later chip, which reaches TestFlight once Apple approves it.
 
