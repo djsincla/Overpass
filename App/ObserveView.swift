@@ -76,8 +76,8 @@ struct ObserveView: View {
             }
             .navigationTitle("Overpass")
             #if os(iOS)
-            // On a phone on its side the large title takes a quarter of the height.
-            .navigationBarTitleDisplayMode(verticalSizeClass == .compact ? .inline : .automatic)
+            // The title on the toolbar's line: a large title sits below it and takes height from the sky.
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 @Bindable var model = model
