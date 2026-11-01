@@ -22,9 +22,11 @@ struct PositionQuestionView: View {
             Text("The mount and Overpass disagree by \(Int(apart.rounded()))°. Either can be wrong: after leaving Special mode the mount can report an old position, and Overpass doesn't see moves made with the hand controller.")
                 .fixedSize(horizontal: false, vertical: true)
 
-            choice("The mount's reading", question.mount, detail: "What the mount reports now") { model.mount.answerPosition(.mount) }
-            choice("Overpass's record", question.record,
-                   detail: "Where Overpass last saw the scope, \(question.recordDate.formatted(date: .abbreviated, time: .shortened))") {
+            choice(String(localized: "The mount's reading"), question.mount, detail: String(localized: "What the mount reports now")) {
+                model.mount.answerPosition(.mount)
+            }
+            choice(String(localized: "Overpass's record"), question.record,
+                   detail: String(localized: "Where Overpass last saw the scope, \(question.recordDate.formatted(date: .abbreviated, time: .shortened))")) {
                 model.mount.answerPosition(.record)
             }
 
@@ -62,7 +64,8 @@ struct PositionQuestionView: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(String(format: "az %.1f°  alt %.1f°", h.azimuth, h.altitude)).monospacedDigit()
+                Text("az \(h.azimuth.formatted(.number.precision(.fractionLength(1))))°  alt \(h.altitude.formatted(.number.precision(.fractionLength(1))))°")
+                    .monospacedDigit()
             }
             .padding(10)
             .contentShape(Rectangle())

@@ -16,13 +16,13 @@ struct MountPanel: View {
         let mount = model.mount
         VStack(alignment: .leading, spacing: 10) {
             header
-            Card(title: "Move", systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
+            Card(title: String(localized: "Move", comment: "Card title: manual moves of the mount"), systemImage: "arrow.up.and.down.and.arrow.left.and.right") {
                 ControlPad()
                     .disabled(mount.state != .connected)
                     .opacity(mount.state == .connected ? 1 : 0.45)
             }
             if mount.state == .connected {
-                Card(title: "Tracking", systemImage: "scope") {
+                Card(title: String(localized: "Tracking", comment: "Card title"), systemImage: "scope") {
                     tracking
                     if showsAlignment {
                         Divider().padding(.vertical, 2)
@@ -30,7 +30,7 @@ struct MountPanel: View {
                     }
                 }
                 if showsGuiding, mount.kind?.isSpecialMode == true {
-                    Card(title: "Camera guiding", systemImage: "camera.viewfinder") { GuidingPanel() }
+                    Card(title: String(localized: "Camera guiding"), systemImage: "camera.viewfinder") { GuidingPanel() }
                 }
             }
             if !mount.status.isEmpty {
@@ -90,8 +90,10 @@ struct MountPanel: View {
             if connected {
                 HStack(alignment: .center, spacing: 18) {
                     let h = mount.skyPosition
-                    Readout(label: "AZ", value: h.map { String(format: "%06.2f°", $0.azimuth) } ?? "———")
-                    Readout(label: "ALT", value: h.map { String(format: "%+06.2f°", $0.altitude) } ?? "———")
+                    Readout(label: String(localized: "AZ", comment: "Azimuth, abbreviated"),
+                            value: h.map { $0.azimuth.formatted(.number.precision(.integerAndFractionLength(integer: 3, fraction: 2)).grouping(.never)) + "°" } ?? "———")
+                    Readout(label: String(localized: "ALT", comment: "Altitude, abbreviated"),
+                            value: h.map { $0.altitude.formatted(.number.precision(.integerAndFractionLength(integer: 2, fraction: 2)).sign(strategy: .always())) + "°" } ?? "———")
                     Spacer(minLength: 4)
                     Button { Task { await mount.stopAll() } } label: {
                         Label("STOP", systemImage: "stop.fill")
@@ -114,7 +116,7 @@ struct MountPanel: View {
                 .help("What the mount reported about itself on connecting: state, GPS, clock and firmware")
                 if let past = mount.pastNorth, !mount.isTracking {
                     HStack {
-                        Text(String(format: "%.0f° past north", past)).font(.callout).foregroundStyle(.orange)
+                        Text("\(past.formatted(.number.precision(.fractionLength(0))))° past north").font(.callout).foregroundStyle(.orange)
                         Spacer()
                         Button(mount.isUnwinding ? "Unwinding…" : "Unwind") { mount.unwind() }
                             .disabled(mount.isUnwinding)
@@ -131,9 +133,9 @@ struct MountPanel: View {
         let mount = model.mount
         let color: Color = gps == 2 ? (mount.gpsStable ? Theme.target : Theme.focus) : gps == 1 ? Theme.focus : .secondary
         let label = switch gps {
-        case 2: mount.gpsStable ? "GPS fix" : "GPS fix, settling"
-        case 1: "GPS searching"
-        default: "No GPS"
+        case 2: mount.gpsStable ? String(localized: "GPS fix") : String(localized: "GPS fix, settling")
+        case 1: String(localized: "GPS searching")
+        default: String(localized: "No GPS")
         }
         HStack(spacing: 8) {
             Image(systemName: gps == 0 ? "location.slash" : "location.fill").foregroundStyle(color)
@@ -142,8 +144,11 @@ struct MountPanel: View {
                 if let site = mount.site, gps == 2 {
                     let saved = Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude)
                     let away = Geodesy.distance(saved, Geodetic(latitude: site.latitude, longitude: site.longitude))
-                    Text(String(format: "%.4f°, %.4f°", site.latitude, site.longitude)
-                         + (!model.settings.hasLocation ? "" : away < 0.1 ? " · matches yours" : " · \(model.units.distance(away, decimals: away < 10 ? 1 : 0)) from yours"))
+                    let coordinates = String(localized: "\(site.latitude.formatted(.number.precision(.fractionLength(4))))°, \(site.longitude.formatted(.number.precision(.fractionLength(4))))°",
+                                             comment: "Latitude and longitude")
+                    Text(coordinates
+                         + (!model.settings.hasLocation ? "" : away < 0.1 ? String(localized: " · matches yours", comment: "The mount's GPS location matches the user's")
+                            : String(localized: " · \(model.units.distance(away, decimals: away < 10 ? 1 : 0)) from yours")))
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
             }
@@ -161,9 +166,9 @@ struct MountPanel: View {
 
     private var stateText: String {
         switch model.mount.state {
-        case .disconnected: "\(model.settings.connection.rawValue) · not connected"
-        case .connecting: "Connecting…"
-        case .connected: model.mount.identity.map(describe) ?? "Connected"
+        case .disconnected: String(localized: "\(model.settings.connection.rawValue) · not connected")
+        case .connecting: String(localized: "Connecting…")
+        case .connected: model.mount.identity.map(describe) ?? String(localized: "Connected")
         case .failed(let why): why
         }
     }
@@ -188,7 +193,7 @@ struct MountPanel: View {
             HStack {
                 if modes.count > 1 {
                     Picker("Mode", selection: Bindable(mount).preferredMode) {
-                        ForEach(modes) { Text($0.rawValue).tag($0) }
+                        ForEach(modes) { Text($0.name).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -196,7 +201,7 @@ struct MountPanel: View {
                     .help(modeExplanation)
                     .disabled(mount.isTracking)
                 } else if let only = modes.first {
-                    Chip(text: only.rawValue, systemImage: only == .smooth ? "waveform.path" : "stairs", tint: Theme.accent)
+                    Chip(text: only.name, systemImage: only == .smooth ? "waveform.path" : "stairs", tint: Theme.accent)
                         .help(modeExplanation)
                 }
                 if mount.preferredMode == .step && mount.kind?.isSpecialMode == false {
@@ -218,7 +223,7 @@ struct MountPanel: View {
                         .background(Color.primary.opacity(0.06), in: Circle()).accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(target?.name ?? "No target set").font(.callout.weight(.medium)).lineLimit(1)
+                    Text(target?.name ?? String(localized: "No target set")).font(.callout.weight(.medium)).lineLimit(1)
                     if let detail = targetDetail {
                         Text(detail).font(.caption.monospacedDigit())
                             .foregroundStyle(model.timeShift != 0 ? Theme.focus : mount.isTracking ? Theme.target : .secondary)
@@ -299,10 +304,11 @@ struct MountPanel: View {
     private var targetDetail: String? {
         guard model.targetObject != nil else { return nil }
         let shift = model.timeShift
-        let timeline = shift == 0 ? "" : " · timeline \(shift < 0 ? "−" : "+")\(countdown(abs(shift)))"
-        if let mode = model.mount.trackingMode { return "\(mode.rawValue) tracking\(timeline)" }
+        let timeline = shift == 0 ? "" : String(localized: " · timeline \(shift < 0 ? "−" : "+")\(countdown(abs(shift)))",
+                                                comment: "How far the time bar is shifted from now")
+        if let mode = model.mount.trackingMode { return String(localized: "\(mode.name) tracking\(timeline)", comment: "Tracking mode, then any time-bar shift") }
         if let pass = model.targetPass {
-            return "\(pass.start.date.formatted(date: .omitted, time: .shortened)) · peaks \(Int(pass.maxAltitude))°\(timeline)"
+            return String(localized: "\(pass.start.date.formatted(date: .omitted, time: .shortened)) · peaks \(Int(pass.maxAltitude))°\(timeline)")
         }
         return nil
     }
@@ -341,10 +347,11 @@ struct MountPanel: View {
     // MARK: Helpers
 
     private var alignmentSummary: String {
-        guard model.settings.alignment != nil else { return "none (Smooth needs 2+ stars)" }
-        if model.settings.alignmentFromMount { return "the mount's own coordinates" }
-        let rms = model.settings.alignmentRMS.map { String(format: ", error %.1f′", $0 * 60) } ?? ""
-        return "\(model.settings.alignmentStars) stars\(rms)"
+        guard model.settings.alignment != nil else { return String(localized: "none (Smooth needs 2+ stars)") }
+        if model.settings.alignmentFromMount { return String(localized: "the mount's own coordinates") }
+        let stars = model.settings.alignmentStars
+        guard let rms = model.settings.alignmentRMS else { return String(localized: "\(stars) stars") }
+        return String(localized: "\(stars) stars, error \((rms * 60).formatted(.number.precision(.fractionLength(1))))′")
     }
 
     /// The modes this connection offers for the target: Passive only for what the mount can
@@ -357,14 +364,14 @@ struct MountPanel: View {
 
     private var modeExplanation: String {
         switch (model.mount.kind?.isSpecialMode, model.mount.preferredMode) {
-        case (false, .passive): "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites."
-        case (false, _): "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope."
-        default: "Smooth: varies both axis speeds continuously. Best for imaging satellites."
+        case (false, .passive): String(localized: "Passive: one goto, then the mount tracks by itself. Stars, planets, Moon, Sun and geostationary satellites.")
+        case (false, _): String(localized: "Step: repeats a goto to where the target will be. Fine for antennas; jumpy in a telescope.")
+        default: String(localized: "Smooth: varies both axis speeds continuously. Best for imaging satellites.")
         }
     }
 
     private func describe(_ identity: MountIdentity) -> String {
-        "\(identity.model.name) · \(identity.isSpecialMode ? "Special mode" : "Normal mode")"
+        "\(identity.model.name) · \(identity.isSpecialMode ? String(localized: "Special mode") : String(localized: "Normal mode"))"
     }
 }
 
@@ -386,9 +393,9 @@ struct TraceView: View {
         let median = errors.isEmpty ? 0 : errors[errors.count / 2]
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                SectionLabel("Last minute")
+                SectionLabel(String(localized: "Last minute"))
                 Spacer()
-                Text(String(format: "median %.0f″ · worst %.0f″ · longest loop %.2f s", median, errors.last ?? 0, gaps.max() ?? 0))
+                Text("median \(median.formatted(.number.precision(.fractionLength(0))))″ · worst \((errors.last ?? 0).formatted(.number.precision(.fractionLength(0))))″ · longest loop \((gaps.max() ?? 0).formatted(.number.precision(.fractionLength(2)))) s")
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 if model.settings.tracksLog {
                     Button {
@@ -426,7 +433,7 @@ struct TraceView: View {
             }
             .frame(height: 44)
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-            .accessibilityLabel(String(format: "Tracking error over the last minute, median %.0f arc-seconds", median))
+            .accessibilityLabel("Tracking error over the last minute, median \(Int(median.rounded())) arc-seconds")
         }
         .fileExporter(isPresented: $exporting, document: csv,
                       contentType: .commaSeparatedText, defaultFilename: "overpass-trace") { _ in }
@@ -472,7 +479,7 @@ struct PointingError: View {
         let fraction = min(max(log10(max(arcsec, 1)) / log10(36_000), 0), 1)
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                SectionLabel("Off target")
+                SectionLabel(String(localized: "Off target"))
                 Spacer()
                 Text("Az \(arc(error.azimuth, signed: true))  Alt \(arc(error.altitude, signed: true))")
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -550,24 +557,24 @@ struct ControlPad: View {
                 }
                 GridRow {
                     gap; gap
-                    JogButton(direction: .up, symbol: "arrowtriangle.up.fill", label: wifi ? "N" : "Up")
+                    JogButton(direction: .up, symbol: "arrowtriangle.up.fill", label: wifi ? String(localized: "N", comment: "North, on a jog button") : String(localized: "Up", comment: "Jog button"))
                     gap; gap
                 }
                 GridRow {
                     FineButton(direction: .left, step: fineStep)
-                    JogButton(direction: .left, symbol: "arrowtriangle.left.fill", label: wifi ? "W" : "Az−")
+                    JogButton(direction: .left, symbol: "arrowtriangle.left.fill", label: wifi ? String(localized: "W", comment: "West, on a jog button") : String(localized: "Az−", comment: "Jog button: azimuth decreasing"))
                     Image(systemName: "scope")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.scope)
                         .frame(width: 30, height: 30)
                         .background(Theme.scope.opacity(0.12), in: Circle())
                         .accessibilityHidden(true)
-                    JogButton(direction: .right, symbol: "arrowtriangle.right.fill", label: wifi ? "E" : "Az+")
+                    JogButton(direction: .right, symbol: "arrowtriangle.right.fill", label: wifi ? String(localized: "E", comment: "East, on a jog button") : String(localized: "Az+", comment: "Jog button: azimuth increasing"))
                     FineButton(direction: .right, step: fineStep)
                 }
                 GridRow {
                     gap; gap
-                    JogButton(direction: .down, symbol: "arrowtriangle.down.fill", label: wifi ? "S" : "Down")
+                    JogButton(direction: .down, symbol: "arrowtriangle.down.fill", label: wifi ? String(localized: "S", comment: "South, on a jog button") : String(localized: "Down", comment: "Jog button"))
                     gap; gap
                 }
                 GridRow {
@@ -579,11 +586,11 @@ struct ControlPad: View {
 
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
                 GridRow {
-                    rowLabel("Speed")
+                    rowLabel(String(localized: "Speed"))
                     if wifi {
                         Picker("Speed", selection: $mount.moveRate) {
                             ForEach(NormalCommand.MoveRate.allCases, id: \.self) { rate in
-                                Text(rate.siderealMultiple.map { "\(Int($0))×" } ?? "Max").tag(rate)
+                                Text(rate.siderealMultiple.map { "\(Int($0))×" } ?? String(localized: "Max", comment: "The mount's maximum move speed")).tag(rate)
                             }
                         }
                         .labelsHidden().fixedSize()
@@ -595,7 +602,7 @@ struct ControlPad: View {
                     }
                 }
                 GridRow {
-                    rowLabel("Fine")
+                    rowLabel(String(localized: "Fine", comment: "Size of a fine move"))
                     Picker("Fine step", selection: $fineStep) {
                         Text("1′").tag(1.0)
                         Text("5′").tag(5.0)
@@ -603,11 +610,11 @@ struct ControlPad: View {
                     .pickerStyle(.segmented).labelsHidden().fixedSize()
                 }
                 GridRow {
-                    rowLabel("Time")
+                    rowLabel(String(localized: "Time", comment: "Time offset along the track"))
                     HStack(spacing: 2) {
                         Button { mount.timeOffset -= 0.1 } label: { Image(systemName: "minus") }
                             .help("Aim 0.1 s earlier along the track").accessibilityLabel("Earlier")
-                        Text(String(format: "%+.1f s", mount.timeOffset))
+                        Text(mount.timeOffset.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always())) + " s")
                             .font(.callout.monospacedDigit()).frame(minWidth: 50)
                         Button { mount.timeOffset += 0.1 } label: { Image(systemName: "plus") }
                             .help("Aim 0.1 s later along the track").accessibilityLabel("Later")
@@ -615,9 +622,10 @@ struct ControlPad: View {
                     .controlSize(.small)
                 }
                 GridRow {
-                    rowLabel("Offset")
+                    rowLabel(String(localized: "Offset", comment: "Position offset of the tracking aim"))
                     HStack(spacing: 4) {
-                        Text(String(format: "Az %+.0f′  Alt %+.0f′", mount.azimuthOffset * 60, mount.altitudeOffset * 60))
+                        let arcminutes = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0)).sign(strategy: .always())
+                        Text("Az \((mount.azimuthOffset * 60).formatted(arcminutes))′  Alt \((mount.altitudeOffset * 60).formatted(arcminutes))′")
                             .font(.callout.monospacedDigit())
                             .foregroundStyle(mount.azimuthOffset == 0 && mount.altitudeOffset == 0 ? .secondary : .primary)
                         Button {
@@ -672,10 +680,10 @@ struct FineButton: View {
 
     private var name: String {
         switch direction {
-        case .up: "up"
-        case .down: "down"
-        case .left: "left"
-        case .right: "right"
+        case .up: String(localized: "up", comment: "Direction of a fine move")
+        case .down: String(localized: "down", comment: "Direction of a fine move")
+        case .left: String(localized: "left", comment: "Direction of a fine move")
+        case .right: String(localized: "right", comment: "Direction of a fine move")
         }
     }
 }

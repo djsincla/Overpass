@@ -16,7 +16,12 @@ struct GuidingPanel: View {
 
                 HStack {
                     if let spot = camera.spot {
-                        Text(String(format: "Spot S/N %.0f", spot.signalToNoise) + (guider.errorArcmin.map { String(format: " · %.1f′ off centre", $0) } ?? ""))
+                        let signal = spot.signalToNoise.formatted(.number.precision(.fractionLength(0)))
+                        if let off = guider.errorArcmin {
+                            Text("Spot S/N \(signal) · \(off.formatted(.number.precision(.fractionLength(1))))′ off centre")
+                        } else {
+                            Text("Spot S/N \(signal)")
+                        }
                     } else {
                         Text("No spot near the centre")
                     }
@@ -38,9 +43,9 @@ struct GuidingPanel: View {
 
     private var help: String {
         if model.settings.cameraCalibration == nil {
-            return "Fix the iPhone to the tube (3× or 5× lens), start the camera, centre a bright star, and calibrate. Then start Smooth tracking and turn on Guide."
+            return String(localized: "Fix the iPhone to the tube (3× or 5× lens), start the camera, centre a bright star, and calibrate. Then start Smooth tracking and turn on Guide.")
         }
-        return "Calibrated. Start Smooth tracking, then turn on Guide to keep the target centred."
+        return String(localized: "Calibrated. Start Smooth tracking, then turn on Guide to keep the target centred.")
     }
 }
 
@@ -98,14 +103,14 @@ struct CameraHardwareControls: View {
                 }
             }
             if let range = hardware.gainRange {
-                LabeledSlider("Gain", value: $hardware.gain, in: range, step: hardware.gainStep, unit: "")
+                LabeledSlider(String(localized: "Gain", comment: "Camera gain"), value: $hardware.gain, in: range, step: hardware.gainStep, unit: "")
                     .help("The camera's analogue gain. Higher is brighter and noisier.")
             }
         }
     }
 
     static func milliseconds(_ ms: Double) -> String {
-        ms < 1 ? String(format: "%.1f ms", ms) : ms < 10 ? String(format: "%.1f ms", ms) : String(format: "%.0f ms", ms)
+        ms.formatted(.number.precision(.fractionLength(ms < 10 ? 1 : 0))) + " ms"
     }
 
     /// To the camera's 0.1 ms steps, and to whole milliseconds above 10.
