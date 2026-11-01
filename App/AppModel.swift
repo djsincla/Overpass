@@ -258,6 +258,8 @@ final class AppModel {
     private(set) var isPruning = false
     /// The object the pass calculator is open on.
     var calculatorObjectID: String?
+    /// An object's Status opened on its own (from a row's menu), with the pass it was opened from.
+    var statusSheet: StatusSheetRequest?
     var message: String?
 
     let mount = MountSession()

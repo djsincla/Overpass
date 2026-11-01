@@ -131,6 +131,7 @@ struct ObserveView: View {
                 }
             }
             .sheet(isPresented: $showingFilters) { FilterSheet() }
+            .sheet(item: Bindable(model).statusSheet) { StatusSheet(request: $0) }
             .sheet(isPresented: Binding(get: { model.calculatorObjectID != nil },
                                         set: { if !$0 { model.calculatorObjectID = nil } })) {
                 PassCalculatorView(objectID: model.calculatorObjectID ?? "")
@@ -337,6 +338,10 @@ struct ObserveView: View {
             }
         }
         Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
+        Button("Status…") {
+            // After this dialog has gone, or the sheet may not show.
+            Task { try? await Task.sleep(for: .milliseconds(350)); model.statusSheet = StatusSheetRequest(objectID: "sat:\(pass.noradID)", passID: pass.id) }
+        }
         Button("Pass calculator…") { model.calculatorObjectID = "sat:\(pass.noradID)" }
         Button("Cancel", role: .cancel) {}
     }
@@ -371,6 +376,7 @@ struct ObserveView: View {
             Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
         }
         Button(model.isSelected(id) ? "Remove from selection" : "Add to selection") { model.toggle(id) }
+        Button("Status…") { model.statusSheet = StatusSheetRequest(objectID: id) }
         Button("Pass calculator…") { model.calculatorObjectID = id }
     }
 
@@ -469,6 +475,7 @@ struct PassesList: View {
                             .disabled(model.mount.isTracking || pass.end.date < model.viewDate())
                     }
                     Button("Details") { detail = pass }
+                    Button("Status…") { model.statusSheet = StatusSheetRequest(objectID: "sat:\(pass.noradID)", passID: pass.id) }
                     Button("Pass calculator…") { model.calculatorObjectID = "sat:\(pass.noradID)" }
                 }
             }
@@ -557,6 +564,7 @@ struct SelectedObjectsList: View {
                             Button("Set as tracking target") { model.highlight(objectID: object.id); model.setTargetFromHighlight() }
                                 .disabled(model.mount.isTracking)
                         }
+                        Button("Status…") { model.statusSheet = StatusSheetRequest(objectID: object.id) }
                         Button("Pass calculator…") { model.calculatorObjectID = object.id }
                     }
                 }

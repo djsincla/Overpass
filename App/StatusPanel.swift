@@ -2,24 +2,36 @@ import IOptronKit
 import SkyKit
 import SwiftUI
 
+/// What a row's Status menu item opens.
+struct StatusSheetRequest: Identifiable {
+    let objectID: String
+    var passID: String?
+    var id: String { objectID + (passID ?? "") }
+}
+
 /// The tracking target, or the highlighted object, in numbers: where it is and how it moves,
 /// its pass, its radio, what the camera and mount make of it, and what the mount reports.
+/// Given `objectID`, that object instead, leaving the target and highlight alone.
 struct StatusPanel: View {
     @Environment(AppModel.self) private var model
+    var objectID: String?
+    var passID: String?
+    /// The mount's report belongs with the panel in Observe, not in a sheet about one object.
+    var showsMount = true
 
     var body: some View {
         TimelineView(.periodic(from: Theme.clockAnchor, by: 1)) { context in
             let date = model.viewDate(context.date)
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if let object = model.targetObject ?? model.highlightedObject {
+                    if let object = objectID.flatMap(model.object) ?? model.targetObject ?? model.highlightedObject {
                         content(object, at: date)
                     } else {
                         Text("Pick a satellite in Passes or on the sky to see it here.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
-                    MountReportSection()
+                    if showsMount { MountReportSection() }
                 }
                 .padding(12)
             }
@@ -30,7 +42,8 @@ struct StatusPanel: View {
     private func content(_ object: SkyObject, at date: Date) -> some View {
         if case .satellite(let s) = object,
            let state = try? SatelliteState(s, observer: model.settings.observer, at: date) {
-            let pass = model.targetPass.flatMap { $0.noradID == s.noradID && $0.end.date > date ? $0 : nil }
+            let pass = passID.flatMap { id in model.passes.first { $0.id == id && $0.end.date > date } }
+                ?? model.targetPass.flatMap { $0.noradID == s.noradID && $0.end.date > date ? $0 : nil }
                 ?? model.currentOrNextPass(s.noradID, at: date)
             let sunlit = (try? s.isSunlit(at: AstroTime(date))) ?? false
             SatelliteStatusView(satellite: s, state: state, pass: pass, sunlit: sunlit, date: date,
@@ -357,6 +370,28 @@ struct MountReportTable: View {
             Spacer()
             Text(value).multilineTextAlignment(.trailing)
         }
+    }
+}
+
+/// One object's Status on its own, opened from a row's menu.
+struct StatusSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let request: StatusSheetRequest
+
+    var body: some View {
+        NavigationStack {
+            StatusPanel(objectID: request.objectID, passID: request.passID, showsMount: false)
+                .navigationTitle("Status")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                }
+        }
+        #if os(macOS)
+        .frame(minWidth: 520, idealWidth: 620, minHeight: 560, idealHeight: 720)
+        #endif
     }
 }
 
