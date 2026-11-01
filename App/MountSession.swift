@@ -74,24 +74,6 @@ final class MountSession {
     /// What tracking will actually use with this connection.
     var effectiveMode: TrackingMode { kind?.isSpecialMode == true ? .smooth : preferredMode }
 
-    /// The mode tracking `object` would use: in Normal mode, Passive whenever the mount's own
-    /// tracking suits it and Settings allows that, whatever the picker says.
-    func effectiveMode(for object: SkyObject?) -> TrackingMode {
-        let mode = effectiveMode
-        guard mode != .smooth, settings.mountTracksWhenItCan, let object, Self.mountCanTrack(object) else { return mode }
-        return .passive
-    }
-
-    /// What the mount's own sidereal, lunar or solar tracking (or one goto, for a geostationary
-    /// satellite) handles well. Not planets: sidereal rate ignores their own motion.
-    static func mountCanTrack(_ object: SkyObject) -> Bool {
-        switch object {
-        case .star: true
-        case .body(let b): b == .moon || b == .sun
-        case .satellite(let s): s.isGeostationary
-        }
-    }
-
     // Fine tuning, applied live by Step and Smooth tracking.
     /// Seconds added to "now": positive aims further along the track (fixes along-track TLE error).
     var timeOffset: TimeInterval = 0

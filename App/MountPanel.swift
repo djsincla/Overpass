@@ -187,22 +187,19 @@ struct MountPanel: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if modes.count > 1 {
-                    // Shows Passive while the mount's own tracking takes the target, whatever was picked.
-                    let overridden = mount.effectiveMode(for: target ?? highlighted) != mount.effectiveMode
-                    Picker("Mode", selection: Binding(get: { mount.effectiveMode(for: target ?? highlighted) },
-                                                      set: { mount.preferredMode = $0 })) {
+                    Picker("Mode", selection: Bindable(mount).preferredMode) {
                         ForEach(modes) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
-                    .help(overridden ? "The mount's own tracking is on for this target; switch it off beside Start tracking to choose." : modeExplanation)
-                    .disabled(mount.isTracking || overridden)
+                    .help(modeExplanation)
+                    .disabled(mount.isTracking)
                 } else if let only = modes.first {
                     Chip(text: only.rawValue, systemImage: only == .smooth ? "waveform.path" : "stairs", tint: Theme.accent)
                         .help(modeExplanation)
                 }
-                if mount.effectiveMode(for: target ?? highlighted) == .step && mount.kind?.isSpecialMode == false {
+                if mount.preferredMode == .step && mount.kind?.isSpecialMode == false {
                     Stepper(value: $model.settings.stepInterval, in: max(0.5, model.settings.normalModePeriod)...10, step: 0.5) {
                         Text("every \(model.settings.stepInterval, format: .number.precision(.fractionLength(1))) s")
                             .font(.callout.monospacedDigit())
@@ -285,15 +282,6 @@ struct MountPanel: View {
                     .buttonStyle(.borderedProminent)
                     .help("Smooth tracking needs a star alignment: centre two or three bright stars")
                 } else {
-                    if mount.kind?.isSpecialMode == false, let target, MountSession.mountCanTrack(target) {
-                        Toggle("Mount's own tracking", isOn: $model.settings.mountTracksWhenItCan)
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .fixedSize()
-                            .help(target.isSatellite
-                                  ? "On: one goto, then the mount holds position. Off: the mode chosen above."
-                                  : "On: one goto, then the mount's own \(target.passiveTracking == .lunar ? "lunar" : target.passiveTracking == .solar ? "solar" : "sidereal") tracking. Off: the mode chosen above.")
-                    }
                     Button {
                         if model.targetObject?.isSun == true { confirmingSun = true } else { Task { await model.startTracking() } }
                     } label: {
