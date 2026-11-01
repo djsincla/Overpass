@@ -118,6 +118,19 @@ private func rotation(aim: Horizontal) -> [[Double]] {
         #expect((against.first?.score ?? 0) > (along.first?.score ?? 0))
     }
 
+    @Test func slowMoversArentDots() throws {
+        // XMM-Newton near apogee crawls at about 0.004°/s: not something seen moving.
+        let xmm = try SatelliteTarget(name: "XMM-NEWTON",
+            line1: "1 25989U 99066A   26297.00284216  .00000152  00000+0  00000+0 0  9998",
+            line2: "2 25989  63.8201 281.3207 4642884  62.5830   0.1940  0.50123653 23653")
+        let observer = Observer(latitude: 35.36, longitude: -120.84)
+        let date = Date(timeIntervalSince1970: 1_793_520_000)
+        let here = try observer.look(at: xmm, AstroTime(date))
+        #expect(here.altitude > 0)
+        #expect(SatelliteIdentifier.candidates(among: [xmm], observer: observer, at: date, pointedAt: here).isEmpty)
+        #expect(SatelliteIdentifier.candidates(among: [xmm], observer: observer, at: date, pointedAt: here, minimumRate: 0).count == 1)
+    }
+
     @Test func nothingFarAwayOrBelowTheHorizon() throws {
         let iss = TLEParser.parse(issTLE)[0]
         let here = try observer.look(at: iss, AstroTime(iss.epoch))

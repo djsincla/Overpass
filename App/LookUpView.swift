@@ -21,6 +21,8 @@ struct LookUpView: View {
     @State private var sighting: Sighting?
     @State private var statusRequest: StatusSheetRequest?
     @AppStorage("lookUp.sightingScope") private var scope = SightingScope.brightest
+    /// The satellite Show put on the sky, and whether Show selected it, so ✕ can undo both.
+    @State private var shown: (id: String, name: String, addedToSelection: Bool)?
 
     var body: some View {
         let date = model.viewDate()
@@ -135,13 +137,37 @@ struct LookUpView: View {
     /// Selects the satellite, so its passes are predicted, and highlights it, so its path is drawn here.
     private func show(_ satellite: SatelliteTarget) {
         let id = "sat:\(satellite.noradID)"
-        if !model.isSelected(id) { model.toggle(id) }
+        let added = !model.isSelected(id)
+        if added { model.toggle(id) }
         model.highlight(objectID: id)
+        shown = (id, satellite.name, added)
         sighting = nil
+    }
+
+    /// Takes the shown satellite off the sky: no longer highlighted, and deselected if Show selected it.
+    private func dismissShown() {
+        guard let shown else { return }
+        model.unhighlight(shown.id)
+        if shown.addedToSelection, model.isSelected(shown.id) { model.toggle(shown.id) }
+        self.shown = nil
     }
 
     private var topBar: some View {
         HStack {
+            if let shown {
+                Button(action: dismissShown) {
+                    HStack(spacing: 6) {
+                        Text(shown.name).lineLimit(1)
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.5), in: Capsule())
+                    .foregroundStyle(.white)
+                }
+                .accessibilityLabel("Stop showing \(shown.name)")
+            }
             Spacer()
             Button {
                 showsCamera.toggle()
@@ -644,8 +670,12 @@ private struct SightingCard: View {
             HStack {
                 Text(sighting.to == nil ? "What's there" : "What's moving that way").font(.headline)
                 Spacer()
-                Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                    .accessibilityLabel("Close")
+                Button(action: close) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Close")
             }
             Picker("Search", selection: $scope) {
                 ForEach(SightingScope.allCases) { Text($0.rawValue).tag($0) }

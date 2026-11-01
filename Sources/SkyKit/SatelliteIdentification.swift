@@ -20,10 +20,12 @@ public struct SightingCandidate: Sendable, Identifiable {
 public enum SatelliteIdentifier {
     /// `towards` is where the swipe ended, for the direction of motion. `radius` allows for the
     /// phone's compass, which is often several degrees out. Satellites in the Earth's shadow are
-    /// kept, as they could be seen just after it enters, but ranked lower.
+    /// kept, as they could be seen just after it enters, but ranked lower. Anything slower than
+    /// `minimumRate` (°/s) across the sky isn't a moving dot: GPS, geostationary, or XMM-Newton
+    /// out near apogee at 0.004°/s.
     public static func candidates(among satellites: [SatelliteTarget], observer: Observer, at date: Date,
                                   pointedAt aim: Horizontal, towards: Horizontal? = nil,
-                                  radius: Double = 15, limit: Int = 5,
+                                  radius: Double = 15, minimumRate: Double = 0.03, limit: Int = 5,
                                   deltaT: TimeInterval = AstroTime.defaultDeltaT) -> [SightingCandidate] {
         let time = AstroTime(date, deltaT: deltaT)
         let aimVector = aim.unitVector
@@ -33,8 +35,10 @@ public enum SatelliteIdentifier {
             guard let h = try? observer.look(at: satellite, time), h.altitude > 0 else { continue }
             let offset = angularSeparation(aimVector, h.unitVector)
             guard offset <= radius else { continue }
+            guard let later = try? observer.look(at: satellite, AstroTime(date + 2, deltaT: deltaT)),
+                  angularSeparation(h.unitVector, later.unitVector) / 2 >= minimumRate else { continue }
             var directionError: Double?
-            if let swipe, let later = try? observer.look(at: satellite, AstroTime(date + 2, deltaT: deltaT)) {
+            if let swipe {
                 let motion = tangent(from: h.unitVector, to: later.unitVector)
                 directionError = angularSeparation(motion, swipe)
             }
