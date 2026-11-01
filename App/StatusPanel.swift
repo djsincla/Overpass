@@ -52,24 +52,25 @@ struct StatusPanel: View {
             Header(name: object.name, detail: nil) {}
             StatusSection("Now") {
                 TileGrid {
-                    Tile("Elevation", String(format: "%.1f°", h.altitude), sub: h.altitude > 0 ? "up" : "below the horizon")
-                    Tile("Azimuth", String(format: "%.1f°", h.azimuth), sub: compass(h.azimuth))
+                    Tile("Elevation", fixed(h.altitude, 1) + "°", sub: h.altitude > 0 ? String(localized: "up") : String(localized: "below the horizon"))
+                    Tile("Azimuth", fixed(h.azimuth, 1) + "°", sub: compass(h.azimuth))
                     if let m = model.magnitude(object, at: date) {
-                        Tile("Magnitude", String(format: "%.1f", m), sub: object.isComet ? "predicted" : nil)
+                        Tile("Magnitude", fixed(m, 1), sub: object.isComet ? String(localized: "predicted") : nil)
                     }
                     switch object {
                     case .deepSky(let d):
                         Tile("Kind", d.kind.name, sub: [d.designation, d.alsoKnownAs].compactMap { $0 }.filter { !$0.isEmpty && $0 != d.id }.first)
                         if let size = d.size {
-                            Tile("Size", size >= 60 ? String(format: "%.1f°", size / 60) : String(format: "%.0f′", size), sub: d.constellation)
+                            Tile("Size", size >= 60 ? fixed(size / 60, 1) + "°" : fixed(size, 0) + "′", sub: d.constellation)
                         }
                     case .star(let st):
                         if let designation = st.designation { Tile("Designation", designation) }
                     case .comet(let c):
                         let (r, delta) = c.distances(AstroTime(date))
-                        Tile("From the Sun", String(format: "%.2f AU", r))
-                        Tile("From Earth", String(format: "%.2f AU", delta), sub: model.units.distance(delta * SolarSystemBody.auKm))
-                        Tile("Motion", String(format: "%.0f″/h", c.motion(AstroTime(date))), sub: "against the stars")
+                        Tile("From the Sun", String(localized: "\(fixed(r, 2)) AU", comment: "Astronomical units"))
+                        Tile("From Earth", String(localized: "\(fixed(delta, 2)) AU", comment: "Astronomical units"),
+                             sub: model.units.distance(delta * SolarSystemBody.auKm))
+                        Tile("Motion", fixed(c.motion(AstroTime(date)), 0) + "″/h", sub: String(localized: "against the stars"))
                     default:
                         EmptyView()
                     }
@@ -93,10 +94,11 @@ private struct SatelliteStatusView: View {
     private var up: Bool { state.position.altitude > 0 }
 
     var body: some View {
-        Header(name: satellite.name, detail: "NORAD \(satellite.noradID)" + (isTarget ? " · tracking target" : "")) {
-            Chip(text: sunlit ? "Sunlit" : "In shadow", systemImage: sunlit ? "sun.max.fill" : "moon.fill",
+        Header(name: satellite.name,
+               detail: isTarget ? String(localized: "NORAD \(satellite.noradID) · tracking target") : "NORAD \(satellite.noradID)") {
+            Chip(text: sunlit ? String(localized: "Sunlit") : String(localized: "In shadow"), systemImage: sunlit ? "sun.max.fill" : "moon.fill",
                  tint: sunlit ? Theme.sunlit : Theme.eclipsed)
-            Chip(text: up ? "Up" : "Below the horizon", tint: up ? Theme.rising : .secondary)
+            Chip(text: up ? String(localized: "Up") : String(localized: "Below the horizon"), tint: up ? Theme.rising : .secondary)
         }
         now
         if let pass { passTimes(pass) }
@@ -111,23 +113,24 @@ private struct SatelliteStatusView: View {
         let peak = pass.map(peakSkySpeed)
         return StatusSection("Now") {
             TileGrid {
-                Tile("Elevation", String(format: "%.1f°", state.position.altitude),
-                     sub: pass.map { "peak \(Int($0.maxAltitude.rounded()))° at \(time($0.culmination.date))" })
-                Tile("Azimuth", String(format: "%.1f°", state.position.azimuth), sub: compass(state.position.azimuth))
+                Tile("Elevation", fixed(state.position.altitude, 1) + "°",
+                     sub: pass.map { String(localized: "peak \(Int($0.maxAltitude.rounded()))° at \(time($0.culmination.date))") })
+                Tile("Azimuth", fixed(state.position.azimuth, 1) + "°", sub: compass(state.position.azimuth))
                 Tile("Range", units.distance(state.position.range),
-                     sub: pass.map { "closest \(units.distance($0.minimumRange))" })
+                     sub: pass.map { String(localized: "closest \(units.distance($0.minimumRange))") })
                 Tile("Range rate", speed(state.rangeRate, signed: true),
-                     sub: state.rangeRate < 0 ? "approaching" : "receding",
+                     sub: state.rangeRate < 0 ? String(localized: "approaching") : String(localized: "receding"),
                      subTint: state.rangeRate < 0 ? Theme.rising : Theme.setting)
-                Tile("Speed", speed(state.orbitalSpeed), sub: "ground \(speed(state.groundSpeed))")
+                Tile("Speed", speed(state.orbitalSpeed), sub: String(localized: "ground \(speed(state.groundSpeed))"))
                 Tile("Height", units.distance(state.subpoint.height))
-                Tile("Sky speed", String(format: "%.2f°/s", state.angularSpeed),
-                     sub: peak.map { String(format: "peak %.2f°/s", $0) })
+                Tile("Sky speed", fixed(state.angularSpeed, 2) + "°/s",
+                     sub: peak.map { String(localized: "peak \(fixed($0, 2))°/s") })
                 if let m = model.magnitude(.satellite(satellite), at: date) {
-                    Tile("Magnitude", String(format: "%.1f", m), sub: sunlit ? "smaller is brighter" : "in shadow")
+                    Tile("Magnitude", fixed(m, 1), sub: sunlit ? String(localized: "smaller is brighter") : String(localized: "in shadow"))
                 }
                 Tile("Below it", Maidenhead.locator(state.subpoint),
-                     sub: String(format: "%.2f°, %.2f°", state.subpoint.latitude, state.subpoint.longitude))
+                     sub: String(localized: "\(fixed(state.subpoint.latitude, 2))°, \(fixed(state.subpoint.longitude, 2))°",
+                                 comment: "Latitude and longitude"))
             }
         }
     }
@@ -135,9 +138,10 @@ private struct SatelliteStatusView: View {
     // MARK: Pass
 
     private func passTimes(_ pass: SatellitePass) -> some View {
-        var rows: [(String, Date)] = [("Rises", pass.start.date), ("Peaks", pass.culmination.date), ("Sets", pass.end.date)]
+        var rows: [(String, Date)] = [(String(localized: "Rises"), pass.start.date), (String(localized: "Peaks"), pass.culmination.date),
+                                      (String(localized: "Sets"), pass.end.date)]
         for crossing in pass.shadowCrossings(of: satellite) {
-            rows.append((crossing.entersShadow ? "Into shadow" : "Out of shadow", crossing.date))
+            rows.append((crossing.entersShadow ? String(localized: "Into shadow") : String(localized: "Out of shadow"), crossing.date))
         }
         rows.sort { $0.1 < $1.1 }
         let next = rows.first { $0.1 > date }
@@ -206,7 +210,7 @@ private struct SatelliteStatusView: View {
         if let f {
             VStack(alignment: .trailing, spacing: 1) {
                 Text(mhz(f.now)).monospacedDigit()
-                Text(String(format: "%+.1f kHz · %+.0f Hz/s", (f.now - f.nominal) / 1000, f.next - f.now))
+                Text(verbatim: "\(fixed((f.now - f.nominal) / 1000, 1, signed: true)) kHz · \(fixed(f.next - f.now, 0, signed: true)) Hz/s")
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
             }
         } else {
@@ -224,19 +228,20 @@ private struct SatelliteStatusView: View {
             ? model.mount.trace.last?.error : nil
         return StatusSection("Camera") {
             TileGrid {
-                Tile("Image scale", String(format: "%.2f″/px", optics.imageScale),
+                Tile("Image scale", fixed(optics.imageScale, 2) + "″/px",
                      sub: "\(optics.focalLength.formatted()) mm, \(optics.pixelSize.formatted()) µm")
                 Tile("Sharp without tracking", exposure(optics.exposureForOnePixel(rate: state.angularSpeed)),
-                     sub: peak.map { "at peak \(exposure(optics.exposureForOnePixel(rate: $0)))" })
-                Tile("Frame rate, untracked", String(format: "%.0f fps", optics.framesPerSecond(rate: state.angularSpeed)),
-                     sub: "under a pixel a frame")
+                     sub: peak.map { String(localized: "at peak \(exposure(optics.exposureForOnePixel(rate: $0)))") })
+                Tile("Frame rate, untracked",
+                     String(localized: "\(fixed(optics.framesPerSecond(rate: state.angularSpeed), 0)) fps", comment: "Frames per second"),
+                     sub: String(localized: "under a pixel a frame"))
                 if let size {
-                    Tile("Size", String(format: "%.0f px", optics.pixels(size: size, range: state.position.range)),
-                         sub: pass.map { String(format: "%.0f px closest", optics.pixels(size: size, range: $0.minimumRange)) })
+                    Tile("Size", fixed(optics.pixels(size: size, range: state.position.range), 0) + " px",
+                         sub: pass.map { String(localized: "\(fixed(optics.pixels(size: size, range: $0.minimumRange), 0)) px closest") })
                 }
                 if let trackingError {
-                    Tile("Tracking error", String(format: "%.0f px", trackingError * 3600 / optics.imageScale),
-                         sub: String(format: "%.1f″", trackingError * 3600))
+                    Tile("Tracking error", fixed(trackingError * 3600 / optics.imageScale, 0) + " px",
+                         sub: fixed(trackingError * 3600, 1) + "″")
                 }
             }
             Text("Set the focal length and pixel size in Settings, Camera.").font(.caption).foregroundStyle(.secondary)
@@ -265,13 +270,13 @@ private struct SatelliteStatusView: View {
         var parts: [String] = []
         switch plan.orientation {
         case .normal: break
-        case .overTheTop: parts.append("Tracked over the top.")
-        case .flipAtCulmination: parts.append("Flips over the top at the peak.")
+        case .overTheTop: parts.append(String(localized: "Tracked over the top."))
+        case .flipAtCulmination: parts.append(String(localized: "Flips over the top at the peak."))
         }
         parts.append(plan.secondsOffTarget > 0
-                     ? String(format: "Off target for about %.0f s, at most %.1f° behind.", plan.secondsOffTarget, plan.maximumError)
-                     : "On target the whole pass.")
-        if plan.unwindSeconds > 0 { parts.append(String(format: "Unwinds past north for %.0f s.", plan.unwindSeconds)) }
+                     ? String(localized: "Off target for about \(fixed(plan.secondsOffTarget, 0)) s, at most \(fixed(plan.maximumError, 1))° behind.")
+                     : String(localized: "On target the whole pass."))
+        if plan.unwindSeconds > 0 { parts.append(String(localized: "Unwinds past north for \(fixed(plan.unwindSeconds, 0)) s.")) }
         return parts.joined(separator: " ")
     }
 
@@ -283,14 +288,14 @@ private struct SatelliteStatusView: View {
 
     private func speed(_ kmPerSecond: Double, signed: Bool = false) -> String {
         let v = units.imperial ? kmPerSecond / Units.kmPerMile : kmPerSecond
-        return String(format: signed ? "%+.2f %@/s" : "%.2f %@/s", v, units.distanceUnit)
+        return "\(fixed(v, 2, signed: signed)) \(units.distanceUnit)/s"
     }
 
-    private func mhz(_ hz: Double) -> String { String(format: "%.4f", hz / 1e6) }
+    private func mhz(_ hz: Double) -> String { fixed(hz / 1e6, 4) }
 
     private func exposure(_ seconds: Double?) -> String {
-        guard let seconds else { return "any" }
-        return seconds >= 1 ? String(format: "%.1f s", seconds) : "1/\(Int((1 / seconds).rounded())) s"
+        guard let seconds else { return String(localized: "any", comment: "Any exposure time") }
+        return seconds >= 1 ? fixed(seconds, 1) + " s" : "1/\(Int((1 / seconds).rounded())) s"
     }
 
     private func time(_ date: Date, seconds: Bool = false) -> String {
@@ -300,8 +305,8 @@ private struct SatelliteStatusView: View {
     private func countdown(_ target: Date) -> String {
         let s = Int(target.timeIntervalSince(date).rounded())
         let a = abs(s)
-        let text = a >= 3600 ? "\(a / 3600) h \(a % 3600 / 60) min" : String(format: "%d:%02d", a / 60, a % 60)
-        return s >= 0 ? "in \(text)" : "\(text) ago"
+        let text = a >= 3600 ? String(localized: "\(a / 3600) h \(a % 3600 / 60) min") : String(format: "%d:%02d", a / 60, a % 60)
+        return s >= 0 ? String(localized: "in \(text)") : String(localized: "\(text) ago")
     }
 }
 
@@ -329,19 +334,22 @@ struct MountReportTable: View {
         if let identity = mount.identity {
             VStack(alignment: .leading, spacing: 6) {
                 StatusTable {
-                    row("Model", identity.model.name + (identity.isSpecialMode ? ", Special mode" : ", Normal mode"))
+                    row("Model", identity.isSpecialMode ? String(localized: "\(identity.model.name), Special mode")
+                                                         : String(localized: "\(identity.model.name), Normal mode"))
                     if let report = mount.report {
                         row("When connected", MountReport.systemName(report.system)
                             + (report.system == 1 || report.system == 5 ? ", " + MountReport.rateName(report.trackingRate).lowercased() : ""))
                         row("GPS", MountSession.gpsName(report.site.gps))
-                        row("Its location", String(format: "%.4f°, %.4f°", report.site.latitude, report.site.longitude)
-                            + " · \(report.northernHemisphere ? "northern" : "southern") hemisphere")
+                        let latitude = fixed(report.site.latitude, 4), longitude = fixed(report.site.longitude, 4)
+                        row("Its location", report.northernHemisphere
+                            ? String(localized: "\(latitude)°, \(longitude)° · northern hemisphere")
+                            : String(localized: "\(latitude)°, \(longitude)° · southern hemisphere"))
                         row("Time from", MountReport.timeSourceName(report.timeSource))
                         if let clock = report.clock, let read = mount.reportDate {
-                            row("Its clock", String(format: "%+.1f s from this %@", clock.timeIntervalSince(read), deviceName)
+                            row("Its clock", String(localized: "\(fixed(clock.timeIntervalSince(read), 1, signed: true)) s from this \(deviceName)")
                                 + (report.utcOffsetMinutes.map { $0 == 0 ? ", UTC" : String(format: ", UTC%+d min", $0) } ?? ""))
                         }
-                        row("Arrow speed", "\(report.moveSpeed) of 9")
+                        row("Arrow speed", String(localized: "\(report.moveSpeed) of 9"))
                         if let main = report.mainBoard { row("Main board", main) }
                         if let hc = report.handController { row("Hand controller", hc) }
                         if let a = report.azimuthBoard { row("Azimuth motor board", a) }
@@ -364,7 +372,7 @@ struct MountReportTable: View {
         #endif
     }
 
-    private func row(_ label: String, _ value: String) -> some View {
+    private func row(_ label: LocalizedStringKey, _ value: String) -> some View {
         StatusRow {
             Text(label).foregroundStyle(.secondary)
             Spacer()
@@ -403,7 +411,7 @@ extension MountModel {
         case .hae29: "HAE29"
         case .hae43: "HAE43"
         case .azMountPro: "AZ Mount Pro"
-        case .unknown(let code): "Mount \(code)"
+        case .unknown(let code): String(localized: "Mount \(code)")
         }
     }
 }
@@ -428,26 +436,29 @@ private struct Header<Chips: View>: View {
 
 /// An uppercase label over a rule, collapsible; collapsed sections are remembered.
 private struct StatusSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringResource
+    /// The English title, which is what's saved for a collapsed section whatever the language.
+    let key: String
     @ViewBuilder let content: () -> Content
     @AppStorage("status.collapsed") private var collapsed = ""
 
-    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: LocalizedStringResource, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
+        self.key = title.key
         self.content = content
     }
 
-    private var isCollapsed: Bool { collapsed.split(separator: ",").contains(Substring(title)) }
+    private var isCollapsed: Bool { collapsed.split(separator: ",").contains(Substring(key)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 var set = Set(collapsed.split(separator: ",").map(String.init))
-                if isCollapsed { set.remove(title) } else { set.insert(title) }
+                if isCollapsed { set.remove(key) } else { set.insert(key) }
                 collapsed = set.sorted().joined(separator: ",")
             } label: {
                 HStack {
-                    Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(1.2)
+                    Text(title).font(.caption.weight(.semibold)).tracking(1.2).textCase(.uppercase)
                     Spacer()
                     Image(systemName: "chevron.down").imageScale(.small).rotationEffect(.degrees(isCollapsed ? -90 : 0))
                 }
@@ -471,12 +482,12 @@ private struct TileGrid<Content: View>: View {
 
 /// A big value with an uppercase label above and a small line below.
 private struct Tile: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
     var sub: String?
     var subTint: Color = .secondary
 
-    init(_ label: String, _ value: String, sub: String? = nil, subTint: Color = .secondary) {
+    init(_ label: LocalizedStringKey, _ value: String, sub: String? = nil, subTint: Color = .secondary) {
         self.label = label
         self.value = value
         self.sub = sub
@@ -485,7 +496,7 @@ private struct Tile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label.uppercased()).font(.caption2.weight(.medium)).tracking(0.8).foregroundStyle(.secondary).lineLimit(1)
+            Text(label).font(.caption2.weight(.medium)).tracking(0.8).textCase(.uppercase).foregroundStyle(.secondary).lineLimit(1)
             Text(value).font(.title3.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
             if let sub { Text(sub).font(.caption).foregroundStyle(subTint).lineLimit(1).minimumScaleFactor(0.8) }
         }
@@ -520,7 +531,7 @@ private struct StatusRow<Content: View>: View {
 
 /// The pass's peak speed on one axis against what the mount does.
 private struct RateBar: View {
-    let label: String
+    let label: LocalizedStringKey
     let need: Double
     let limit: Double
 
@@ -530,7 +541,7 @@ private struct RateBar: View {
             HStack {
                 Text(label).font(.callout)
                 Spacer()
-                Text(String(format: "%.1f°/s of %.1f°/s", need, limit)).font(.callout).monospacedDigit()
+                Text("\(fixed(need, 1))°/s of \(fixed(limit, 1))°/s").font(.callout).monospacedDigit()
                     .foregroundStyle(over ? Theme.scope : .primary)
             }
             GeometryReader { proxy in
@@ -544,4 +555,10 @@ private struct RateBar: View {
         }
         .accessibilityElement(children: .combine)
     }
+}
+
+/// A number to a set count of decimals in the reader's own style (a decimal comma in German and
+/// Spanish), without grouping, as `String(format:)` gave it.
+private func fixed(_ x: Double, _ digits: Int, signed: Bool = false) -> String {
+    x.formatted(.number.precision(.fractionLength(digits)).grouping(.never).sign(strategy: signed ? .always() : .automatic))
 }

@@ -162,8 +162,7 @@ struct SkyDome: View {
     }
 
     private func compassName(_ azimuth: Double) -> String {
-        let names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-        return names[Int((azimuth / 22.5).rounded()) % 16] + " \(Int(azimuth.rounded()))°"
+        compassPoints[Int((azimuth / 22.5).rounded()) % 16] + " \(Int(azimuth.rounded()))°"
     }
 
     /// Everything drawn that can be clicked: selected objects, and the stars, Sun, Moon and
@@ -190,11 +189,11 @@ struct SkyDome: View {
     }
 
     var accessibilitySummary: String {
-        var parts = ["Sky chart"]
+        var parts = [String(localized: "Sky chart")]
         if let pass {
-            parts.append("\(pass.name) rising at azimuth \(Int(pass.start.position.azimuth)) degrees, peaking at \(Int(pass.maxAltitude)) degrees")
+            parts.append(String(localized: "\(pass.name) rising at azimuth \(Int(pass.start.position.azimuth)) degrees, peaking at \(Int(pass.maxAltitude)) degrees"))
         }
-        if !liveObjects.isEmpty { parts.append("Up now: " + liveObjects.map(\.name).joined(separator: ", ")) }
+        if !liveObjects.isEmpty { parts.append(String(localized: "Up now: \(liveObjects.map(\.name).joined(separator: ", "))")) }
         return parts.joined(separator: ". ")
     }
 
@@ -210,7 +209,8 @@ struct SkyDome: View {
             context.stroke(Path(ellipseIn: g.rect(altitude: altitude)), with: .color(.white.opacity(0.18)),
                            style: StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
         }
-        for (label, az) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("W", 270.0)] {
+        // The compass points' own names: German writes O for east, Spanish O for west.
+        for (label, az) in [(compassPoints[0], 0.0), (compassPoints[4], 90.0), (compassPoints[8], 180.0), (compassPoints[12], 270.0)] {
             context.draw(Text(label).font(.caption.bold()).foregroundStyle(.secondary), at: g.point(azimuth: az, altitude: -5))
         }
     }
@@ -292,10 +292,10 @@ struct SkyDome: View {
             half.addArc(center: p, radius: 6, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
             context.fill(half, with: .color(color))
             context.stroke(marker, with: .color(.white), lineWidth: 1.5)
-            let label = b.sunlit ? "lit" : "shadow"
+            let time = b.date.formatted(date: .omitted, time: .shortened)
             // Above the marker when it's close to the start, whose time sits above the start ring.
             let nearStart = distance(p, g.point(pass.start.position)) < 40
-            context.draw(Text("\(label) \(b.date.formatted(date: .omitted, time: .shortened))")
+            context.draw(Text(b.sunlit ? "lit \(time)" : "shadow \(time)")
                             .font(.caption2).foregroundStyle(.white.opacity(0.85)),
                          at: CGPoint(x: p.x + (nearStart ? -34 : 0), y: p.y + (nearStart ? -14 : 14)))
         }
