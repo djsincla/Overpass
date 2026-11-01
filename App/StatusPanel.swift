@@ -41,7 +41,25 @@ struct StatusPanel: View {
                 TileGrid {
                     Tile("Elevation", String(format: "%.1f°", h.altitude), sub: h.altitude > 0 ? "up" : "below the horizon")
                     Tile("Azimuth", String(format: "%.1f°", h.azimuth), sub: compass(h.azimuth))
-                    if let m = model.magnitude(object, at: date) { Tile("Magnitude", String(format: "%.1f", m)) }
+                    if let m = model.magnitude(object, at: date) {
+                        Tile("Magnitude", String(format: "%.1f", m), sub: object.isComet ? "predicted" : nil)
+                    }
+                    switch object {
+                    case .deepSky(let d):
+                        Tile("Kind", d.kind.name, sub: [d.designation, d.alsoKnownAs].compactMap { $0 }.filter { !$0.isEmpty && $0 != d.id }.first)
+                        if let size = d.size {
+                            Tile("Size", size >= 60 ? String(format: "%.1f°", size / 60) : String(format: "%.0f′", size), sub: d.constellation)
+                        }
+                    case .star(let st):
+                        if let designation = st.designation { Tile("Designation", designation) }
+                    case .comet(let c):
+                        let (r, delta) = c.distances(AstroTime(date))
+                        Tile("From the Sun", String(format: "%.2f AU", r))
+                        Tile("From Earth", String(format: "%.2f AU", delta), sub: model.units.distance(delta * SolarSystemBody.auKm))
+                        Tile("Motion", String(format: "%.0f″/h", c.motion(AstroTime(date))), sub: "against the stars")
+                    default:
+                        EmptyView()
+                    }
                 }
             }
         }

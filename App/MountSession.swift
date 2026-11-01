@@ -818,12 +818,20 @@ final class MountSession {
         default: .sidereal
         }
         let rateName = rate == .lunar ? "lunar" : rate == .solar ? "solar" : "sidereal"
-        // The Moon's parallax changes as it moves, so it's re-centred every few minutes. Between
-        // times, watch the mount's own status, so a stop shows here and in the mount log.
+        // The Moon's parallax changes as it moves, so it's re-centred every few minutes; a comet
+        // as often as it drifts 30″ against the stars. Between times, watch the mount's own
+        // status, so a stop shows here and in the mount log.
+        func recentreInterval() -> TimeInterval? {
+            switch object {
+            case .body(.moon): 300
+            case .comet(let c): c.recentreInterval(AstroTime(skyNow))
+            default: nil
+            }
+        }
         var recentred = Date.distantPast
         var lastState: Int?
         while !Task.isCancelled {
-            if how == .lunar ? Date.now.timeIntervalSince(recentred) > 300 : recentred == .distantPast {
+            if recentreInterval().map({ Date.now.timeIntervalSince(recentred) > $0 }) ?? (recentred == .distantPast) {
                 let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(skyNow))
                 do {
                     try await normal.slew(rightAscension: ra, declination: dec, rate: rate)

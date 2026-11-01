@@ -23,10 +23,33 @@ struct ObjectsView: View {
     @State private var confirmingSun = false
     /// Unticked while "Selected only" is on: kept visible so a mis-tap can be undone.
     @State private var recentlyUnselected: Set<String> = []
+    /// Catalogues page: which list, only this kind, and how faint for NGC and IC.
+    @AppStorage("objects.catalogue") private var catalogue = Catalogue.messier
+    @State private var deepSkyKind: DeepSkyObject.Kind?
+    @AppStorage("objects.catalogueLimit") private var catalogueLimit = 12.0
+
+    /// The deep sky lists the hand controller has, by the numbers it uses.
+    enum Catalogue: String, CaseIterable, Identifiable {
+        case messier = "Messier", caldwell = "Caldwell", ngc = "NGC", ic = "IC"
+        var id: Self { self }
+        var objects: [DeepSkyObject] {
+            switch self {
+            case .messier: DeepSky.messier
+            case .caldwell: DeepSky.caldwell
+            case .ngc: DeepSky.ngc
+            case .ic: DeepSky.ic
+            }
+        }
+    }
+    /// Comets page: the faint ones too.
+    @AppStorage("objects.allComets") private var showsFaintComets = false
+
+    /// Comets fainter than this now are left off the Comets page unless asked for.
+    static let cometMagnitudeLimit = 14.0
 
     /// A sidebar entry.
     enum Page: Hashable {
-        case selected, solarSystem, stars
+        case selected, solarSystem, stars, deepSky, comets
         case source(String)
 
         var rawValue: String {
@@ -34,6 +57,8 @@ struct ObjectsView: View {
             case .selected: "selected"
             case .solarSystem: "solar"
             case .stars: "stars"
+            case .deepSky: "deepsky"
+            case .comets: "comets"
             case .source(let id): "source:" + id
             }
         }
@@ -42,6 +67,8 @@ struct ObjectsView: View {
             switch rawValue {
             case "solar": self = .solarSystem
             case "stars": self = .stars
+            case "deepsky": self = .deepSky
+            case "comets": self = .comets
             case let s where s.hasPrefix("source:"): self = .source(String(s.dropFirst(7)))
             default: self = .selected
             }
@@ -138,8 +165,16 @@ struct ObjectsView: View {
                         .badge(SolarSystemBody.allCases.filter { model.isSelected(SkyObject.body($0).id) }.count)
                 }
                 pageRow(Page.stars) {
-                    Label("Bright stars", systemImage: "sparkles")
-                        .badge(BrightStars.all.filter { model.isSelected(SkyObject.star($0).id) }.count)
+                    Label("Stars", systemImage: "sparkle")
+                        .badge(model.selected.filter { $0.hasPrefix("star:") }.count)
+                }
+                pageRow(Page.deepSky) {
+                    Label("Catalogues", systemImage: "hurricane")
+                        .badge(model.selected.filter { $0.hasPrefix("dso:") }.count)
+                }
+                pageRow(Page.comets) {
+                    Label("Comets", systemImage: "sparkles")
+                        .badge(model.selected.filter { $0.hasPrefix("comet:") }.count)
                 }
             }
             Section("Satellites") {
@@ -195,6 +230,8 @@ struct ObjectsView: View {
             case .selected: selectedPage
             case .solarSystem: bodiesPage
             case .stars: starsPage
+            case .deepSky: deepSkyPage
+            case .comets: cometsPage
             case .source(let id):
                 if let group = model.groups.first(where: { $0.id == id && $0.source.enabled }) {
                     sourcePage(group)
@@ -208,12 +245,13 @@ struct ObjectsView: View {
 
     private var selectedPage: some View {
         let bodies = SolarSystemBody.allCases.map(SkyObject.body).filter { model.isSelected($0.id) || recentlyUnselected.contains($0.id) }
-        let stars = BrightStars.all.map(SkyObject.star).filter { model.isSelected($0.id) || recentlyUnselected.contains($0.id) }
+        let stars = (model.selected.union(recentlyUnselected)).filter { !$0.hasPrefix("sat:") && !$0.hasPrefix("body:") }
+            .compactMap(model.object).sorted { $0.name < $1.name }
         let sats = model.satellites.filter { model.isSelected("sat:\($0.noradID)") || recentlyUnselected.contains("sat:\($0.noradID)") }
         return List {
             if model.selected.isEmpty && recentlyUnselected.isEmpty {
                 ContentUnavailableView("Nothing selected", systemImage: "checkmark.circle",
-                                       description: Text("Pick satellites from a source, or the Sun, Moon and planets. Passes are predicted for what's selected, and it's marked on the sky."))
+                                       description: Text("Pick satellites from a source, or the Sun, Moon, planets, stars, deep sky objects and comets. Passes are predicted for what's selected, and it's marked on the sky."))
             }
             if !bodies.isEmpty || !stars.isEmpty {
                 Section("Sky") {
@@ -247,13 +285,130 @@ struct ObjectsView: View {
 
     private var starsPage: some View {
         List {
-            ForEach(BrightStars.all, id: \.name) { star in
-                let object = SkyObject.star(star)
-                if visible(object) { selectRow(object, detail: String(format: "mag %.1f", star.magnitude)) }
+            Section {
+                ForEach(NamedStars.all, id: \.name) { star in
+                    let object = SkyObject.star(star)
+                    if visible(object) { selectRow(object, detail: detail(object)) }
+                }
+            } footer: {
+                Text("Every star with an IAU name to magnitude 4, brightest first. Passive tracking sends the mount there and lets it track at the sidereal rate.")
             }
         }
-        .navigationTitle("Bright stars")
+        .navigationTitle("Stars")
         .toolbar { detailToolbar(showsAge: false) }
+    }
+
+    private var deepSkyPage: some View {
+        // NGC and IC run to 13,000, mostly faint galaxies: cut at a magnitude, leaving what's selected.
+        let limited = catalogue == .ngc || catalogue == .ic
+        let objects = catalogue.objects
+            .filter { deepSkyKind == nil || $0.kind == deepSkyKind }
+            .filter { !limited || ($0.magnitude ?? 99) <= catalogueLimit || model.isSelected("dso:\($0.id)") }
+            .map(SkyObject.deepSky)
+            .filter(visible)
+        return List {
+            Section {
+                ForEach(objects.prefix(2000), id: \.id) { selectRow($0, detail: detail($0)) }
+            } header: {
+                Picker("Catalogue", selection: $catalogue) {
+                    ForEach(Catalogue.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.bottom, 4)
+            } footer: {
+                Text(limited
+                     ? "\(objects.count) brighter than magnitude \(Int(catalogueLimit))\(objects.count > 2000 ? ", the first 2,000 shown" : ""). Search by number, such as NGC 891 or IC 434, to go straight to one. Positions and data from OpenNGC."
+                     : "Numbered as on the hand controller. Search by number, such as M13 or C14. Positions and data from OpenNGC.")
+            }
+        }
+        .navigationTitle("Catalogues")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Picker(selection: $deepSkyKind) {
+                    Text("Every kind").tag(DeepSkyObject.Kind?.none)
+                    ForEach(DeepSkyObject.Kind.allCases, id: \.self) { Text($0.name).tag(Optional($0)) }
+                } label: {
+                    Label("Kind", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .help("Show one kind of object")
+            }
+            if limited {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker(selection: $catalogueLimit) {
+                        ForEach([8.0, 10, 12, 14, 99], id: \.self) { Text($0 == 99 ? "Any magnitude" : "Brighter than \(Int($0))").tag($0) }
+                    } label: {
+                        Label("Magnitude", systemImage: "eye")
+                    }
+                    .help("How faint an NGC or IC object can be and still be listed")
+                }
+            }
+            detailToolbar(showsAge: false)
+        }
+    }
+
+    private var cometsPage: some View {
+        let time = AstroTime(model.viewDate())
+        let rated = model.comets.map { ($0, $0.apparentMagnitude(time) ?? 99) }
+            .filter { showsFaintComets || $0.1 <= Self.cometMagnitudeLimit || model.isSelected(SkyObject.comet($0.0).id) }
+            .sorted { $0.1 < $1.1 }
+            .map { SkyObject.comet($0.0) }
+            .filter(visible)
+        return List {
+            Section {
+                ForEach(rated, id: \.id) { selectRow($0, detail: detail($0)) }
+            } header: {
+                HStack {
+                    if let date = model.cometsDate {
+                        Text("Elements from the Minor Planet Center, \(date.formatted(date: .abbreviated, time: .shortened))")
+                    } else {
+                        Text(model.isLoadingComets ? "Downloading from the Minor Planet Center…" : "No comet elements yet")
+                    }
+                    Spacer()
+                    Button("Refresh") { Task { await model.loadComets(force: true) } }
+                        .disabled(model.isLoadingComets)
+                }
+            } footer: {
+                Text(showsFaintComets
+                     ? "All \(model.comets.count) comets, brightest first."
+                     : "Comets predicted brighter than magnitude \(Int(Self.cometMagnitudeLimit)) now, brightest first. Comets often stray a magnitude or two from the prediction. Passive tracking re-centres a comet as often as it drifts 30″ against the stars.")
+            }
+        }
+        .navigationTitle("Comets")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Toggle(isOn: $showsFaintComets) { Label("Fainter comets", systemImage: "eye") }
+                    .help("Show every comet, however faint")
+            }
+            detailToolbar(showsAge: false)
+        }
+        .task { await model.loadComets() }
+    }
+
+    /// The small line under a sky object's name: what it is, how bright, and where it is now.
+    private func detail(_ object: SkyObject) -> String {
+        let time = AstroTime(model.viewDate())
+        var parts: [String] = []
+        switch object {
+        case .star(let s):
+            if let d = s.designation { parts.append(d) }
+            parts.append(String(format: "mag %.1f", s.magnitude))
+        case .deepSky(let d):
+            parts.append(d.kind.name)
+            parts.append(d.constellation)
+            if let m = d.magnitude { parts.append(String(format: "mag %.1f", m)) }
+            if let size = d.size { parts.append(size >= 60 ? String(format: "%.1f°", size / 60) : String(format: "%.0f′", size)) }
+        case .comet(let c):
+            if let m = c.apparentMagnitude(time) { parts.append(String(format: "mag %.1f", m)) }
+            let (r, delta) = c.distances(time)
+            parts.append(String(format: "%.2f AU from the Sun, %.2f AU from Earth", r, delta))
+        default:
+            break
+        }
+        if let h = try? model.settings.observer.look(at: object.target, time) {
+            parts.append(h.altitude > 0 ? String(format: "%.0f° up", h.altitude) : "below the horizon")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func sourcePage(_ group: SourceGroup) -> some View {
@@ -271,14 +426,21 @@ struct ObjectsView: View {
 
     /// Everything that matches, from every page at once.
     private var searchResults: some View {
-        let sky = (SolarSystemBody.allCases.map(SkyObject.body) + BrightStars.all.map(SkyObject.star)).filter(visible)
+        // A catalogue number goes straight to that object, and anything else it's known as.
+        let exact = DeepSky.normalisedID(search).map { id in
+            DeepSky.all.filter { $0.id == id || $0.designation == id || $0.alsoKnownAs == id }.map(SkyObject.deepSky)
+        } ?? []
+        let sky = exact.isEmpty
+            ? (SolarSystemBody.allCases.map(SkyObject.body) + NamedStars.all.map(SkyObject.star)
+               + DeepSky.all.map(SkyObject.deepSky) + model.comets.map(SkyObject.comet)).filter(visible)
+            : exact
         let sats = model.satellites.filter { visible(.satellite($0)) }
         return List {
             if sky.isEmpty && sats.isEmpty {
                 ContentUnavailableView.search(text: search)
             }
             if !sky.isEmpty {
-                Section("Sky") { ForEach(sky, id: \.id) { selectRow($0) } }
+                Section("Sky") { ForEach(sky.prefix(300), id: \.id) { selectRow($0, detail: detail($0)) } }
             }
             if !sats.isEmpty {
                 satelliteSection(sats, sortID: "search") { Text("Satellites · \(sats.count)") }
@@ -384,6 +546,16 @@ struct ObjectsView: View {
         search = ""
     }
 
+    /// Everything a search can match: names, catalogue numbers, Bayer letters, kinds.
+    private func searchText(_ object: SkyObject) -> String {
+        switch object {
+        case .star(let s): [s.name, s.designation ?? ""].joined(separator: " ")
+        case .deepSky(let d): [d.name, d.designation, d.designation.replacingOccurrences(of: " ", with: ""), d.alsoKnownAs ?? "",
+                               d.kind.name, d.constellation].joined(separator: " ")
+        default: object.name
+        }
+    }
+
     private func visible(_ object: SkyObject) -> Bool {
         if selectedOnly && !model.isSelected(object.id) && !recentlyUnselected.contains(object.id) { return false }
         if !search.isEmpty {
@@ -394,7 +566,8 @@ struct ObjectsView: View {
                 // Only satellites have attributes to compare.
                 if query.comparesAttributes { return false }
                 let words = search.split(whereSeparator: \.isWhitespace)
-                if !words.allSatisfy({ object.name.localizedCaseInsensitiveContains($0) }) { return false }
+                let text = searchText(object)
+                if !words.allSatisfy({ text.localizedCaseInsensitiveContains($0) }) { return false }
             }
         }
         if maxAgeDays > 0, case .satellite(let s) = object, s.elementAge() > maxAgeDays * 86_400 { return false }

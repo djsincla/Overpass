@@ -58,6 +58,8 @@ enum Theme {
         case .satellite: sunlit
         case .body(let b): color(of: b)
         case .star: Color(white: 0.92)
+        case .deepSky: Color(red: 0.72, green: 0.62, blue: 1.0)
+        case .comet: Color(red: 0.55, green: 0.95, blue: 0.75)
         }
     }
 
@@ -68,6 +70,20 @@ enum Theme {
         case .body(.moon): "moon.fill"
         case .body: "circle.fill"
         case .star: "sparkle"
+        case .deepSky(let d): symbol(of: d.kind)
+        case .comet: "sparkles"
+        }
+    }
+
+    static func symbol(of kind: DeepSkyObject.Kind) -> String {
+        switch kind {
+        case .galaxy: "hurricane"
+        case .openCluster, .asterism: "circle.grid.cross"
+        case .globularCluster: "circle.dotted.circle"
+        case .clusterWithNebula, .nebula, .supernovaRemnant: "cloud.fill"
+        case .darkNebula: "cloud"
+        case .planetaryNebula: "circle.circle"
+        case .star, .doubleStar: "sparkle"
         }
     }
 }

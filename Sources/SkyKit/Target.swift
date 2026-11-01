@@ -16,12 +16,15 @@ public struct Star: Target, Hashable {
     /// J2000 declination in degrees.
     public let dec: Double
     public let magnitude: Double
+    /// Bayer letter and constellation, "α Lyr", where it has one.
+    public let designation: String?
 
-    public init(name: String, ra: Double, dec: Double, magnitude: Double) {
+    public init(name: String, ra: Double, dec: Double, magnitude: Double, designation: String? = nil) {
         self.name = name
         self.ra = ra
         self.dec = dec
         self.magnitude = magnitude
+        self.designation = designation
     }
 
     /// Far enough that observer parallax is irrelevant.
