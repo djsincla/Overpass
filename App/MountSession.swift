@@ -11,6 +11,15 @@ enum TrackingMode: String, CaseIterable, Identifiable {
     /// Continuously varied axis speeds (USB Special mode).
     case smooth = "Smooth"
     var id: Self { self }
+
+    /// For the screen; `rawValue` stays English, for the mount log.
+    var name: String {
+        switch self {
+        case .passive: String(localized: "Passive", comment: "Tracking mode: the mount tracks by itself")
+        case .step: String(localized: "Step", comment: "Tracking mode: a goto repeated every few seconds")
+        case .smooth: String(localized: "Smooth", comment: "Tracking mode: continuously varied axis speeds")
+        }
+    }
 }
 
 enum JogDirection { case up, down, left, right }
@@ -130,6 +139,15 @@ final class MountSession {
     }
 
     private func describe(_ h: Horizontal) -> String { String(format: "az %.3f° alt %.3f°", h.azimuth, h.altitude) }
+    /// `describe` for the screen, in the user's language and number format.
+    private func explain(_ h: Horizontal) -> String {
+        String(localized: "az \(Self.number(h.azimuth, 3))° alt \(Self.number(h.altitude, 3))°")
+    }
+
+    /// `x` to `digits` decimal places in the user's number format, with a sign when `signed`.
+    nonisolated static func number(_ x: Double, _ digits: Int, signed: Bool = false) -> String {
+        x.formatted(.number.precision(.fractionLength(digits)).sign(strategy: signed ? .always() : .automatic))
+    }
 
     private func remember(_ pointing: Horizontal, now: Bool = false) {
         knownPointing = KnownPointing(azimuth: pointing.azimuth, altitude: pointing.altitude, date: .now)
@@ -204,7 +222,7 @@ final class MountSession {
                 var id = try await client.identify()
                 if id.isSpecialMode {
                     // Chosen Normal mode, so leave Special mode, carrying the position across.
-                    status = "Leaving Special mode…"
+                    status = String(localized: "Leaving Special mode…")
                     let special = MountClient(transport: transport)
                     let raw = try await special.positions()
                     let model = s.alignment ?? .iOptronSpecialMode
@@ -249,7 +267,7 @@ final class MountSession {
             state = .connected
             startPolling()
         } catch {
-            state = .failed(describe(error))
+            state = .failed(explain(error))
             await closeTransport()
         }
     }
@@ -345,8 +363,8 @@ final class MountSession {
                     } catch {
                         failures += 1
                         if failures >= 3 {
-                            status = describe(error)
-                            state = .failed("Lost contact with the mount: \(describe(error))")
+                            status = explain(error)
+                            state = .failed(String(localized: "Lost contact with the mount: \(explain(error))"))
                             log("Lost contact with the mount: \(describe(error))")
                             app?.clearTarget()
                             return
@@ -411,7 +429,7 @@ final class MountSession {
         reportDate = report == nil ? nil : asked
         site = report?.site
         if let report {
-            var line = "Mount: \(MountReport.systemName(report.system)), GPS \(Self.gpsName(report.site.gps)), time from \(MountReport.timeSourceName(report.timeSource))"
+            var line = "Mount: \(MountReport.systemName(report.system)), GPS \(Self.gpsLogName(report.site.gps)), time from \(MountReport.timeSourceName(report.timeSource))"
             if let main = report.mainBoard { line += ", main board \(main)" }
             if let hc = report.handController { line += ", hand controller \(hc)" }
             if let a = report.azimuthBoard, let b = report.altitudeBoard { line += ", motor boards \(a) and \(b)" }
@@ -429,7 +447,7 @@ final class MountSession {
     var gpsStable: Bool { gpsFixReads >= 3 }
 
     private func updateGPS(_ reading: MountSite) {
-        if reading.gps != gpsState { log("GPS: \(Self.gpsName(reading.gps))") }
+        if reading.gps != gpsState { log("GPS: \(Self.gpsLogName(reading.gps))") }
         gpsState = reading.gps
         gpsFixReads = reading.hasFix ? gpsFixReads + 1 : 0
         // With a stable fix, the mount's location is its GPS position. (If it only echoes the
@@ -438,6 +456,16 @@ final class MountSession {
     }
 
     static func gpsName(_ state: Int) -> String {
+        switch state {
+        case 0: String(localized: "no GPS")
+        case 1: String(localized: "searching", comment: "GPS state")
+        case 2: String(localized: "fix", comment: "GPS state: has a position fix")
+        default: String(localized: "state \(state)", comment: "GPS state, an unknown code")
+        }
+    }
+
+    /// `gpsName` in English, for the mount log.
+    private static func gpsLogName(_ state: Int) -> String {
         switch state {
         case 0: "no GPS"
         case 1: "searching"
@@ -510,13 +538,13 @@ final class MountSession {
                 case .left: (-model.azimuthSense * jogSpeed, 0)
                 }
                 if let axes, wouldHitCableStop(axes, primaryRate: speed.0) {
-                    status = "Can't turn further that way: cable stop"
+                    status = String(localized: "Can't turn further that way: cable stop")
                     return
                 }
                 try await special.setSpeeds(primary: speed.0, secondary: speed.1)
             }
         } catch {
-            status = describe(error)
+            status = explain(error)
         }
     }
 
@@ -563,7 +591,7 @@ final class MountSession {
                 try await special.stop()
             }
         } catch {
-            status = describe(error)
+            status = explain(error)
         }
     }
 
@@ -597,7 +625,7 @@ final class MountSession {
         unwindTask?.cancel()
         await unwindTask?.value
         unwindTask = nil
-        if let trackingName { log("Stop pressed while tracking \(trackingName)") } else if prepareTask != nil { log("Stop pressed while moving to the start point") }
+        if let trackingName { log("Stop pressed while tracking \(tracksCamera ? "Camera target" : trackingName)") } else if prepareTask != nil { log("Stop pressed while moving to the start point") }
         // Stop at once, then again once the loops have ended: waiting first let a goto finish
         // over slow WiFi, and a loop partway through a step can still send one more command.
         let wasMoving = trackingTask != nil || prepareTask != nil
@@ -611,12 +639,12 @@ final class MountSession {
         try? await normal?.stop()
         try? await normal?.setTracking(false)
         try? await special?.stop()
-        status = "Stopped"
+        status = String(localized: "Stopped")
         if unwinding, !wasUnwinding, pastNorth != nil {
             _ = try? await readPosition()
             unwind()
-        } else if pastNorth != nil {
-            status = String(format: "Stopped %.0f° past north. Unwind before tracking again.", pastNorth ?? 0)
+        } else if let pastNorth {
+            status = String(localized: "Stopped \(Self.number(pastNorth, 0))° past north. Unwind before tracking again.")
         }
     }
 
@@ -649,7 +677,7 @@ final class MountSession {
 
     /// Follows whatever the camera tracker is locked on (Special mode).
     func trackCamera(_ source: CameraTracker) async {
-        await startTracking(name: "Camera target", object: nil, mode: nil, camera: true) {
+        await startTracking(name: "Camera target", shownName: String(localized: "Camera target"), object: nil, mode: nil, camera: true) {
             try await self.runCamera(source)
         }
     }
@@ -657,11 +685,12 @@ final class MountSession {
     /// Camera tracking is running.
     private(set) var tracksCamera = false
 
-    private func startTracking(name: String, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
+    /// `name` is for the mount log; `shownName`, if different, for the screen.
+    private func startTracking(name: String, shownName: String? = nil, object: SkyObject?, mode: TrackingMode?, camera: Bool = false,
                                _ run: @escaping @MainActor () async throws -> Void) async {
         // Mid-switch neither client is usable: a track started then failed with "stopped answering".
         guard !isSwitchingMode else {
-            status = "Wait for the mode switch to finish"
+            status = String(localized: "Wait for the mode switch to finish")
             return
         }
         motionRequests += 1
@@ -674,13 +703,13 @@ final class MountSession {
         // Nothing may be left running with no handle on it.
         trackingTask?.cancel()
         prepareTask?.cancel()
-        trackingName = name
+        trackingName = shownName ?? name
         trackingObject = object
         trackingMode = mode
         tracksCamera = camera
         trace = []
         lastLoop = nil
-        status = "Starting…"
+        status = String(localized: "Starting…")
         let label = mode.map { "\(name) (\($0))" } ?? name
         log("Tracking \(label) started" + (skyPosition.map { " at " + describe($0) } ?? ""))
         trackingTask = Task {
@@ -690,7 +719,7 @@ final class MountSession {
             } catch is CancellationError {
             } catch {
                 lostContact = error is TransportError
-                status = describe(error)
+                status = explain(error)
                 log("Tracking \(label) stopped: \(describe(error))" + (lostContact ? " Letting go of the target." : ""))
                 try? await normal?.stop()
                 try? await special?.stop()
@@ -724,26 +753,26 @@ final class MountSession {
         await stopAll(unwinding: false, request: request)
         guard request == motionRequests else { return }
         guard let point = startPoint(of: pass) else {
-            status = "That pass is already past its start point."
+            status = String(localized: "That pass is already past its start point.")
             return
         }
-        status = "Moving to start point"
+        status = String(localized: "Moving to start point")
         log("Move to start of \(pass.name): " + describe(point.position) + " at \(point.date.formatted(date: .omitted, time: .standard))")
         trackingTask?.cancel()
         prepareTask?.cancel()
         prepareTask = Task {
             do {
                 if let normal {
-                    status = "Slewing to start point at full speed…"
+                    status = String(localized: "Slewing to start point at full speed…")
                     try await goto(normal, to: point.position)
                     // MSS leaves tracking off, so the mount holds there.
-                    status = "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSince(skyNow)))"
+                    status = String(localized: "Waiting at az \(Int(point.position.azimuth))°, alt \(Int(point.position.altitude))° · reaches it in \(countdown(point.date.timeIntervalSince(skyNow)))")
                 } else if let special {
                     try await driveToPlanStart(pass, special)
                 }
             } catch is CancellationError {
             } catch {
-                status = describe(error)
+                status = explain(error)
                 log("Move to start stopped: \(describe(error))" + (error is TransportError ? " Letting go of the target." : ""))
                 try? await normal?.stop()
                 try? await special?.stop()
@@ -764,7 +793,7 @@ final class MountSession {
         guard let plan = MountPlanner(limits: s.limits, model: model).plan(pass.track(above: startAltitude)) else {
             throw MountSessionError.untrackablePass
         }
-        status = "Slewing to start point at full speed…"
+        status = String(localized: "Slewing to start point at full speed…")
         try await slewAxes(special, to: plan.start)
         // The mount's slew gets close; rate control settles the last fraction of a degree.
         var controller = RateController(limits: s.limits)
@@ -775,7 +804,7 @@ final class MountSession {
             let goal = plan.start
             if abs(goal.primary - current.primary) < 0.02 && abs(goal.secondary - current.secondary) < 0.02 {
                 try await special.stop()
-                status = "Ready at the start point · rises in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))"
+                status = String(localized: "Ready at the start point · rises in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))")
                 return
             }
             guard Date.now < deadline else { throw MountSessionError.couldNotReachStart }
@@ -792,11 +821,11 @@ final class MountSession {
         let s = settings
         let observer = s.observer
         // Get there by the allowed way round first; the RA/Dec goto that starts tracking is then tiny.
-        status = "Slewing at full speed…"
+        status = String(localized: "Slewing at full speed…")
         try await goto(normal, to: try observer.look(at: object.target, AstroTime(skyNow)))
 
         if how == .holdPosition {
-            status = "Holding position (geostationary)"
+            status = String(localized: "Holding position (geostationary)")
             return
         }
         let rate: NormalCommand.TrackingRate = switch how {
@@ -837,7 +866,7 @@ final class MountSession {
                 try? await normal.setTracking(false)
                 log("Passive \(object.name): reaching the cable stop, the mount's tracking stopped")
                 guard try await confirmUnwind(object.name, seconds: Self.slewTime(from: here, to: soon, stop: s.cableStopAzimuth)) else {
-                    status = "Stopped at north"
+                    status = String(localized: "Stopped at north")
                     return
                 }
                 var ahead = soon
@@ -845,21 +874,21 @@ final class MountSession {
                     ahead = try observer.look(at: object.target, AstroTime(skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) + 60))
                 }
                 log("Going the long way round to " + describe(ahead) + " from " + describe(here))
-                status = "Going the long way round (the mount won't turn through the cable stop)…"
+                status = String(localized: "Going the long way round (the mount won't turn through the cable stop)…")
                 try await goto(normal, to: ahead, from: here)
                 recentred = .distantPast
                 continue
             }
             let state = try? await normal.systemStatus()
             if let state, state != lastState {
-                log("Passive \(object.name): mount status \(state) (\(Self.systemStatusName(state)))")
+                log("Passive \(object.name): mount status \(state) (\(Self.systemStatusLogName(state)))")
                 lastState = state
             }
             switch state {
-            case 1, 5: status = "Mount tracking at \(rateName) rate"
-            case 2: status = "Mount slewing…"
+            case 1, 5: status = String(localized: "Mount tracking at \(Self.rateName(rate)) rate")
+            case 2: status = String(localized: "Mount slewing…")
             case let other?:
-                status = "The mount stopped tracking (it reports \(Self.systemStatusName(other)))"
+                status = String(localized: "The mount stopped tracking (it reports \(Self.systemStatusName(other)))")
             case nil: break
             }
             try await Task.sleep(for: .seconds(max(2, settings.normalModePeriod * 3)))
@@ -868,11 +897,11 @@ final class MountSession {
 
     static func rateName(_ rate: NormalCommand.TrackingRate) -> String {
         switch rate {
-        case .sidereal: "sidereal"
-        case .lunar: "lunar"
-        case .solar: "solar"
-        case .king: "King"
-        case .custom: "custom"
+        case .sidereal: String(localized: "sidereal", comment: "Tracking rate")
+        case .lunar: String(localized: "lunar", comment: "Tracking rate")
+        case .solar: String(localized: "solar", comment: "Tracking rate")
+        case .king: String(localized: "King", comment: "Tracking rate (King's rate, corrected for refraction)")
+        case .custom: String(localized: "custom", comment: "Tracking rate")
         }
     }
 
@@ -888,6 +917,21 @@ final class MountSession {
 
     /// `:GLS#` system status digit.
     static func systemStatusName(_ digit: Int) -> String {
+        switch digit {
+        case 0: String(localized: "stopped", comment: "Mount status")
+        case 1: String(localized: "tracking", comment: "Mount status")
+        case 2: String(localized: "slewing", comment: "Mount status")
+        case 3: String(localized: "guiding", comment: "Mount status")
+        case 4: String(localized: "meridian flip", comment: "Mount status")
+        case 5: String(localized: "tracking with PEC", comment: "Mount status; PEC is periodic error correction")
+        case 6: String(localized: "parked", comment: "Mount status")
+        case 7: String(localized: "stopped at home", comment: "Mount status")
+        default: String(localized: "status \(digit)", comment: "Mount status, an unknown code")
+        }
+    }
+
+    /// `systemStatusName` in English, for the mount log.
+    private static func systemStatusLogName(_ digit: Int) -> String {
         switch digit {
         case 0: "stopped"
         case 1: "tracking"
@@ -912,7 +956,7 @@ final class MountSession {
             log("\(pass.name) crosses the cable stop at \(crossing.formatted(date: .omitted, time: .standard)); the mount goes the long way round there")
         }
         func crossingNote() -> String {
-            crossing.map { " · goes the long way round at \($0.formatted(date: .omitted, time: .shortened)), where it crosses the cable stop" } ?? ""
+            crossing.map { String(localized: " · goes the long way round at \($0.formatted(date: .omitted, time: .shortened)), where it crosses the cable stop") } ?? ""
         }
         func aimPoint(after seconds: TimeInterval) throws -> Horizontal {
             var h = try StepTracking.aim(at: object.target, observer: settings.observer, now: skyNow + timeOffset, lead: seconds)
@@ -926,7 +970,7 @@ final class MountSession {
             let sky = skyNow
             let interval = max(s.normalModePeriod, s.stepInterval)
             if let pass, sky > pass.end.date + 5 {
-                status = "Pass over"
+                status = String(localized: "Pass over")
                 return
             }
             let aim = try aimPoint(after: StepTracking.defaultLead(interval: interval))
@@ -934,15 +978,15 @@ final class MountSession {
             if aim.altitude < startAltitude {
                 // Before the pass: wait where it first reaches the start elevation, once.
                 if let pass, let point = pass.startPoint(above: startAltitude), sky < point.date, !waitingAtRise {
-                    status = "Slewing to start point at full speed…"
+                    status = String(localized: "Slewing to start point at full speed…")
                     try await goto(normal, to: point.position)
                     waitingAtRise = true
                 }
                 let point = pass.flatMap { $0.startPoint(above: startAltitude) }
                 if let point { countDown(to: point.date) }
                 status = (point
-                    .map { "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSince(skyNow)))" }
-                    ?? "Below \(Int(startAltitude))°") + crossingNote()
+                    .map { String(localized: "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown($0.date.timeIntervalSince(skyNow)))") }
+                    ?? String(localized: "Below \(Int(startAltitude))°")) + crossingNote()
             } else {
                 // Read at the end of the last step; good enough to tell which way round to go.
                 let here = if let skyPosition { skyPosition } else { try await currentAltAz(normal) }
@@ -961,11 +1005,11 @@ final class MountSession {
                         ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth))
                     }
                     if let pass, skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) > pass.end.date {
-                        status = "Pass over before the mount could get round"
+                        status = String(localized: "Pass over before the mount could get round")
                         return
                     }
                     log("Going the long way round to " + describe(ahead) + " from " + describe(here))
-                    status = "Going the long way round (the mount won't turn through the cable stop)…"
+                    status = String(localized: "Going the long way round (the mount won't turn through the cable stop)…")
                     try await goto(normal, to: ahead, from: here)
                     continue
                 }
@@ -977,7 +1021,7 @@ final class MountSession {
                     for _ in 0..<3 {
                         ahead = try aimPoint(after: Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth))
                     }
-                    status = "Slewing to \(object.name) at full speed…"
+                    status = String(localized: "Slewing to \(object.name) at full speed…")
                     try await goto(normal, to: ahead, from: here)
                     continue
                 }
@@ -985,9 +1029,9 @@ final class MountSession {
                     try await normal.slew(altitude: aim.altitude, azimuth: aim.azimuth)
                     log("Step to " + describe(aim) + ", mount read " + describe(here))
                     following = true
-                    status = String(format: "Stepping every %.1f s · az %.1f° alt %.1f°", interval, aim.azimuth, aim.altitude) + crossingNote()
+                    status = String(localized: "Stepping every \(Self.number(interval, 1)) s · az \(Self.number(aim.azimuth, 1))° alt \(Self.number(aim.altitude, 1))°") + crossingNote()
                 } catch NormalModeError.slewRefused {
-                    status = "Mount refused the step (below its altitude limit?)"
+                    status = String(localized: "Mount refused the step (below its altitude limit?)")
                     log("Step to " + describe(aim) + " refused by the mount")
                 }
             }
@@ -1021,13 +1065,13 @@ final class MountSession {
         if settings.unwindsWithoutAsking { return true }
         log("\(name) reached the cable stop; asking whether to unwind")
         unwindAnswer = nil
-        unwindQuestion = "\(name) crosses north, which the mount doesn't turn through. Going the long way round takes about \(Int(seconds)) s, then tracking carries on."
-        status = "Stopped at north, waiting for an answer"
+        unwindQuestion = String(localized: "\(name) crosses north, which the mount doesn't turn through. Going the long way round takes about \(Int(seconds)) s, then tracking carries on.")
+        status = String(localized: "Stopped at north, waiting for an answer")
         defer { unwindQuestion = nil }
         while unwindAnswer == nil { try await Task.sleep(for: .milliseconds(200)) }
         let carryOn = unwindAnswer ?? false
         log(carryOn ? "Unwinding" : "Stopped at the cable stop")
-        if !carryOn { status = "Stopped at north" }
+        if !carryOn { status = String(localized: "Stopped at north") }
         return carryOn
     }
 
@@ -1064,7 +1108,7 @@ final class MountSession {
         positionAnswer = nil
         positionQuestion = PositionQuestion(mount: reading, record: known.horizontal, recordDate: known.date)
         let before = status
-        status = "The mount and Overpass disagree about where the scope points: waiting for an answer"
+        status = String(localized: "The mount and Overpass disagree about where the scope points: waiting for an answer")
         defer { positionQuestion = nil }
         while positionAnswer == nil, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(200)) }
         status = before
@@ -1099,13 +1143,13 @@ final class MountSession {
                 try await Task.sleep(for: .milliseconds(300))
             } while Date.now.timeIntervalSince(sent) < 3
             log(String(format: "Normal-mode sync on %@: after %.1f s the mount reads %@", describe(sky), Date.now.timeIntervalSince(sent), describe(reads)))
-            guard off < 0.1 else { return String(format: "the mount now reads %@, %.2f° away", describe(reads), off) }
+            guard off < 0.1 else { return String(localized: "the mount now reads \(explain(reads)), \(Self.number(off, 2))° away") }
             recordHeld = false
             normalNeedsSync = false
             remember(sky, now: true)
             return nil
         } catch {
-            return "the sync failed: \(describe(error))"
+            return String(localized: "the sync failed: \(explain(error))")
         }
     }
 
@@ -1120,15 +1164,15 @@ final class MountSession {
             log(String(format: "Set position to %@: P0 %+.4f° P1 %+.4f° → sent %+.4f° %+.4f° → read %+.4f° %+.4f°",
                        describe(pointing), before.primary, before.secondary, axes.primary, axes.secondary, after.primary, after.secondary))
             guard abs(wrap180(after.primary - axes.primary)) < 0.05, abs(after.secondary - axes.secondary) < 0.05 else {
-                return String(format: "the mount didn't take the position as sent: sent P0 %+.3f° P1 %+.3f°, it now reads P0 %+.3f° P1 %+.3f° (it read %+.3f° %+.3f° before). Nothing else was changed; this is in the mount log",
-                              axes.primary, axes.secondary, after.primary, after.secondary, before.primary, before.secondary)
+                func n(_ x: Double) -> String { Self.number(x, 3, signed: true) }
+                return String(localized: "the mount didn't take the position as sent: sent P0 \(n(axes.primary))° P1 \(n(axes.secondary))°, it now reads P0 \(n(after.primary))° P1 \(n(after.secondary))° (it read \(n(before.primary))° \(n(before.secondary))° before). Nothing else was changed; this is in the mount log")
             }
             unwrapper = AxisUnwrapper(raw: after.primary, model: model, limits: settings.limits)
             recordHeld = false
             remember(pointing, now: true)
             return nil
         } catch {
-            return "couldn't set the position: \(describe(error))"
+            return String(localized: "couldn't set the position: \(explain(error))")
         }
     }
 
@@ -1178,7 +1222,7 @@ final class MountSession {
         let m = model.azimuthSense * current.primary
         let goalM = m > range.upperBound ? range.upperBound - 2 : range.lowerBound + 2
         let goal = AxisPosition(primary: model.azimuthSense * goalM, secondary: current.secondary)
-        status = String(format: "Unwinding: %.0f° past north, turning back…", past)
+        status = String(localized: "Unwinding: \(Self.number(past, 0))° past north, turning back…")
         log(String(format: "Unwinding from %.0f° past north: primary %.2f → %.2f", past, current.primary, goal.primary))
         do {
             if !(try await slewAxes(special, to: goal)) {
@@ -1191,14 +1235,14 @@ final class MountSession {
                 }
                 try await special.stop()
             }
-            status = "Unwound"
+            status = String(localized: "Unwound")
             log("Unwound")
         } catch is CancellationError {
             try? await special.stop()
         } catch {
             try? await special.stop()
-            status = "Unwinding stopped: " + describe(error)
-            log(status)
+            status = String(localized: "Unwinding stopped: \(explain(error))")
+            log("Unwinding stopped: " + describe(error))
         }
     }
 
@@ -1348,7 +1392,7 @@ final class MountSession {
             if let plan {
                 if let end = plan.samples.last?.date, t > end {
                     try await special.stop()
-                    status = "Pass over"
+                    status = String(localized: "Pass over")
                     return
                 }
                 if let target = plan.target(at: t) {
@@ -1365,7 +1409,7 @@ final class MountSession {
                     if gap <= 2 { following = true; unwindAgreed = false }
                     if mountSlews, gap > 2,
                        let ahead = plan.target(at: t + gap / Self.estimatedSlewRate + 2) {
-                        status = "Catching up at full speed…"
+                        status = String(localized: "Catching up at full speed…")
                         mountSlews = try await slewAxes(special, to: ahead.axes)
                         continue
                     }
@@ -1377,11 +1421,11 @@ final class MountSession {
                     rates = (ahead.primaryRate, ahead.secondaryRate)
                     // Far off with no mount slew to catch up with: catch up at full speed.
                     controller.maximumCorrection = gap > 2 ? max(s.maximumAzimuthRate, s.maximumAltitudeRate) : 2
-                    status = "Tracking"
+                    status = String(localized: "Tracking", comment: "Status: the mount is following the target")
                 } else {
                     // Before the pass: get to the start of the plan at full speed, then hold.
                     if mountSlews, abs(plan.start.primary - current.primary) > 1 || abs(plan.start.secondary - current.secondary) > 1 {
-                        status = "Slewing to start point at full speed…"
+                        status = String(localized: "Slewing to start point at full speed…")
                         // If the mount refuses, rate control does the move instead.
                         mountSlews = try await slewAxes(special, to: plan.start)
                         continue
@@ -1390,7 +1434,7 @@ final class MountSession {
                     rates = (0, 0)
                     controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
                     countDown(to: plan.samples[0].date)
-                    status = "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))"
+                    status = String(localized: "Waiting at start point · reaches \(Int(startAltitude))° in \(countdown(plan.samples[0].date.timeIntervalSince(skyNow)))")
                 }
             } else {
                 // Not a pass: follow the object directly, staying on the current azimuth turn.
@@ -1420,7 +1464,7 @@ final class MountSession {
                 let gap = max(abs(a.primary - current.primary), abs(a.secondary - current.secondary))
                 if gap <= 2 { unwindAgreed = false }
                 period = gap > 2 ? Self.positioningPeriod : s.trackingPeriod
-                status = "Tracking"
+                status = String(localized: "Tracking", comment: "Status: the mount is following the target")
             }
             desired.primary += model.azimuthSense * azimuthOffset
             // The altitude axis may count down (iOptron's counts from the zenith).
@@ -1471,19 +1515,19 @@ final class MountSession {
             guard let estimate = source.estimate(at: read) else {
                 if source.isLost {
                     try await special.stop()
-                    status = "Lost the target. Click it again to pick it up."
+                    status = String(localized: "Lost the target. Click it again to pick it up.")
                     return
                 }
                 // Just picked: measuring its speed before moving.
                 if moving { try await special.stop(); moving = false }
-                setStatus("Measuring its motion…")
+                setStatus(String(localized: "Measuring its motion…"))
                 try await Task.sleep(for: .seconds(period))
                 continue
             }
             let unseen = read.timeIntervalSince(estimate.latest)
             if unseen > source.coastLimit {
                 try await special.stop()
-                status = "Lost the target. Click it again to pick it up."
+                status = String(localized: "Lost the target. Click it again to pick it up.")
                 return
             }
 
@@ -1510,8 +1554,7 @@ final class MountSession {
             } else if let start = stuck, error > 0.7 * start.error {
                 if read.timeIntervalSince(start.date) > 8 {
                     try await special.stop()
-                    status = "Stopped: the mount turned but the object stayed as far from the aim point. "
-                        + "It may be fixed in the picture (the camera's text, a mark on the lens), or the calibration may be off."
+                    status = String(localized: "Stopped: the mount turned but the object stayed as far from the aim point. It may be fixed in the picture (the camera's text, a mark on the lens), or the calibration may be off.")
                     return
                 }
             } else {
@@ -1523,9 +1566,10 @@ final class MountSession {
             record(current: current, desired: estimate.position, feed: (estimate.primaryRate, estimate.secondaryRate), command: command)
             let off = trace.last.map { $0.error * 60 } ?? 0
             let limit = rising ? s.limits.maximumAltitudeAxis : s.limits.minimumAltitudeAxis
-            setStatus(atLimit ? "Held at the altitude limit (\(Int(limit))°). Change it with Point down to."
-                      : unseen > 0.3 ? "Out of sight, carrying on along its path…"
-                      : String(format: "Camera tracking · %.1f′ off", off))
+            setStatus(atLimit ? String(localized: "Held at the altitude limit (\(Int(limit))°). Change it with Point down to.",
+                                           comment: "“Point down to” is the name of a slider on the Camera screen")
+                      : unseen > 0.3 ? String(localized: "Out of sight, carrying on along its path…")
+                      : String(localized: "Camera tracking · \(Self.number(off, 1))′ off"))
             let rest = period - Date.now.timeIntervalSince(loopStart)
             if rest > 0.005 { try await Task.sleep(for: .seconds(rest)) }
         }
@@ -1596,8 +1640,7 @@ final class MountSession {
                     // and leave moves to rate control, where the app owns the turns.
                     try await special.stop()
                     nativeSlewWentWrongWay = true
-                    status = String(format: "The mount's slew to %.1f° went the wrong way from %.1f° (now %.1f°); moving under rate control instead",
-                                    raw, wrap180(current.primary), wrap180(axes?.primary ?? current.primary))
+                    status = String(localized: "The mount's slew to \(Self.number(raw, 1))° went the wrong way from \(Self.number(wrap180(current.primary), 1))° (now \(Self.number(wrap180(axes?.primary ?? current.primary), 1))°); moving under rate control instead")
                     return false
                 }
             case .crossWrap(let direction):
@@ -1639,17 +1682,17 @@ final class MountSession {
     /// round as if ±180° were two ends). Every move is watched and stopped if it goes more than 2°
     /// the wrong way. Returns a report.
     func testNativeSlew() async -> String {
-        guard let special else { return "Connect over USB (Special mode) first." }
+        guard let special else { return String(localized: "Connect over USB (Special mode) first.") }
         await stopAll()
         var report: [String] = []
         do {
-            guard let start = try await readPosition() else { return "No position from the mount." }
+            guard let start = try await readPosition() else { return String(localized: "No position from the mount.") }
             let r0 = wrap180(start.primary)
-            report.append(String(format: "Start: azimuth axis reads %+.2f°.", r0))
+            report.append(String(localized: "Start: azimuth axis reads \(Self.number(r0, 2, signed: true))°."))
 
             // 1. A small move inside the reading's range.
             let near = r0 - 5 > -170 ? r0 - 5 : r0 + 5
-            report.append(try await watchSlew(special, to: near, label: "5° slew"))
+            report.append(try await watchSlew(special, to: near, label: String(localized: "5° slew")))
 
             // 2. Across the wrap, if the cable stop allows it there.
             let side: Double = r0 >= 0 ? 1 : -1
@@ -1663,24 +1706,25 @@ final class MountSession {
             let path = [current.primary, current.primary + wrap180(before - wrap180(current.primary)), crossing.primary]
                 .map { model.azimuthSense * $0 }
             if path.allSatisfy({ $0 > lo && $0 < lo + 360 - 2 * settings.cableMargin }) {
-                report.append(try await watchSlew(special, to: before, label: "Slew to the wrap"))
-                report.append(try await watchSlew(special, to: after, label: "6° across the wrap"))
+                report.append(try await watchSlew(special, to: before, label: String(localized: "Slew to the wrap")))
+                report.append(try await watchSlew(special, to: after, label: String(localized: "6° across the wrap")))
             } else {
-                report.append("Skipped the wrap test: the cable stop is in the way from here.")
+                report.append(String(localized: "Skipped the wrap test: the cable stop is in the way from here."))
             }
         } catch {
             try? await special.stop()
-            report.append("Stopped: \(describe(error))")
+            report.append(String(localized: "Stopped: \(explain(error))"))
         }
         try? await special.stop()
         let text = report.joined(separator: "\n")
-        status = "Slew test finished"
+        status = String(localized: "Slew test finished")
         return text
     }
 
     /// One `:T0#` slew to a raw reading, watched at 4 Hz for up to 15 s.
     private func watchSlew(_ special: MountClient, to raw: Double, label: String) async throws -> String {
-        guard let first = try await readPosition() else { return "\(label): no position." }
+        guard let first = try await readPosition() else { return String(localized: "\(label): no position.") }
+        func n(_ x: Double, _ digits: Int) -> String { Self.number(x, digits, signed: true) }
         let from = wrap180(first.primary)
         // Which way the short path goes, on the continuous axis.
         let shortWay = wrap180(raw - from)
@@ -1693,16 +1737,17 @@ final class MountSession {
             moved = now.primary - first.primary
             let reading = wrap180(now.primary)
             if abs(wrap180(reading - raw)) < 0.2 {
-                return String(format: "%@ from %+.2f° to %+.2f°: arrived after moving %+.1f° (the short way is %+.1f°). %@", label, from, raw, moved, shortWay,
-                              abs(moved - shortWay) < 1 ? "Same frame as the reading." : "A different way round from the reading.")
+                let frame = abs(moved - shortWay) < 1 ? String(localized: "Same frame as the reading.")
+                    : String(localized: "A different way round from the reading.")
+                return String(localized: "\(label) from \(n(from, 2))° to \(n(raw, 2))°: arrived after moving \(n(moved, 1))° (the short way is \(n(shortWay, 1))°). \(frame)")
             }
             if moved * shortWay < 0 && abs(moved) > 2 {
                 try await special.stop()
-                return String(format: "%@ from %+.2f° to %+.2f°: went the wrong way (%+.1f° when the short way is %+.1f°), stopped.", label, from, raw, moved, shortWay)
+                return String(localized: "\(label) from \(n(from, 2))° to \(n(raw, 2))°: went the wrong way (\(n(moved, 1))° when the short way is \(n(shortWay, 1))°), stopped.")
             }
         }
         try await special.stop()
-        return String(format: "%@ from %+.2f° to %+.2f°: hadn't arrived after 15 s, moved %+.1f°, stopped.", label, from, raw, moved)
+        return String(localized: "\(label) from \(n(from, 2))° to \(n(raw, 2))°: hadn't arrived after 15 s, moved \(n(moved, 1))°, stopped.")
     }
 
     /// Polls (4 Hz) until the axes reach `target`, or stop moving short of it. False if the
@@ -1763,7 +1808,7 @@ final class MountSession {
         do {
             if special != nil {
                 guard let model = settings.alignment, let current = try await readPosition() else {
-                    status = "Align first, or turn on the mount's own alignment"
+                    status = String(localized: "Align first, or turn on the mount's own alignment")
                     return
                 }
                 let sky = try observer.look(at: object.target, AstroTime(skyPositionDate ?? .now))
@@ -1776,21 +1821,21 @@ final class MountSession {
                 _ = try? await readPosition()
                 log(String(format: "Sync on %@ (Special mode): P0 %+.4f° P1 %+.4f° = ", object.name, current.primary, current.secondary)
                     + describe(sky) + String(format: ", moved the alignment %.3f°", shift))
-                status = String(format: "Synced on %@: the alignment moved %@", object.name, Self.arc(shift))
+                status = String(localized: "Synced on \(object.name): the alignment moved \(Self.arc(shift))")
             } else if let normal {
                 await holdStill(normal: normal)
                 let before = try await normal.altAz()
                 let sky = try observer.look(at: object.target, AstroTime(.now))
                 log(String(format: "Sync on %@ (Normal mode): :GAC# az %.3f° alt %.3f°", object.name, before.azimuth, before.altitude))
                 if let problem = await syncNormal(normal, to: sky) {
-                    status = "Synced on \(object.name), but \(problem). In the mount log."
+                    status = String(localized: "Synced on \(object.name), but \(problem). In the mount log.")
                 } else {
-                    status = "Synced on \(object.name)"
+                    status = String(localized: "Synced on \(object.name)")
                 }
                 _ = try? await currentAltAz(normal)
             }
         } catch {
-            status = describe(error)
+            status = explain(error)
         }
     }
 
@@ -1799,7 +1844,7 @@ final class MountSession {
         let seconds = degrees * 3600
         if seconds < 60 { return String(format: "%.0f″", seconds) }
         if degrees < 1 { return String(format: "%d′ %02d″", Int(seconds) / 60, Int(seconds) % 60) }
-        return String(format: "%.2f°", degrees)
+        return number(degrees, 2) + "°"
     }
 
     /// Special mode: record that `object` is centred right now.
@@ -1808,9 +1853,9 @@ final class MountSession {
             guard let current = try await readPosition() else { return }
             let sky = try settings.observer.look(at: object.target, AstroTime(.now))
             alignmentPoints.append(AlignmentPoint(targetName: object.name, date: .now, sky: sky, axes: current))
-            status = "Recorded \(object.name)"
+            status = String(localized: "Recorded \(object.name)")
         } catch {
-            status = describe(error)
+            status = explain(error)
         }
     }
 
@@ -1850,11 +1895,11 @@ final class MountSession {
                 let here = model.sky(for: AxisPosition(primary: raw.primary, secondary: raw.secondary))
                 let chosen = await confirmPosition(here)
                 if chosen == here {
-                    status = "Special mode: the axes agree with where Overpass last saw the scope"
+                    status = String(localized: "Special mode: the axes agree with where Overpass last saw the scope")
                 } else if let problem = await syncSpecial(client, to: chosen) {
-                    status = "Couldn't set the position chosen: \(problem)."
+                    status = String(localized: "Couldn't set the position chosen: \(problem).")
                 } else {
-                    status = "Special mode: the axes now read " + describe(chosen)
+                    status = String(localized: "Special mode: the axes now read \(explain(chosen))")
                 }
             }
             return identity
@@ -1875,13 +1920,13 @@ final class MountSession {
                 + (knownPointing.map { " (Overpass's record: " + describe($0.horizontal) + ")" } ?? ""))
             let chosen = await confirmPosition(here)
             if chosen == here {
-                if knownPointing != nil { status = "Special mode: the axes agree with where Overpass last saw the scope" }
+                if knownPointing != nil { status = String(localized: "Special mode: the axes agree with where Overpass last saw the scope") }
                 recordHeld = false
                 remember(here, now: true)
             } else if let problem = await syncSpecial(client, to: chosen) {
-                status = "Couldn't set the position chosen: \(problem)."
+                status = String(localized: "Couldn't set the position chosen: \(problem).")
             } else {
-                status = "Special mode: the axes now read " + describe(chosen)
+                status = String(localized: "Special mode: the axes now read \(explain(chosen))")
             }
         }
         return identity
@@ -1942,7 +1987,7 @@ final class MountSession {
     /// read the position back to check.
     private func syncAfterSwitch(_ normal: NormalModeClient, position: Horizontal?) async {
         guard let position else {
-            status = "Normal mode, but the mount still reported a placeholder position after 20 s, so it wasn't synced"
+            status = String(localized: "Normal mode, but the mount still reported a placeholder position after 20 s, so it wasn't synced")
             return
         }
         // The mount's own reading, now its real position is back: where the scope is. Overpass's
@@ -1950,17 +1995,20 @@ final class MountSession {
         // unseen), and syncing on a stale record moved the alignment 35° (27 Oct 2026). Normal
         // mode still needs a sync before it tracks; on its own reading that changes nothing.
         var sky = await confirmPosition(position)
+        // English for the mount log, and for the screen.
         var name = sky == position ? "the scope's position" : "the position chosen"
+        var shownName = sky == position ? String(localized: "the scope's position") : String(localized: "the position chosen")
         if let target = app?.targetObject, let h = try? settings.observer.look(at: target.target, AstroTime(.now)),
            angularSeparation(h.unitVector, sky.unitVector) < 0.5 {
             name = target.name
+            shownName = target.name
             sky = h
         }
         log("Sync after switching to Normal mode, on \(name): mount read " + describe(position) + ", sending " + describe(sky))
         if let problem = await syncNormal(normal, to: sky) {
-            status = "Normal mode, synced on \(name), but \(problem). In the mount log."
+            status = String(localized: "Normal mode, synced on \(shownName), but \(problem). In the mount log.")
         } else {
-            status = "Normal mode, synced on \(name)"
+            status = String(localized: "Normal mode, synced on \(shownName)")
         }
     }
 
@@ -1971,7 +2019,7 @@ final class MountSession {
             await checkNormalPosition(normal)
             return
         }
-        status = "Waiting for the mount's position…"
+        status = String(localized: "Waiting for the mount's position…")
         let position = await waitForNormalPosition(normal)
         await syncAfterSwitch(normal, position: position)
     }
@@ -2001,7 +2049,7 @@ final class MountSession {
         }
         do {
             if current.isSpecialMode, let special {
-                status = "Switching to Normal mode…"
+                status = String(localized: "Switching to Normal mode…")
                 await holdStill(special: special)
                 if let raw = try? await special.positions() {
                     let model = settings.alignment ?? .iOptronSpecialMode
@@ -2013,7 +2061,7 @@ final class MountSession {
                 _ = try await special.exitSpecialMode()
                 let normal = NormalModeClient(transport: transport)
                 await holdStill(normal: normal)
-                status = "Waiting for the mount's position…"
+                status = String(localized: "Waiting for the mount's position…")
                 let position = await waitForNormalPosition(normal)
                 // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
                 site = try? await normal.site()
@@ -2027,7 +2075,8 @@ final class MountSession {
                 app?.settings.connection = .usbNormal
 
             } else if let normal {
-                status = "Switching to Special mode…"
+                let switching = String(localized: "Switching to Special mode…")
+                status = switching
                 let client = MountClient(transport: transport)
                 identity = try await enterSpecialMode(client, transport)
                 let raw = try await client.positions()
@@ -2038,11 +2087,11 @@ final class MountSession {
                 self.special = client
                 kind = .usb
                 app?.settings.connection = .usb
-                if status.hasPrefix("Switching") { status = "Special mode" }
+                if status == switching { status = String(localized: "Special mode") }
             }
             _ = try? await readPosition()
         } catch {
-            status = "Couldn't switch modes: \(describe(error))"
+            status = String(localized: "Couldn't switch modes: \(explain(error))")
             log("Mode switch failed: \(describe(error))")
         }
     }
@@ -2052,26 +2101,26 @@ final class MountSession {
     /// Special mode: sets the axes so the scope reads `pointing` (`:S0`/`:S1`), then reads them
     /// back to check the mount took the values as positions. Returns a report.
     func setPosition(_ pointing: Horizontal) async -> String {
-        guard special != nil || normal != nil else { return "Connect the mount first." }
+        guard special != nil || normal != nil else { return String(localized: "Connect the mount first.") }
         await stopAll()
         if let special {
             if let problem = await syncSpecial(special, to: pointing) { return problem.prefix(1).uppercased() + problem.dropFirst() + "." }
             _ = try? await readPosition()
-            return "The axes now read " + describe(pointing) + "."
+            return String(localized: "The axes now read \(explain(pointing)).")
         }
         if let normal {
-            if let problem = await syncNormal(normal, to: pointing) { return "Couldn't set it: \(problem)." }
+            if let problem = await syncNormal(normal, to: pointing) { return String(localized: "Couldn't set it: \(problem).") }
             _ = try? await readPosition()
-            return "The mount now reads " + describe(pointing) + "."
+            return String(localized: "The mount now reads \(explain(pointing)).")
         }
-        return "Connect the mount first."
+        return String(localized: "Connect the mount first.")
     }
 
     /// Switches Special → Normal → Special without moving or syncing anything, reading the
     /// position at each step, to see what a mode change does to it. Returns a report; every
     /// line also goes to the mount log.
     func testModeSwitching() async -> String {
-        guard let special, let transport = usbTransport else { return "Connect over USB (Special mode) first." }
+        guard let special, let transport = usbTransport else { return String(localized: "Connect over USB (Special mode) first.") }
         await stopAll()
         pollTask?.cancel()
         pollTask = nil
@@ -2123,9 +2172,9 @@ final class MountSession {
         let chosen = await confirmPosition(reading)
         guard chosen != reading else { return }
         if let problem = await syncNormal(client, to: chosen) {
-            status = "Couldn't set the position chosen: \(problem). In the mount log."
+            status = String(localized: "Couldn't set the position chosen: \(problem). In the mount log.")
         } else {
-            status = "The mount now reads " + describe(chosen)
+            status = String(localized: "The mount now reads \(explain(chosen))")
         }
     }
 
@@ -2147,20 +2196,34 @@ final class MountSession {
             // Re-anchor the turn count to the new model.
             unwrapper = AxisUnwrapper(raw: wrap180(raw), model: model, limits: app.settings.limits)
         }
-        status = "Aligned on \(alignmentPoints.count) stars"
+        status = String(localized: "Aligned on \(alignmentPoints.count) stars")
         return true
     }
 
     // MARK: Errors
 
+    /// In English, for the mount log.
     private func describe(_ error: Error) -> String {
         switch error {
-        case let e as MountSessionError: e.message
+        case let e as MountSessionError: e.logMessage
         case TransportError.timedOut: "The mount stopped answering."
         case MountClientError.modeDidNotChange: "The mount didn't switch to Special mode. Power it off and on, then connect again."
         case TransportError.closed: "The connection closed."
         case TransportError.cannotOpen(let why): "Couldn't open the port: \(why)"
         case NormalModeError.slewRefused: "The mount refused the slew (below its altitude limit?)"
+        default: error.localizedDescription
+        }
+    }
+
+    /// `describe` for the screen, in the user's language.
+    private func explain(_ error: Error) -> String {
+        switch error {
+        case let e as MountSessionError: e.message
+        case TransportError.timedOut: String(localized: "The mount stopped answering.")
+        case MountClientError.modeDidNotChange: String(localized: "The mount didn't switch to Special mode. Power it off and on, then connect again.")
+        case TransportError.closed: String(localized: "The connection closed.")
+        case TransportError.cannotOpen(let why): String(localized: "Couldn't open the port: \(why)")
+        case NormalModeError.slewRefused: String(localized: "The mount refused the slew (below its altitude limit?)")
         default: error.localizedDescription
         }
     }
@@ -2170,7 +2233,26 @@ enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsNormalMode, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
 
+    /// For the screen.
     var message: String {
+        switch self {
+        case .inSpecialMode: String(localized: "The mount is in Special mode, so WiFi won't work. Connect by USB, or switch it back.")
+        case .noSerialPort: String(localized: "Choose the mount's USB port in Settings.")
+        case .needsWiFi: String(localized: "Passive and Step tracking need the WiFi connection.")
+        case .needsNormalMode: String(localized: "Connect over WiFi or USB Normal mode to read the mount's location.")
+        case .needsUSB: String(localized: "Smooth tracking needs the USB connection (Special mode).")
+        case .notAligned: String(localized: "Align on at least two stars first.")
+        case .notPassive: String(localized: "The mount can't track this by itself; use Step or Smooth.")
+        case .untrackablePass: String(localized: "This pass exceeds the altitude limits.")
+        case .routeCrossesCableStop: String(localized: "Stopped: that move would swing through the cable stop.")
+        case .pastCableStop: String(localized: "Stopped at the cable stop.")
+        case .belowHorizon: String(localized: "It's below your horizon.")
+        case .couldNotReachStart: String(localized: "Stopped: the mount didn't reach the start point within 5 minutes.")
+        }
+    }
+
+    /// `message` in English, for the mount log.
+    var logMessage: String {
         switch self {
         case .inSpecialMode: "The mount is in Special mode, so WiFi won't work. Connect by USB, or switch it back."
         case .noSerialPort: "Choose the mount's USB port in Settings."

@@ -11,7 +11,10 @@ enum CameraTarget: String, CaseIterable, Identifiable {
     case ground
 
     var id: Self { self }
-    var title: String { self == .sky ? "Sky" : "Ground" }
+    var title: String {
+        self == .sky ? String(localized: "Sky", comment: "Camera tracking target: something against the sky")
+            : String(localized: "Ground", comment: "Camera tracking target: something on the ground")
+    }
 }
 
 /// Camera tracking: click something in the camera image and the mount follows it, keeping it on
@@ -67,9 +70,9 @@ final class CameraTracker {
     /// Why the mount can't follow yet, or nil if it can.
     var driveBlocker: String? {
         guard let mount, mount.state == .connected, mount.kind == .usb else {
-            return "Connect the mount by USB in Special mode to move it."
+            return String(localized: "Connect the mount by USB in Special mode to move it.")
         }
-        if calibration == nil { return "Calibrate first, so Overpass knows how the image moves with the mount." }
+        if calibration == nil { return String(localized: "Calibrate first, so Overpass knows how the image moves with the mount.") }
         return nil
     }
 
@@ -83,7 +86,7 @@ final class CameraTracker {
             app?.settings.cameraAimX = min(max(point.x / Double(size.width - 1), 0), 1)
             app?.settings.cameraAimY = min(max(point.y / Double(size.height - 1), 0), 1)
             settingAim = false
-            message = "Aim point set."
+            message = String(localized: "Aim point set.")
             return
         }
         await pick(at: point, radius: radius)
@@ -96,24 +99,24 @@ final class CameraTracker {
 
     func pick(at point: (x: Double, y: Double), radius: Double = 30) async {
         guard let frame = latestFrame else {
-            message = "Start the camera first."
+            message = String(localized: "Start the camera first.")
             return
         }
         switch target {
         case .sky:
             guard let picked = MovingObjectTracker(frame: frame, at: point, radius: radius) else {
-                message = "Nothing stands out from the sky there. Click right on it."
+                message = String(localized: "Nothing stands out from the sky there. Click right on it.")
                 return
             }
-            await start(picked, frame, picked.blob.polarity > 0 ? "Locked on a bright object." : "Locked on a dark object.")
+            await start(picked, frame, picked.blob.polarity > 0 ? String(localized: "Locked on a bright object.") : String(localized: "Locked on a dark object."))
         case .ground:
             // The outline of what's there if Vision finds one, else a square about the size of the click.
             if let box = await ObjectFinder.box(around: point, in: frame) {
-                await pick(box: box, in: frame, note: "Locked on it. If it slips, drag a box around it instead.")
+                await pick(box: box, in: frame, note: String(localized: "Locked on it. If it slips, drag a box around it instead."))
             } else {
                 let side = 4 * radius
                 await pick(box: CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side), in: frame,
-                           note: "Locked on the area clicked. Drag a box around the object for a closer fit.")
+                           note: String(localized: "Locked on the area clicked. Drag a box around the object for a closer fit."))
             }
         }
     }
@@ -121,16 +124,16 @@ final class CameraTracker {
     /// A box dragged around something, in frame pixels.
     func pick(box: CGRect) async {
         guard let frame = latestFrame else {
-            message = "Start the camera first."
+            message = String(localized: "Start the camera first.")
             return
         }
-        await pick(box: box, in: frame, note: "Locked on it.")
+        await pick(box: box, in: frame, note: String(localized: "Locked on it."))
     }
 
     private func pick(box: CGRect, in frame: GrayFrame, note: String) async {
         let width = Int(min(box.width, Self.largestPatch)), height = Int(min(box.height, Self.largestPatch))
         guard let picked = PatchTracker(frame: frame, centre: (box.midX, box.midY), width: width, height: height) else {
-            message = "There's too little detail there to hold on to. Drag a box around the object."
+            message = String(localized: "There's too little detail there to hold on to. Drag a box around the object.")
             return
         }
         await start(picked, frame, note)
@@ -202,7 +205,7 @@ final class CameraTracker {
                               at: frame.timestamp)
             }
         }
-        if tracker.state == .lost, !wasLost { message = "Lost it. Click it again to pick it up." }
+        if tracker.state == .lost, !wasLost { message = String(localized: "Lost it. Click it again to pick it up.") }
     }
 
     /// Zoomed in, the view stays on the aim point. Following the object made the whole picture
@@ -233,7 +236,7 @@ final class CameraTracker {
     /// Calibrates on whatever is picked, which must be fixed: a star, or a distant light, mast or building.
     func calibrate() async {
         guard let app, tracker != nil else {
-            message = "Click something that isn't moving first (a star, a distant light, mast or building), then calibrate."
+            message = String(localized: "Click something that isn't moving first (a star, a distant light, mast or building), then calibrate.")
             return
         }
         isCalibrating = true

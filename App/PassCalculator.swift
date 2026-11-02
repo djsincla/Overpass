@@ -101,7 +101,7 @@ struct PassCalculatorView: View {
 
     private var daysPicker: some View {
         Picker("Days", selection: $days) {
-            ForEach([1.0, 3, 7, 14], id: \.self) { Text($0 == 1 ? "1 day" : "\(Int($0)) days").tag($0) }
+            ForEach([1.0, 3, 7, 14], id: \.self) { Text("\(Int($0)) days").tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -125,10 +125,11 @@ struct PassCalculatorView: View {
 
     private var summary: String {
         if let failure { return failure }
-        if computing && rows.isEmpty { return "Calculating…" }
-        let count = rows.count == 1 ? "1 pass" : "\(rows.count) passes"
-        let visible = object?.isSatellite == true && !visibleOnly ? " · \(rows.filter(\.isVisible).count) visible" : ""
-        return "\(count) in the next \(Int(days)) day\(days == 1 ? "" : "s")\(visible) · from \(Int(model.settings.minimumAltitude))° above the horizon"
+        if computing && rows.isEmpty { return String(localized: "Calculating…") }
+        var parts = [String(localized: "\(rows.count) passes in the next \(Int(days)) days")]
+        if object?.isSatellite == true && !visibleOnly { parts.append(String(localized: "\(rows.filter(\.isVisible).count) visible")) }
+        parts.append(String(localized: "from \(Int(model.settings.minimumAltitude))° above the horizon"))
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Results
@@ -211,7 +212,7 @@ struct PassCalculatorView: View {
             rows = result
         } catch {
             rows = []
-            failure = "Couldn't calculate: \(error.localizedDescription)"
+            failure = String(localized: "Couldn't calculate: \(error.localizedDescription)")
         }
     }
 
@@ -284,13 +285,13 @@ struct CalculatorRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(time(row.start, else: "Up now")) → \(time(row.end, else: "stays up"))")
+                Text("\(time(row.start, else: String(localized: "Up now"))) → \(time(row.end, else: String(localized: "stays up")))")
                     .font(.headline.monospacedDigit())
                 Text(detail).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 if row.satellitePass != nil {
                     HStack(spacing: 5) {
-                        if row.isVisible { Chip(text: "Visible", systemImage: "eye.fill", tint: Theme.focus) }
-                        if row.isEclipsed { Chip(text: "Eclipsed", systemImage: "moon.fill", tint: Theme.eclipsed) }
+                        if row.isVisible { Chip(text: String(localized: "Visible"), systemImage: "eye.fill", tint: Theme.focus) }
+                        if row.isEclipsed { Chip(text: String(localized: "Eclipsed"), systemImage: "moon.fill", tint: Theme.eclipsed) }
                     }
                 }
             }
@@ -301,7 +302,7 @@ struct CalculatorRow: View {
             VStack(alignment: .trailing, spacing: 0) {
                 Text(row.maxAltitude.map { "\(Int($0.rounded()))°" } ?? "—")
                     .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
-                Text(row.peak.map { "at \($0.formatted(date: .omitted, time: .shortened))" } ?? "peak")
+                Text(row.peak.map { String(localized: "at \($0.formatted(date: .omitted, time: .shortened))") } ?? String(localized: "peak"))
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
             }
             .frame(minWidth: 64, alignment: .trailing)
@@ -318,7 +319,7 @@ struct CalculatorRow: View {
             parts.append(d < 3600 ? Duration.seconds(d).formatted(.time(pattern: .minuteSecond))
                                   : Duration.seconds(d).formatted(.time(pattern: .hourMinute)) + " h")
         }
-        if row.start == nil && row.end == nil { parts.append("Circumpolar: never sets") }
+        if row.start == nil && row.end == nil { parts.append(String(localized: "Circumpolar: never sets")) }
         return parts.joined(separator: " · ")
     }
 

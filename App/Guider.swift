@@ -42,7 +42,7 @@ final class Guider {
         guard isGuiding, mount.trackingMode == .smooth, let object = mount.trackingObject else { return }
         guard let spot else {
             lostFrames += 1
-            status = lostFrames > 10 ? "Lost the target; holding the last corrections" : "Searching…"
+            status = lostFrames > 10 ? String(localized: "Lost the target; holding the last corrections") : String(localized: "Searching…")
             return
         }
         lostFrames = 0
@@ -66,9 +66,11 @@ final class Guider {
             mount.timeOffset = next.timeOffset
             mount.azimuthOffset = sense * next.azimuthOffset
             mount.altitudeOffset = altitudeSense * next.altitudeOffset
-            status = String(format: "Guiding · off by %.1f′ · time %+.2f s", errorArcmin ?? 0, next.timeOffset)
+            let off = (errorArcmin ?? 0).formatted(.number.precision(.fractionLength(1)))
+            let time = next.timeOffset.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always()))
+            status = String(localized: "Guiding · off by \(off)′ · time \(time) s")
         } catch {
-            status = "Guiding paused: \(error.localizedDescription)"
+            status = String(localized: "Guiding paused: \(error.localizedDescription)")
         }
     }
 
@@ -85,7 +87,7 @@ final class Guider {
     func calibrate(using position: @escaping @MainActor () -> (x: Double, y: Double)?) async {
         guard let app, let mount, !isCalibrating else { return }
         guard mount.kind == .usb, !mount.isTracking else {
-            status = "Calibrate over USB, with tracking stopped and a bright star centred."
+            status = String(localized: "Calibrate over USB, with tracking stopped and a bright star centred.")
             return
         }
         isCalibrating = true
@@ -100,10 +102,12 @@ final class Guider {
                                                 altitude: altitude)
             guard !calibration.isDegenerate else { throw GuiderError.degenerate }
             app.settings.cameraCalibration = calibration
-            status = String(format: "Calibrated · %.1f″ per pixel · rotated %.0f°", calibration.arcsecondsPerPixel, calibration.rotation)
+            let scale = calibration.arcsecondsPerPixel.formatted(.number.precision(.fractionLength(1)))
+            let rotation = calibration.rotation.formatted(.number.precision(.fractionLength(0)))
+            status = String(localized: "Calibrated · \(scale)″ per pixel · rotated \(rotation)°")
         } catch {
             try? await mount.stopMotion()
-            status = (error as? GuiderError)?.message ?? "Calibration failed: \(error.localizedDescription)"
+            status = (error as? GuiderError)?.message ?? String(localized: "Calibration failed: \(error.localizedDescription)")
         }
     }
 
@@ -114,7 +118,7 @@ final class Guider {
         let start = try await averageSpot(position)
         guard let axesBefore = try await mount.currentAxes() else { throw GuiderError.noMount }
 
-        status = "Calibrating: moving \(primaryRate != 0 ? "azimuth" : "altitude")…"
+        status = primaryRate != 0 ? String(localized: "Calibrating: moving azimuth…") : String(localized: "Calibrating: moving altitude…")
         // Slowly at first, for a telescope's narrow view; faster if the image barely moves, as
         // with a wide-angle webcam, where 0.1°/s would take most of a minute to show.
         var speed = 1.0
@@ -170,10 +174,10 @@ enum GuiderError: Error {
 
     var message: String {
         switch self {
-        case .noSpot: "Can't see a bright spot near the centre. Centre a bright star and check focus and exposure."
-        case .noMount: "Connect the mount by USB first."
-        case .tooLittleMotion: "The star barely moved. Check the camera is fixed to the tube and the mount is moving."
-        case .degenerate: "Both axes moved the image the same way; check the camera is fixed to the tube and try again."
+        case .noSpot: String(localized: "Can't see a bright spot near the centre. Centre a bright star and check focus and exposure.")
+        case .noMount: String(localized: "Connect the mount by USB first.")
+        case .tooLittleMotion: String(localized: "The star barely moved. Check the camera is fixed to the tube and the mount is moving.")
+        case .degenerate: String(localized: "Both axes moved the image the same way; check the camera is fixed to the tube and try again.")
         }
     }
 }

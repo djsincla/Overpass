@@ -12,42 +12,43 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
 
     func title(_ units: Units) -> String {
         switch self {
-        case .name: "Name"
-        case .number: "Number"
+        case .name: String(localized: "Name", comment: "Satellite list column")
+        case .number: String(localized: "Number", comment: "Satellite list column: NORAD number")
         case .cospar: "COSPAR"
-        case .type: "Type"
-        case .owner: "Owner"
-        case .launched: "Launched"
-        case .period: "Period min"
-        case .perigee: "Perigee \(units.distanceUnit)"
-        case .apogee: "Apogee \(units.distanceUnit)"
-        case .inclination: "Incl."
-        case .dimensions: "L × D \(units.lengthUnit)"
-        case .span: "Span \(units.lengthUnit)"
-        case .rcs: "RCS m²"
-        case .size: "Size"
-        case .age: "TLE age"
+        case .type: String(localized: "Type", comment: "Satellite list column")
+        case .owner: String(localized: "Owner", comment: "Satellite list column")
+        case .launched: String(localized: "Launched", comment: "Satellite list column")
+        case .period: String(localized: "Period min", comment: "Satellite list column: orbital period in minutes")
+        case .perigee: String(localized: "Perigee \(units.distanceUnit)", comment: "Satellite list column; the unit is km or mi")
+        case .apogee: String(localized: "Apogee \(units.distanceUnit)", comment: "Satellite list column; the unit is km or mi")
+        case .inclination: String(localized: "Incl.", comment: "Satellite list column: orbital inclination, abbreviated")
+        case .dimensions: String(localized: "L × D \(units.lengthUnit)", comment: "Satellite list column: length × diameter; the unit is m or ft")
+        case .span: String(localized: "Span \(units.lengthUnit)", comment: "Satellite list column; the unit is m or ft")
+        case .rcs: String(localized: "RCS m²", comment: "Satellite list column: radar cross-section")
+        case .size: String(localized: "Size", comment: "Satellite list column")
+        case .age: String(localized: "TLE age", comment: "Satellite list column")
         }
     }
 
     func help(_ units: Units) -> String {
-        let distance = units.imperial ? "miles" : "km", length = units.imperial ? "feet" : "metres"
+        let distance = units.imperial ? String(localized: "miles") : "km"
+        let length = units.imperial ? String(localized: "feet") : String(localized: "metres")
         return switch self {
-        case .name: "Name in the TLE source"
-        case .number: "NORAD catalogue number"
-        case .cospar: "International designator: launch year, launch number and piece"
-        case .type: "Payload, rocket body or debris"
-        case .owner: "Owner or operator country code"
-        case .launched: "Launch date"
-        case .period: "Orbital period, minutes"
-        case .perigee: "Lowest height above the surface, \(distance)"
-        case .apogee: "Highest height above the surface, \(distance)"
-        case .inclination: "Orbital inclination, degrees"
-        case .dimensions: "Length × diameter, \(length) (GCAT)"
-        case .span: "Span across solar panels or booms, \(length) (GCAT)"
-        case .rcs: "Radar cross-section, m², where published"
-        case .size: "Small, medium or large: from the radar cross-section, or else the largest dimension"
-        case .age: "Age of the orbital elements"
+        case .name: String(localized: "Name in the TLE source")
+        case .number: String(localized: "NORAD catalogue number")
+        case .cospar: String(localized: "International designator: launch year, launch number and piece")
+        case .type: String(localized: "Payload, rocket body or debris")
+        case .owner: String(localized: "Owner or operator country code")
+        case .launched: String(localized: "Launch date")
+        case .period: String(localized: "Orbital period, minutes")
+        case .perigee: String(localized: "Lowest height above the surface, \(distance)")
+        case .apogee: String(localized: "Highest height above the surface, \(distance)")
+        case .inclination: String(localized: "Orbital inclination, degrees")
+        case .dimensions: String(localized: "Length × diameter, \(length) (GCAT)")
+        case .span: String(localized: "Span across solar panels or booms, \(length) (GCAT)")
+        case .rcs: String(localized: "Radar cross-section, m², where published")
+        case .size: String(localized: "Small, medium or large: from the radar cross-section, or else the largest dimension")
+        case .age: String(localized: "Age of the orbital elements")
         }
     }
 
@@ -105,7 +106,7 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         case .period: return number(info?.period, 1)
         case .perigee: return km(info?.perigee)
         case .apogee: return km(info?.apogee)
-        case .inclination: return info?.inclination.map { String(format: "%.1f°", $0) } ?? "–"
+        case .inclination: return info?.inclination.map { number($0, 1) + "°" } ?? "–"
         case .dimensions:
             let parts = [info?.length, info?.diameter].compactMap { $0 }
             return parts.isEmpty ? "–" : parts.map { metres($0) }.joined(separator: " × ")
@@ -114,7 +115,8 @@ enum SatelliteColumn: String, CaseIterable, Codable, Identifiable {
         case .size: return info?.sizeClass?.name ?? "–"
         case .age:
             let days = sat.elementAge() / 86_400
-            return days < 1 ? "\(Int(days * 24)) h" : String(format: "%.1f d", days)
+            return days < 1 ? String(localized: "\(Int(days * 24)) h", comment: "Hours, abbreviated")
+                : String(localized: "\(days.formatted(.number.precision(.fractionLength(1)))) d", comment: "Days, abbreviated")
         }
     }
 

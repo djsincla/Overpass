@@ -53,11 +53,11 @@ struct PassRow: View {
                         .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                     HStack(spacing: 5) {
                         RiseCountdown(start: pass.start.date, end: pass.end.date, now: now)
-                        if pass.isVisible { Chip(text: "Visible", systemImage: "eye.fill", tint: Theme.focus) }
-                        if pass.isEclipsed { Chip(text: "Eclipsed", systemImage: "moon.fill", tint: Theme.eclipsed) }
+                        if pass.isVisible { Chip(text: String(localized: "Visible"), systemImage: "eye.fill", tint: Theme.focus) }
+                        if pass.isEclipsed { Chip(text: String(localized: "Eclipsed"), systemImage: "moon.fill", tint: Theme.eclipsed) }
                         if !docked.isEmpty {
-                            Chip(text: "+\(docked.count) docked", systemImage: "link", tint: Theme.sunlit)
-                                .help("Flying together: " + docked.joined(separator: ", "))
+                            Chip(text: String(localized: "+\(docked.count) docked"), systemImage: "link", tint: Theme.sunlit)
+                                .help("Flying together: \(docked.joined(separator: ", "))")
                         }
                     }
                 }
@@ -102,8 +102,8 @@ struct SourceTag: View {
                 .font(.caption)
                 .foregroundStyle(onDark ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
-                .help(origin.others.isEmpty ? "Elements from \(origin.name)"
-                      : "Elements from \(origin.name), the newest; also in " + origin.others.joined(separator: ", "))
+                .help(origin.others.isEmpty ? String(localized: "Elements from \(origin.name)")
+                      : String(localized: "Elements from \(origin.name), the newest; also in \(origin.others.joined(separator: ", "))"))
                 .accessibilityLabel("from \(origin.name)")
         }
     }
@@ -136,18 +136,29 @@ struct RiseCountdown: View {
 func countdown(_ seconds: TimeInterval) -> String {
     let s = Int(seconds.rounded(.up))
     switch s {
-    case ..<60: return "\(s) s"
-    case ..<600: return "\(s / 60) min \(String(format: "%02d", s % 60)) s"
-    case ..<3600: return "\(s / 60) min"
-    case ..<86_400: return "\(s / 3600) h \(String(format: "%02d", (s % 3600) / 60)) min"
-    default: return "\(s / 86_400) d \((s % 86_400) / 3600) h"
+    case ..<60: return String(localized: "\(s) s")
+    case ..<600: return String(localized: "\(s / 60) min \(String(format: "%02d", s % 60)) s")
+    case ..<3600: return String(localized: "\(s / 60) min")
+    case ..<86_400: return String(localized: "\(s / 3600) h \(String(format: "%02d", (s % 3600) / 60)) min")
+    default: return String(localized: "\(s / 86_400) d \((s % 86_400) / 3600) h", comment: "Days and hours")
     }
 }
 
 func compass(_ azimuth: Double) -> String {
-    let names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-    return names[Int((normalizedDegrees(azimuth) / 22.5).rounded()) % 16]
+    compassPoints[Int((normalizedDegrees(azimuth) / 22.5).rounded()) % 16]
 }
+
+/// The sixteen points from north, clockwise. German writes O for east, Spanish O for west.
+let compassPoints = [
+    String(localized: "N", comment: "Compass point"), String(localized: "NNE", comment: "Compass point"),
+    String(localized: "NE", comment: "Compass point"), String(localized: "ENE", comment: "Compass point"),
+    String(localized: "E", comment: "Compass point"), String(localized: "ESE", comment: "Compass point"),
+    String(localized: "SE", comment: "Compass point"), String(localized: "SSE", comment: "Compass point"),
+    String(localized: "S", comment: "Compass point"), String(localized: "SSW", comment: "Compass point"),
+    String(localized: "SW", comment: "Compass point"), String(localized: "WSW", comment: "Compass point"),
+    String(localized: "W", comment: "Compass point"), String(localized: "WNW", comment: "Compass point"),
+    String(localized: "NW", comment: "Compass point"), String(localized: "NNW", comment: "Compass point"),
+]
 
 struct FilterSheet: View {
     @Environment(AppModel.self) private var model
@@ -167,7 +178,7 @@ struct FilterSheet: View {
                         Text("7 days").tag(168.0)
                     }
                     Picker("Sort by", selection: $model.filter.sort) {
-                        ForEach(FilterSettings.Sort.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(FilterSettings.Sort.allCases) { Text($0.label).tag($0) }
                     }
                 }
                 Section("Pass") {
@@ -198,13 +209,23 @@ struct FilterSheet: View {
 }
 
 struct LabeledSlider: View {
-    let title: String
+    let title: Text
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
     let unit: String
 
-    init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, unit: String) {
+    /// A literal title is looked up in the string catalog, as with SwiftUI's own controls.
+    init(_ titleKey: LocalizedStringKey, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, unit: String) {
+        self.init(title: Text(titleKey), value: value, in: range, step: step, unit: unit)
+    }
+
+    @_disfavoredOverload
+    init<S: StringProtocol>(_ title: S, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, unit: String) {
+        self.init(title: Text(title), value: value, in: range, step: step, unit: unit)
+    }
+
+    private init(title: Text, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, unit: String) {
         self.title = title
         _value = value
         self.range = range
@@ -215,7 +236,7 @@ struct LabeledSlider: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(title)
+                title
                 Spacer()
                 Text("\(value, format: .number.precision(.fractionLength(0)))\(unit)").monospacedDigit().foregroundStyle(.secondary)
             }
@@ -256,11 +277,11 @@ struct PassDetailView: View {
                     fact("Visible", visibility)
                     fact("Closest", model.units.distance(pass.minimumRange))
                     fact("Nearest the Sun", "\(Int(pass.minimumSunSeparation))°")
-                    fact("Fastest azimuth", String(format: "%.1f°/s", pass.peakAzimuthRate))
-                    fact("Fastest altitude", String(format: "%.1f°/s", pass.peakAltitudeRate))
+                    fact("Fastest azimuth", "\(pass.peakAzimuthRate.formatted(.number.precision(.fractionLength(1))))°/s")
+                    fact("Fastest altitude", "\(pass.peakAltitudeRate.formatted(.number.precision(.fractionLength(1))))°/s")
                     fact("Mount", mountSummary(plan))
                     if let sat = model.satellites.first(where: { $0.noradID == pass.noradID }) {
-                        fact("Elements", "\(String(format: "%.1f", sat.elementAge() / 86_400)) days old")
+                        fact("Elements", String(localized: "\((sat.elementAge() / 86_400).formatted(.number.precision(.fractionLength(1)))) days old"))
                     }
                 }
                 .font(.callout)
@@ -272,25 +293,25 @@ struct PassDetailView: View {
     }
 
     var visibility: String {
-        guard let range = pass.visibleSamples else { return "No (in shadow or daylight)" }
+        guard let range = pass.visibleSamples else { return String(localized: "No (in shadow or daylight)") }
         let from = pass.track[range.lowerBound].date, to = pass.track[range.upperBound - 1].date
         return "\(from.formatted(date: .omitted, time: .shortened))–\(to.formatted(date: .omitted, time: .shortened))"
     }
 
     func mountSummary(_ plan: MountPlan?) -> String {
-        guard let plan else { return "Can't track: exceeds the altitude limits" }
+        guard let plan else { return String(localized: "Can't track: exceeds the altitude limits") }
         let how = switch plan.orientation {
-        case .normal: "Normal"
-        case .overTheTop: "Over the top"
-        case .flipAtCulmination: "Flips over the top at the peak"
+        case .normal: String(localized: "Normal", comment: "How the mount follows a pass")
+        case .overTheTop: String(localized: "Over the top")
+        case .flipAtCulmination: String(localized: "Flips over the top at the peak")
         }
         if plan.unwindSeconds > 0 {
-            return "\(how); crosses north, where the mount goes the long way round (about \(Int(plan.unwindSeconds)) s)"
+            return String(localized: "\(how); crosses north, where the mount goes the long way round (about \(Int(plan.unwindSeconds)) s)")
         }
-        return plan.secondsOffTarget == 0 ? how : "\(how); loses it for \(Int(plan.secondsOffTarget)) s near the top"
+        return plan.secondsOffTarget == 0 ? how : String(localized: "\(how); loses it for \(Int(plan.secondsOffTarget)) s near the top")
     }
 
-    func pointRow(_ label: String, _ s: PassSample) -> some View {
+    func pointRow(_ label: LocalizedStringKey, _ s: PassSample) -> some View {
         GridRow {
             Text(label)
             Text(s.date, format: .dateTime.hour().minute().second())
@@ -299,7 +320,7 @@ struct PassDetailView: View {
         }
     }
 
-    func fact(_ label: String, _ value: String) -> some View {
+    func fact(_ label: LocalizedStringKey, _ value: String) -> some View {
         GridRow {
             Text(label).foregroundStyle(.secondary)
             Text(value)
