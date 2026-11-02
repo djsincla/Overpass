@@ -31,6 +31,8 @@ struct LookUpView: View {
     @AppStorage("lookUp.headingOffset") private var headingOffset = 0.0
     @AppStorage("lookUp.tiltOffset") private var tiltOffset = 0.0
     @AppStorage("lookUp.diagnostics") private var showsDiagnostics = false
+    @AppStorage("lookUp.nightCamera") private var nightCamera = false
+    @AppStorage("lookUp.nightExposure") private var nightExposure = 0.25
     @State private var tuning = false
     /// Calibrating with a star: nil when not, then the first tap once it's made.
     @State private var calibration: Calibration?
@@ -118,6 +120,8 @@ struct LookUpView: View {
             UIApplication.shared.isIdleTimerDisabled = model.mount.state == .connected
         }
         .onChange(of: showsCamera) { _, on in on ? camera.start() : camera.stop() }
+        .onChange(of: nightCamera, initial: true) { _, on in camera.night = on }
+        .onChange(of: nightExposure, initial: true) { _, seconds in camera.exposure = seconds }
         .sheet(item: $statusRequest) { StatusSheet(request: $0) }
         .sheet(item: $captured) { ShareSheet(items: $0.urls) }
         .onChange(of: scope) { _, _ in
@@ -398,6 +402,11 @@ struct LookUpView: View {
             }
             tuningSlider("Heading", value: $headingOffset, range: -30...30, step: 0.5, unit: "°", note: String(localized: "added to the compass"))
             tuningSlider("Tilt", value: $tiltOffset, range: -15...15, step: 0.25, unit: "°", note: String(localized: "moves everything up or down"))
+            Toggle("Night camera", isOn: $nightCamera)
+            if nightCamera {
+                tuningSlider("Exposure", value: $nightExposure, range: 0.03...max(0.04, camera.longestExposure), step: 0.01, unit: " s",
+                             note: String(localized: "longer shows fainter stars, but updates more slowly"))
+            }
             Toggle("Diagnostics", isOn: $showsDiagnostics)
             Button("Reset", role: .destructive) {
                 if cameraShown { cameraFieldOfView = 0 } else { eyeFieldOfView = 0 }
@@ -853,6 +862,35 @@ final class SkyCamera {
     @ObservationIgnored private var configured = false
     /// The latest frame, for Capture in the diagnostics.
     @ObservationIgnored let frames = FrameGrabber()
+    @ObservationIgnored private var device: AVCaptureDevice?
+
+    /// Night: the sensor's highest ISO and an exposure of `exposure` seconds (as long as the
+    /// camera allows), instead of the automatic exposure that keeps the night sky black.
+    var night = false { didSet { applyExposure() } }
+    var exposure = 0.25 { didSet { applyExposure() } }
+    /// The longest exposure the camera allows, seconds.
+    private(set) var longestExposure = 0.5
+
+    private func applyExposure() {
+        guard let device, (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+        let format = device.activeFormat
+        // No longer than the format's slowest frame rate allows: asking for more throws.
+        let slowestFrame = format.videoSupportedFrameRateRanges.map(\.maxFrameDuration.seconds).max() ?? 1.0 / 15
+        longestExposure = min(format.maxExposureDuration.seconds, slowestFrame)
+        if night, device.isExposureModeSupported(.custom) {
+            let seconds = min(max(exposure, format.minExposureDuration.seconds), longestExposure)
+            let duration = CMTime(seconds: seconds, preferredTimescale: 1_000_000)
+            // Frames as long as the exposure, or the camera cuts it short.
+            device.activeVideoMaxFrameDuration = duration
+            device.activeVideoMinFrameDuration = duration
+            device.setExposureModeCustom(duration: duration, iso: format.maxISO)
+        } else {
+            device.activeVideoMaxFrameDuration = .invalid
+            device.activeVideoMinFrameDuration = .invalid
+            if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        }
+    }
 
     func start() {
         Task {
@@ -871,12 +909,14 @@ final class SkyCamera {
                 output.setSampleBufferDelegate(frames, queue: frames.queue)
                 if session.canAddOutput(output) { session.addOutput(output) }
                 session.commitConfiguration()
+                self.device = device
                 fieldOfView = Double(device.activeFormat.videoFieldOfView)
                 let d = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
                 if d.width > 0, d.height > 0 { aspect = Double(max(d.width, d.height)) / Double(min(d.width, d.height)) }
                 dimensions = "\(d.width) × \(d.height)"
                 configured = true
             }
+            applyExposure()
             // AVCaptureSession isn't Sendable, but starting and stopping it off the main thread is
             // what Apple asks for: it blocks.
             nonisolated(unsafe) let session = session
