@@ -19,6 +19,56 @@ private func rotation(aim: Horizontal) -> [[Double]] {
                            width: size.w, height: size.h, orientation: orientation)
     }
 
+    /// One star tapped twice, the phone turned between: the field of view that puts both taps on
+    /// it is the one the screen really has.
+    @Test func twoTapsOnAStarGiveTheFieldOfView() throws {
+        let star = Horizontal(azimuth: 140, altitude: 40)
+        for (trueFOV, orientation) in [(28.0, PhoneSkyProjection.Orientation.portrait), (65, .portrait), (40, .landscapeLeft)] {
+            func tap(_ aim: Horizontal) throws -> (rotation: [[Double]], x: Double, y: Double) {
+                let sky = PhoneSkyProjection(rotation: rotation(aim: aim), focal: PhoneSkyProjection.focal(longSide: size.h, fieldOfView: trueFOV),
+                                             width: size.w, height: size.h, orientation: orientation)
+                let p = try #require(sky.point(star))
+                return (sky.rotation, p.x, p.y)
+            }
+            // Near the middle, then turned so the star is towards an edge.
+            let first = try tap(Horizontal(azimuth: 141, altitude: 41))
+            let second = try tap(Horizontal(azimuth: 140 - trueFOV * 0.15, altitude: 40 - trueFOV * 0.3))
+            let found = try #require(PhoneSkyProjection.calibratedFieldOfView(first: first, second: second, width: size.w,
+                                                                               height: size.h, orientation: orientation))
+            #expect(abs(found - trueFOV) < 0.05, "true \(trueFOV), found \(found)")
+        }
+    }
+
+    /// A heading correction moves everything along in azimuth; a tilt moves the middle straight up.
+    @Test func headingAndTiltCorrections() throws {
+        let aim = Horizontal(azimuth: 100, altitude: 20)
+        let r = rotation(aim: aim)
+        let turned = PhoneSkyProjection(rotation: PhoneSkyProjection.adjusted(r, heading: 5, tilt: 0, orientation: .portrait),
+                                        focal: 500, width: size.w, height: size.h, orientation: .portrait)
+        // Drawn where 95° would have been without it.
+        let plain = PhoneSkyProjection(rotation: r, focal: 500, width: size.w, height: size.h, orientation: .portrait)
+        let p = try #require(turned.point(Horizontal(azimuth: 100, altitude: 20)))
+        let q = try #require(plain.point(Horizontal(azimuth: 105, altitude: 20)))
+        #expect(abs(p.x - q.x) < 1e-6 && abs(p.y - q.y) < 1e-6)
+        for orientation in [PhoneSkyProjection.Orientation.portrait, .landscapeLeft, .landscapeRight, .portraitUpsideDown] {
+            let tilted = PhoneSkyProjection(rotation: PhoneSkyProjection.adjusted(r, heading: 0, tilt: 3, orientation: orientation),
+                                            focal: 500, width: size.w, height: size.h, orientation: orientation)
+            let base = PhoneSkyProjection(rotation: r, focal: 500, width: size.w, height: size.h, orientation: orientation)
+            let a = try #require(base.point(base.centre)), b = try #require(tilted.point(base.centre))
+            #expect(abs(b.x - a.x) < 1e-6 && abs((a.y - b.y) - 500 * tan(3.0.radians)) < 1e-6, "\(orientation)")
+        }
+    }
+
+    /// Taps too close together, or on two different stars, aren't trusted.
+    @Test func calibrationRefusesWhatItCantTell() {
+        let r = rotation(aim: Horizontal(azimuth: 0, altitude: 30))
+        #expect(PhoneSkyProjection.calibratedFieldOfView(first: (r, 195, 422), second: (r, 200, 430),
+                                                         width: size.w, height: size.h, orientation: .portrait) == nil)
+        // The phone didn't turn but the taps are far apart: no field of view joins them.
+        #expect(PhoneSkyProjection.calibratedFieldOfView(first: (r, 100, 200), second: (r, 300, 700),
+                                                         width: size.w, height: size.h, orientation: .portrait) == nil)
+    }
+
     @Test func aimIsTheCentre() throws {
         let aim = Horizontal(azimuth: 120, altitude: 35)
         let p = try #require(projection(aim).point(aim))
