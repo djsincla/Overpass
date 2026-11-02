@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The unsandboxed Mac app's settings and folder (com.djsincla.overpass, 0.4.5 to 0.5.1),
+	     moved into the sandbox container on its first launch. EarlierMacApp takes them in. -->
+	<key>Move</key>
+	<array>
+		<string>${Library}/Preferences/com.djsincla.overpass.plist</string>
+		<string>${Library}/Application Support/com.djsincla.overpass</string>
+	</array>
+</dict>
+</plist>
