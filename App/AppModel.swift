@@ -429,11 +429,9 @@ final class AppModel {
     /// colour. The highlighted pass is the one in focus.
     private(set) var shownTrackKeys: [PassKey] = []
 
-    /// The shown passes still to finish at `date`; with none chosen, the highlighted pass.
+    /// The shown passes still to finish at `date`. Nothing is drawn until a pass is chosen.
     func shownPasses(at date: Date) -> [SatellitePass] {
-        let found = shownTrackKeys.compactMap { key in passes.first(where: key.matches) }.filter { $0.end.date > date }
-        if found.isEmpty, let pass = highlightedPass(at: date) { return [pass] }
-        return found
+        shownTrackKeys.compactMap { key in passes.first(where: key.matches) }.filter { $0.end.date > date }
     }
 
     func isShown(_ pass: SatellitePass) -> Bool { shownTrackKeys.contains { $0.matches(pass) } }
@@ -482,6 +480,12 @@ final class AppModel {
         }
     }
 
+    /// The pass whose track a satellite in the objects list adds or hides: the one on now, or its next.
+    func trackPass(of objectID: String) -> SatellitePass? {
+        guard objectID.hasPrefix("sat:") else { return nil }
+        return currentOrNextPass(String(objectID.dropFirst(4)), at: viewDate())
+    }
+
     func toggleTrack(_ pass: SatellitePass) {
         if isShown(pass) { hideTrack(pass) } else { showTrack(pass) }
     }
@@ -492,10 +496,6 @@ final class AppModel {
         let current = shownPasses(at: viewDate())
         let removed = current.filter { !ids.contains($0.id) }
         let added = list.filter { ids.contains($0.id) && !isShown($0) }
-        if shownTrackKeys.isEmpty {
-            // The highlighted pass was standing in for an empty list: make the click explicit.
-            shownTrackKeys = current.filter { ids.contains($0.id) }.map(PassKey.init)
-        }
         for pass in removed { hideTrack(pass) }
         for pass in added { showTrack(pass) }
     }
