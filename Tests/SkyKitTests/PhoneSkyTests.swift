@@ -102,6 +102,18 @@ private func rotation(aim: Horizontal) -> [[Double]] {
         #expect(abs(right.x - size.w / 2 - focal * tan(10.0.radians)) < 1e-6)
     }
 
+    @Test func aSquareScreenMatchesTheCroppedPicture() {
+        // A phone screen is longer than a 4:3 picture, so the field of view spans its long side.
+        #expect(PhoneSkyProjection.focal(width: 390, height: 844, fieldOfView: 60, pictureAspect: 4.0 / 3)
+                == PhoneSkyProjection.focal(longSide: 844, fieldOfView: 60))
+        // An unfolded iPhone Duo is nearly square: the 4:3 picture fills its short side and
+        // overhangs the long one, so the drawing is scaled to the whole picture, 4/3 of the short side.
+        let square = PhoneSkyProjection.focal(width: 700, height: 760, fieldOfView: 60, pictureAspect: 4.0 / 3)
+        #expect(abs(square - PhoneSkyProjection.focal(longSide: 700 * 4.0 / 3, fieldOfView: 60)) < 1e-9)
+        // With no picture shown, the long side.
+        #expect(PhoneSkyProjection.focal(width: 700, height: 760, fieldOfView: 60) == PhoneSkyProjection.focal(longSide: 760, fieldOfView: 60))
+    }
+
     @Test func behindTheCameraIsntDrawn() {
         let sky = projection(Horizontal(azimuth: 0, altitude: 0))
         #expect(sky.point(Horizontal(azimuth: 180, altitude: 0)) == nil)
