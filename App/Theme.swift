@@ -114,9 +114,24 @@ extension Color {
 
 /// A rounded panel: the building block of the control side.
 struct Card<Content: View>: View {
-    var title: String?
+    var title: Text?
     var systemImage: String?
     @ViewBuilder var content: Content
+
+    /// A literal title is looked up in the string catalog, like `Text("…")`.
+    init(title: LocalizedStringKey? = nil, systemImage: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title.map { Text($0) }
+        self.systemImage = systemImage
+        self.content = content()
+    }
+
+    /// A title that is already text to show, such as a name.
+    @_disfavoredOverload
+    init<S: StringProtocol>(title: S, systemImage: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = Text(title)
+        self.systemImage = systemImage
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -132,10 +147,22 @@ struct Card<Content: View>: View {
 
 /// Small, spaced capitals above a group of controls.
 struct SectionLabel: View {
-    let title: String
+    let title: Text
     var systemImage: String?
 
-    init(_ title: String, systemImage: String? = nil) {
+    /// A literal title is looked up in the string catalog, like `Text("…")`.
+    init(_ title: LocalizedStringKey, systemImage: String? = nil) {
+        self.title = Text(title)
+        self.systemImage = systemImage
+    }
+
+    @_disfavoredOverload
+    init<S: StringProtocol>(_ title: S, systemImage: String? = nil) {
+        self.title = Text(title)
+        self.systemImage = systemImage
+    }
+
+    init(_ title: Text, systemImage: String? = nil) {
         self.title = title
         self.systemImage = systemImage
     }
@@ -143,7 +170,7 @@ struct SectionLabel: View {
     var body: some View {
         HStack(spacing: 5) {
             if let systemImage { Image(systemName: systemImage) }
-            Text(title.uppercased()).tracking(0.8)
+            title.tracking(0.8).textCase(.uppercase)
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -153,14 +180,29 @@ struct SectionLabel: View {
 
 /// A small tinted capsule: "Visible", "NE → S", "Eclipsed".
 struct Chip: View {
-    let text: String
+    let text: Text
     var systemImage: String?
     var tint: Color = .secondary
+
+    /// A literal is looked up in the string catalog, like `Text("…")`.
+    init(text: LocalizedStringKey, systemImage: String? = nil, tint: Color = .secondary) {
+        self.text = Text(text)
+        self.systemImage = systemImage
+        self.tint = tint
+    }
+
+    /// Text that is already what to show, such as a name or a localized string.
+    @_disfavoredOverload
+    init<S: StringProtocol>(text: S, systemImage: String? = nil, tint: Color = .secondary) {
+        self.text = Text(text)
+        self.systemImage = systemImage
+        self.tint = tint
+    }
 
     var body: some View {
         HStack(spacing: 3) {
             if let systemImage { Image(systemName: systemImage).imageScale(.small) }
-            Text(text)
+            text
         }
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 6)
@@ -184,12 +226,24 @@ struct StatusDot: View {
 
 /// An instrument readout: small label over large monospaced digits.
 struct Readout: View {
-    let label: String
+    let label: Text
     let value: String
+
+    /// A literal label is looked up in the string catalog, like `Text("…")`.
+    init(label: LocalizedStringKey, value: String) {
+        self.label = Text(label)
+        self.value = value
+    }
+
+    @_disfavoredOverload
+    init<S: StringProtocol>(label: S, value: String) {
+        self.label = Text(label)
+        self.value = value
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(label).font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.secondary)
+            label.font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.secondary)
             Text(value).font(.system(.title3, design: .monospaced).weight(.medium)).monospacedDigit()
                 .contentTransition(.numericText())
         }

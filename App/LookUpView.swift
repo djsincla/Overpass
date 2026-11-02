@@ -536,7 +536,10 @@ private struct LookUpOverlay: View {
                            with: .color(.white.opacity(0.25)), style: StrokeStyle(lineWidth: 0.75, dash: [4, 5]))
         }
         // Compass points on the horizon, with a tick every 15°.
-        let names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        let names = [String(localized: "N", comment: "Compass point"), String(localized: "NE", comment: "Compass point"),
+                     String(localized: "E", comment: "Compass point"), String(localized: "SE", comment: "Compass point"),
+                     String(localized: "S", comment: "Compass point"), String(localized: "SW", comment: "Compass point"),
+                     String(localized: "W", comment: "Compass point"), String(localized: "NW", comment: "Compass point")]
         for az in stride(from: 0.0, to: 360, by: 15) {
             guard let p = sky.point(Horizontal(azimuth: az, altitude: 0)) else { continue }
             let major = az.truncatingRemainder(dividingBy: 45) == 0
@@ -732,7 +735,7 @@ private struct LookUpStatus: View {
         VStack(alignment: .leading, spacing: 4) {
             // Folded, one line: the satellite and where it is, by the chevron, as in Conjunctions.
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(pass?.name ?? "No passes coming up").font(.headline).lineLimit(1).layoutPriority(1)
+                Text(pass?.name ?? String(localized: "No passes coming up")).font(.headline).lineLimit(1).layoutPriority(1)
                 if let pass { SourceTag(noradID: pass.noradID, onDark: true) }
                 if collapsed, let summary { Text(summary).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
                 Spacer(minLength: 4)
@@ -759,9 +762,9 @@ private struct LookUpStatus: View {
     /// Up now, or when it rises: for the folded card.
     private var summary: String? {
         guard let pass else { return nil }
-        if pass.start.date > date { return "rises in \(countdown(pass.start.date.timeIntervalSince(date)))" }
+        if pass.start.date > date { return String(localized: "rises in \(countdown(pass.start.date.timeIntervalSince(date)))") }
         if let goal = Self.goal(pass: pass, live: live, date: date), goal.up {
-            return "up \(Int(goal.position.altitude))° \(compass(goal.position.azimuth))"
+            return String(localized: "up \(Int(goal.position.altitude))° \(compass(goal.position.azimuth))")
         }
         return nil
     }
@@ -781,7 +784,8 @@ private struct LookUpStatus: View {
             Text("Select satellites in Objects.")
         }
         let c = sky.centre
-        Text(String(format: "Pointing az %.0f° alt %.0f°", c.azimuth, c.altitude) + (usesTrueNorth ? "" : " · magnetic north"))
+        let pointing = String(localized: "Pointing az \(c.azimuth.formatted(.number.precision(.fractionLength(0))))° alt \(c.altitude.formatted(.number.precision(.fractionLength(0))))°")
+        Text(usesTrueNorth ? pointing : String(localized: "\(pointing) · magnetic north"))
             .font(.caption.monospacedDigit())
             .foregroundStyle(.white.opacity(0.7))
     }
@@ -793,19 +797,21 @@ private struct LookUpStatus: View {
         if dAz > 180 { dAz -= 360 }
         let dAlt = h.altitude - c.altitude
         var parts: [String] = []
-        if abs(dAz) >= 3 { parts.append("\(dAz > 0 ? "right" : "left") \(Int(abs(dAz).rounded()))°") }
-        if abs(dAlt) >= 3 { parts.append("\(dAlt > 0 ? "up" : "down") \(Int(abs(dAlt).rounded()))°") }
-        return parts.isEmpty ? "Nearly there" : "Turn " + parts.joined(separator: ", ")
+        let turn = Int(abs(dAz).rounded()), tilt = Int(abs(dAlt).rounded())
+        if abs(dAz) >= 3 { parts.append(dAz > 0 ? String(localized: "right \(turn)°") : String(localized: "left \(turn)°")) }
+        if abs(dAlt) >= 3 { parts.append(dAlt > 0 ? String(localized: "up \(tilt)°") : String(localized: "down \(tilt)°")) }
+        return parts.isEmpty ? String(localized: "Nearly there") : String(localized: "Turn \(parts.joined(separator: ", "))")
     }
 
     private func compass(_ azimuth: Double) -> String {
-        let names = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
+        let names = [String(localized: "north"), String(localized: "north-east"), String(localized: "east"), String(localized: "south-east"),
+                     String(localized: "south"), String(localized: "south-west"), String(localized: "west"), String(localized: "north-west")]
         return names[Int((normalizedDegrees(azimuth) + 22.5) / 45) % 8]
     }
 
     private func countdown(_ seconds: TimeInterval) -> String {
         let s = max(0, Int(seconds))
-        return s >= 3600 ? "\(s / 3600) h \(s % 3600 / 60) min" : String(format: "%d:%02d", s / 60, s % 60)
+        return s >= 3600 ? String(localized: "\(s / 3600) h \(s % 3600 / 60) min") : String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 
@@ -1017,6 +1023,13 @@ struct Sighting: Identifiable {
 enum SightingScope: String, CaseIterable, Identifiable {
     case brightest = "Brightest", starlink = "+ Starlink", all = "All sources"
     var id: Self { self }
+    var title: String {
+        switch self {
+        case .brightest: String(localized: "Brightest")
+        case .starlink: String(localized: "+ Starlink")
+        case .all: String(localized: "All sources")
+        }
+    }
 }
 
 /// The satellites that could be the one tapped, best match first.
@@ -1042,7 +1055,7 @@ private struct SightingCard: View {
                 .accessibilityLabel("Close")
             }
             Picker("Search", selection: $scope) {
-                ForEach(SightingScope.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(SightingScope.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -1079,11 +1092,12 @@ private struct SightingCard: View {
     }
 
     private func detail(_ c: SightingCandidate) -> String {
-        var parts = [String(format: "%.1f° from where you tapped", c.offset)]
+        var parts = [String(localized: "\(c.offset.formatted(.number.precision(.fractionLength(1))))° from where you tapped")]
         if let e = c.directionError {
-            parts.append(e < 25 ? "moving your way" : e > 155 ? "moving the other way" : String(format: "path %.0f° off", e))
+            parts.append(e < 25 ? String(localized: "moving your way") : e > 155 ? String(localized: "moving the other way")
+                         : String(localized: "path \(e.formatted(.number.precision(.fractionLength(0))))° off"))
         }
-        parts.append(c.sunlit ? "sunlit" : "in shadow")
+        parts.append(c.sunlit ? String(localized: "sunlit") : String(localized: "in shadow"))
         return parts.joined(separator: " · ")
     }
 }

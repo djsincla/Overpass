@@ -16,7 +16,11 @@ struct TimeBar: View {
     /// The labelled marks, as offsets from now. One day is marked but not labelled (it would
     /// crowd the two-day label).
     private static let marks: [(seconds: TimeInterval, label: String?)] = [
-        (600, "10m"), (3600, "1h"), (6 * 3600, "6h"), (86_400, nil), (2 * 86_400, "2d"),
+        (600, String(localized: "10m", comment: "Time bar mark: 10 minutes")),
+        (3600, String(localized: "1h", comment: "Time bar mark: 1 hour")),
+        (6 * 3600, String(localized: "6h", comment: "Time bar mark: 6 hours")),
+        (86_400, nil),
+        (2 * 86_400, String(localized: "2d", comment: "Time bar mark: 2 days")),
     ]
     private static let inset: CGFloat = 10
 
@@ -35,7 +39,7 @@ struct TimeBar: View {
                 if shifted {
                     Chip(text: offsetText(shift), tint: Theme.focus)
                 } else {
-                    Chip(text: "Live", systemImage: "dot.radiowaves.left.and.right", tint: Theme.rising)
+                    Chip(text: String(localized: "Live"), systemImage: "dot.radiowaves.left.and.right", tint: Theme.rising)
                 }
                 Spacer()
                 Button("Now") { withAnimation(.spring(duration: 0.3)) { model.timeShift = 0 } }
@@ -110,7 +114,7 @@ struct TimeBar: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Time")
-        .accessibilityValue(shifted ? offsetText(shift) : "Now")
+        .accessibilityValue(shifted ? offsetText(shift) : String(localized: "Now"))
         .accessibilityAdjustableAction { direction in
             let step = 0.05
             let position = TimeScale.position(model.timeShift)

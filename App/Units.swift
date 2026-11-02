@@ -14,8 +14,10 @@ struct Units: Equatable {
     var lengthUnit: String { imperial ? "ft" : "m" }
 
     /// A distance given in kilometres, in km or miles, with `decimals` places: "12 km", "7.5 mi".
+    /// The number follows the locale ("7,5 mi" in German); the unit symbol doesn't change.
     func distance(_ km: Double, decimals: Int = 0) -> String {
-        String(format: "%.\(decimals)f %@", imperial ? km / Self.kmPerMile : km, distanceUnit)
+        let value = imperial ? km / Self.kmPerMile : km
+        return value.formatted(.number.precision(.fractionLength(decimals)).grouping(.never)) + " " + distanceUnit
     }
 
     /// A length given in metres, in metres or feet, with up to one decimal place.

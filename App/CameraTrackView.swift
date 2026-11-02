@@ -113,19 +113,21 @@ struct CameraTrackScreen: View {
 
     private var hint: String {
         let tracker = model.cameraTracker
-        if !tracker.camera.isRunning { return "Start the camera, then click on something to track it" }
-        if tracker.settingAim { return "Click where the telescope points" }
+        if !tracker.camera.isRunning { return String(localized: "Start the camera, then click on something to track it") }
+        if tracker.settingAim { return String(localized: "Click where the telescope points") }
         if let t = tracker.tracker {
             switch t.state {
             case .locked:
                 if model.mount.tracksCamera { return model.mount.status }
-                if let blocker = tracker.driveBlocker { return "Following in the image only. " + blocker }
-                return tracker.drivesMount ? "Following in the image" : "Following in the image only (Move the mount is off)"
-            case .coasting: return "Out of sight, carrying on along its path…"
-            case .lost: return "Lost it. Click it again to pick it up."
+                if let blocker = tracker.driveBlocker { return String(localized: "Following in the image only. \(blocker)") }
+                return tracker.drivesMount ? String(localized: "Following in the image")
+                    : String(localized: "Following in the image only (Move the mount is off)", comment: "“Move the mount” is the name of a switch")
+            case .coasting: return String(localized: "Out of sight, carrying on along its path…")
+            case .lost: return String(localized: "Lost it. Click it again to pick it up.")
             }
         }
-        return tracker.target == .ground ? "Click on something to track it, or drag a box around it" : "Click on a moving object to track it"
+        return tracker.target == .ground ? String(localized: "Click on something to track it, or drag a box around it")
+            : String(localized: "Click on a moving object to track it")
     }
 
     private func draw(_ context: inout GraphicsContext, _ layout: FrameLayout) {
@@ -216,7 +218,7 @@ struct CameraTrackControls: View {
     var body: some View {
         @Bindable var tracker = model.cameraTracker
         let mount = model.mount
-        Card(title: "Camera tracking", systemImage: "camera.viewfinder") {
+        Card(title: String(localized: "Camera tracking"), systemImage: "camera.viewfinder") {
             CameraControls()
 
             Picker("Track", selection: $tracker.target) {
@@ -246,11 +248,11 @@ struct CameraTrackControls: View {
                 Text(blocker).font(.caption).foregroundStyle(.secondary)
             }
             if let off = tracker.offsetArcminutes {
-                Text(String(format: "%.1f′ from the aim point", off))
+                Text("\(off.formatted(.number.precision(.fractionLength(1))))′ from the aim point")
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
 
-            LabeledSlider("Point down to", value: Bindable(model).settings.minimumAltitudeAxis, in: -45...10, step: 1, unit: "°")
+            LabeledSlider(String(localized: "Point down to", comment: "The lowest altitude the mount follows down to"), value: Bindable(model).settings.minimumAltitudeAxis, in: -45...10, step: 1, unit: "°")
                 .help("The lowest altitude the mount will follow down to. Below 0° is under the horizon; check the tube clears the tripod. Also in Settings.")
 
             Divider().padding(.vertical, 2)
@@ -267,7 +269,7 @@ struct CameraTrackControls: View {
                     .disabled(model.guider.isCalibrating || mount.kind != .usb || mount.isTracking || tracker.tracker == nil)
                     .help("Click something that isn't moving (a star, a distant light or mast), then calibrate: the mount nudges each axis and watches it move.")
                 if let c = model.settings.cameraCalibration {
-                    Text(String(format: "%.1f″ per pixel · rotated %.0f°", c.arcsecondsPerPixel, c.rotation))
+                    Text("\(c.arcsecondsPerPixel.formatted(.number.precision(.fractionLength(1))))″ per pixel · rotated \(c.rotation.formatted(.number.precision(.fractionLength(0))))°")
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 } else {
                     Text("Not calibrated").font(.caption).foregroundStyle(.secondary)

@@ -8,17 +8,17 @@ public struct DeepSkyObject: Target, Hashable, Identifiable {
 
         public var name: String {
             switch self {
-            case .galaxy: "Galaxy"
-            case .openCluster: "Open cluster"
-            case .globularCluster: "Globular cluster"
-            case .clusterWithNebula: "Cluster and nebula"
-            case .nebula: "Nebula"
-            case .darkNebula: "Dark nebula"
-            case .planetaryNebula: "Planetary nebula"
-            case .supernovaRemnant: "Supernova remnant"
-            case .asterism: "Asterism"
-            case .star: "Star"
-            case .doubleStar: "Double star"
+            case .galaxy: String(localized: "Galaxy", bundle: .module)
+            case .openCluster: String(localized: "Open cluster", bundle: .module)
+            case .globularCluster: String(localized: "Globular cluster", bundle: .module)
+            case .clusterWithNebula: String(localized: "Cluster and nebula", bundle: .module)
+            case .nebula: String(localized: "Nebula", bundle: .module)
+            case .darkNebula: String(localized: "Dark nebula", bundle: .module)
+            case .planetaryNebula: String(localized: "Planetary nebula", bundle: .module)
+            case .supernovaRemnant: String(localized: "Supernova remnant", bundle: .module)
+            case .asterism: String(localized: "Asterism", bundle: .module)
+            case .star: String(localized: "Star", bundle: .module)
+            case .doubleStar: String(localized: "Double star", bundle: .module)
             }
         }
     }

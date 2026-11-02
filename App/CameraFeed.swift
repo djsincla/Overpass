@@ -85,12 +85,13 @@ final class CameraFeed {
         stop()
         error = nil
         guard await AVCaptureDevice.requestAccess(for: .video) else {
-            error = "Camera access is off. Turn it on in System Settings → Privacy & Security → Camera."
+            error = String(localized: "Camera access is off. Turn it on in System Settings → Privacy & Security → Camera.",
+                           comment: "Use the names System Settings shows in this language")
             return
         }
         refreshDevices()
         guard let id = devices.first(where: { $0.id == deviceID })?.id ?? devices.first?.id else {
-            error = "No camera found. For an iPhone: keep it near the Mac, unlocked, signed in to the same Apple ID."
+            error = String(localized: "No camera found. For an iPhone: keep it near the Mac, unlocked, signed in to the same Apple ID.")
             return
         }
         capture.handler = { [weak self] result in
@@ -110,7 +111,7 @@ final class CameraFeed {
             }
             isRunning = true
         } catch {
-            self.error = "Couldn't open the camera: \(error.localizedDescription)"
+            self.error = String(localized: "Couldn't open the camera: \(error.localizedDescription)")
         }
     }
 

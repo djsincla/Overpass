@@ -70,6 +70,16 @@ struct ConjunctionsView: View {
     }
 }
 
+/// A latitude or longitude to four places, with the locale's decimal mark: "51.4778°".
+fileprivate func coordinateDegrees(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(4))) + "°"
+}
+
+/// Seconds to `digits` places, with the locale's decimal mark.
+fileprivate func seconds(_ value: Double, _ digits: Int, signed: Bool = false) -> String {
+    value.formatted(.number.precision(.fractionLength(digits)).sign(strategy: signed ? .always() : .automatic))
+}
+
 // MARK: - Controls and list
 
 struct EventList: View {
@@ -164,7 +174,8 @@ struct SearchControls: View {
             }
             if c.settings.place == nil {
                 if let home = c.centre {
-                    Text(String(format: "%.4f°, %.4f° · from Settings", home.latitude, home.longitude))
+                    Text("\(coordinateDegrees(home.latitude)), \(coordinateDegrees(home.longitude)) · from Settings",
+                         comment: "Latitude, longitude of the location in Settings")
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 } else {
                     Text("No location yet: set one in Settings, or search for a place.")
@@ -184,7 +195,7 @@ struct SearchControls: View {
                     }
                 }
                 Picker("Days", selection: $c.settings.daysAhead) {
-                    ForEach([1.0, 3, 7, 14], id: \.self) { Text($0 == 1 ? "1 day" : "\(Int($0)) days").tag($0) }
+                    ForEach([1.0, 3, 7, 14], id: \.self) { Text("\(Int($0)) days").tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
@@ -217,12 +228,14 @@ struct SearchControls: View {
 
     private var summary: String {
         let c = model.conjunctions
-        if c.isSearching { return "Searching…" }
-        if c.bodies.isEmpty { return "Turn on the Moon or the Sun to search." }
+        if c.isSearching { return String(localized: "Searching…") }
+        if c.bodies.isEmpty { return String(localized: "Turn on the Moon or the Sun to search.") }
         let names = c.satellites.map { EventList.short($0.name) }.joined(separator: ", ")
         let ages = c.satellites.map { Date.now.timeIntervalSince($0.epoch) }
-        let age = ages.max().map { " · elements up to \(countdown($0)) old" } ?? ""
-        return "\(c.results.count) in \(Int(c.settings.daysAhead)) days · \(names)\(age)"
+        let found = String(localized: "\(c.results.count) in \(Int(c.settings.daysAhead)) days",
+                           comment: "Conjunctions found in the next N days")
+        guard let age = ages.max() else { return "\(found) · \(names)" }
+        return "\(found) · \(names) · " + String(localized: "elements up to \(countdown(age)) old")
     }
 }
 
@@ -253,13 +266,13 @@ struct EventRow: View {
                     .help(c.isWatched(event) ? "Stop watching" : "Watch: refresh the elements and recalculate as it gets closer")
                     .accessibilityLabel(c.isWatched(event) ? "Stop watching" : "Watch")
                 }
-                Text("\(EventList.short(event.satelliteName)) × \(event.body.name) · \(distanceText) · \(model.units.distance(event.width, decimals: 1)) wide · \(String(format: "%.1f s", event.duration))")
+                Text("\(EventList.short(event.satelliteName)) × \(event.body.name) · \(distanceText) · \(model.units.distance(event.width, decimals: 1)) wide · \(seconds(event.duration, 1)) s")
                     .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 HStack(spacing: 5) {
-                    Text("\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up" + (event.illumination.map { " · \(Int(($0 * 100).rounded()))% lit" } ?? ""))
+                    Text(bodyText)
                         .font(.caption).foregroundStyle(.secondary)
                     if event.visibleFromCentre { Chip(text: "From \(c.centreName.components(separatedBy: ",")[0])", systemImage: "checkmark", tint: Theme.rising) }
-                    if let drift = watch?.drift { Chip(text: String(format: "moved %+.1f s", drift.seconds), tint: Theme.sunlit) }
+                    if let drift = watch?.drift { Chip(text: "moved \(seconds(drift.seconds, 1, signed: true)) s", tint: Theme.sunlit) }
                     if watch?.missesArea == true { Chip(text: "now misses", systemImage: "exclamationmark.triangle", tint: Theme.setting) }
                 }
             }
@@ -268,7 +281,16 @@ struct EventRow: View {
     }
 
     private var distanceText: String {
-        event.distance < 0.5 ? "over you" : "\(model.units.distance(event.distance)) \(compass(event.bearing))"
+        event.distance < 0.5 ? String(localized: "over you", comment: "The transit's centre line passes over the search centre")
+            : String(localized: "\(model.units.distance(event.distance)) \(compass(event.bearing))",
+                     comment: "Distance and compass direction: 12 km NE")
+    }
+
+    /// "Moon 42° up · 87% lit".
+    private var bodyText: String {
+        let up = Int(event.bodyAltitude.rounded())
+        guard let lit = event.illumination else { return String(localized: "\(event.body.name) \(up)° up") }
+        return String(localized: "\(event.body.name) \(up)° up · \(lit.formatted(.percent.precision(.fractionLength(0)))) lit")
     }
 }
 
@@ -362,16 +384,22 @@ struct EventDetail: View {
 
     private func facts(_ c: ConjunctionsModel, _ units: Units) -> [(label: String, value: String)] {
         var list = [
-            ("Nearest line", "\(units.distance(event.distance, decimals: 1)) \(compass(event.bearing)) of \(c.centreName.components(separatedBy: ",")[0])"),
-            ("Band", "\(units.distance(event.width, decimals: 1)) wide · \(String(format: "%.2f s", event.duration))"),
-            ("Look", "\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up, \(compass(event.bodyAzimuth))"),
-            ("Station", "\(units.distance(event.satelliteRange)) away"),
-            ("Elements", "\(countdown(Date.now.timeIntervalSince(event.elementEpoch))) old"),
+            (String(localized: "Nearest line", comment: "Conjunction detail: the band's centre line nearest the search centre"),
+             String(localized: "\(units.distance(event.distance, decimals: 1)) \(compass(event.bearing)) of \(c.centreName.components(separatedBy: ",")[0])")),
+            (String(localized: "Band", comment: "Conjunction detail: the strip of ground the transit is seen from"),
+             String(localized: "\(units.distance(event.width, decimals: 1)) wide · \(seconds(event.duration, 2)) s")),
+            (String(localized: "Look", comment: "Conjunction detail: where to point"),
+             String(localized: "\(event.body.name) \(Int(event.bodyAltitude.rounded()))° up, \(compass(event.bodyAzimuth))")),
+            (String(localized: "Station", comment: "Conjunction detail: the satellite's distance"),
+             String(localized: "\(units.distance(event.satelliteRange)) away")),
+            (String(localized: "Elements", comment: "Conjunction detail: the orbital elements' age"),
+             String(localized: "\(countdown(Date.now.timeIntervalSince(event.elementEpoch))) old")),
         ]
         if let drift = watch?.drift, let previous = watch?.previous {
-            list.append(("Last update", String(format: "%+.1f s, ", drift.seconds) + "\(units.distance(drift.distance, decimals: 1)) \(compass(drift.bearing)) since elements of \(previous.elementEpoch.formatted(date: .omitted, time: .shortened))"))
+            list.append((String(localized: "Last update"),
+                         String(localized: "\(seconds(drift.seconds, 1, signed: true)) s, \(units.distance(drift.distance, decimals: 1)) \(compass(drift.bearing)) since elements of \(previous.elementEpoch.formatted(date: .omitted, time: .shortened))")))
         } else {
-            list.append(("Timing", "refresh near the event: element errors shift it by seconds"))
+            list.append((String(localized: "Timing"), String(localized: "refresh near the event: element errors shift it by seconds")))
         }
         return list
     }
@@ -515,7 +543,7 @@ struct SatelliteChooser: View {
                             .font(.caption)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Theme.accent.opacity(0.15), in: Capsule())
-                            .help(c.name(of: id).map { "\($0), NORAD \(id)" } ?? "NORAD \(id): not in the loaded catalogue")
+                            .help(c.name(of: id).map { "\($0), NORAD \(id)" } ?? String(localized: "NORAD \(id): not in the loaded catalogue"))
                         }
                     }
                 }
@@ -590,7 +618,8 @@ struct PlaceSearch: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(place.name)
-                            Text(String(format: "%.4f°, %.4f°", place.location.latitude, place.location.longitude))
+                            Text("\(coordinateDegrees(place.location.latitude)), \(coordinateDegrees(place.location.longitude))",
+                                 comment: "Latitude, longitude")
                                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                         .contentShape(Rectangle())
@@ -617,10 +646,10 @@ struct PlaceSearch: View {
         Task {
             do {
                 found = try await ConjunctionsModel.places(matching: text)
-                if found.isEmpty { note = "Nothing found for \(text)." }
+                if found.isEmpty { note = String(localized: "Nothing found for \(text).") }
             } catch {
                 found = []
-                note = "Couldn't search for \(text): \(error.localizedDescription)"
+                note = String(localized: "Couldn't search for \(text): \(error.localizedDescription)")
             }
             searching = false
         }

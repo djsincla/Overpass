@@ -10,7 +10,19 @@ public enum SolarSystemBody: String, CaseIterable, Target, Hashable {
 
     public static let auKm = 149_597_870.7
 
-    public var name: String { rawValue.capitalized }
+    public var name: String {
+        switch self {
+        case .sun: String(localized: "Sun", bundle: .module)
+        case .moon: String(localized: "Moon", bundle: .module)
+        case .mercury: String(localized: "Mercury", bundle: .module)
+        case .venus: String(localized: "Venus", bundle: .module)
+        case .mars: String(localized: "Mars", bundle: .module)
+        case .jupiter: String(localized: "Jupiter", bundle: .module)
+        case .saturn: String(localized: "Saturn", bundle: .module)
+        case .uranus: String(localized: "Uranus", bundle: .module)
+        case .neptune: String(localized: "Neptune", bundle: .module)
+        }
+    }
 
     /// Geocentric apparent position in km, true equator and equinox of date.
     public func equatorialOfDate(_ time: AstroTime) -> Vec3 {

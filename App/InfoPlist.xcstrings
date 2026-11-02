@@ -1,0 +1,102 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "comment": "The app's name under its icon. Usually left as Overpass.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        }
+      }
+    },
+    "NSCameraUsageDescription": {
+      "comment": "Shown when Overpass first asks to use a camera.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass verwendet eine Kamera am Teleskop, um das Ziel während der Nachführung zentriert zu halten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass uses a camera on your telescope to keep the target centred while tracking."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass usa una cámara en el telescopio para mantener el objetivo centrado durante el seguimiento."
+          }
+        }
+      }
+    },
+    "NSLocalNetworkUsageDescription": {
+      "comment": "Shown when Overpass first asks to use the local network.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass verbindet sich über das WLAN der Montierung mit ihr."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass connects to your mount over its WiFi network."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass se conecta a la montura a través de su red WiFi."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription": {
+      "comment": "Shown when Overpass first asks for the location.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass verwendet den Standort, um zu berechnen, wo Satelliten, Sonne, Mond und Planeten am Himmel stehen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass uses your location to work out where satellites, the Sun, Moon and planets appear in your sky."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass usa su ubicación para calcular dónde aparecen en su cielo los satélites, el Sol, la Luna y los planetas."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

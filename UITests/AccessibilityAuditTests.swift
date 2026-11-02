@@ -8,6 +8,10 @@ final class AccessibilityAuditTests: XCTestCase {
         // Greenwich, so there are passes to show without asking for a location.
         let settings = #"{"latitude":51.4779,"longitude":-0.0015,"hasLocation":true}"#
         app.launchArguments += ["-settings", "<" + settings.utf8.map { String(format: "%02x", $0) }.joined() + ">"]
+        // TEST_RUNNER_AUDIT_LANGUAGE=de xcodebuild test … runs it in another language.
+        if let language = ProcessInfo.processInfo.environment["AUDIT_LANGUAGE"] {
+            app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        }
         app.launch()
         addUIInterruptionMonitor(withDescription: "Permission") { alert in
             alert.buttons.element(boundBy: 1).tap()
@@ -15,8 +19,9 @@ final class AccessibilityAuditTests: XCTestCase {
         }
 
         var report: [String] = []
-        for tab in ["Observe", "Look up", "Objects", "Conjunctions", "Settings"] {
-            let button = app.tabBars.buttons[tab]
+        for (index, tab) in ["Observe", "Look up", "Objects", "Conjunctions", "Settings"].enumerated() {
+            // By position, so it works in any language.
+            let button = app.tabBars.buttons.element(boundBy: index)
             guard button.waitForExistence(timeout: 10) else {
                 report.append("\(tab): tab not found")
                 continue

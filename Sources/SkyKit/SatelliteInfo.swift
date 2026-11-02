@@ -43,6 +43,18 @@ public struct SatelliteInfo: Codable, Sendable, Equatable {
 
     public var objectTypeName: String? {
         switch objectType {
+        case "PAY": String(localized: "Payload", bundle: .module)
+        case "R/B": String(localized: "Rocket body", bundle: .module)
+        case "DEB": String(localized: "Debris", bundle: .module)
+        case "UNK": String(localized: "Unknown type", bundle: .module)
+        default: objectType
+        }
+    }
+
+    /// The English type name, so searches written as in the documentation ("type=payload") work
+    /// in every language.
+    var englishObjectTypeName: String? {
+        switch objectType {
         case "PAY": "Payload"
         case "R/B": "Rocket body"
         case "DEB": "Debris"
@@ -68,11 +80,13 @@ public struct SatelliteInfo: Codable, Sendable, Equatable {
         public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
         public var name: String {
             switch self {
-            case .small: "Small"
-            case .medium: "Medium"
-            case .large: "Large"
+            case .small: String(localized: "Small", bundle: .module)
+            case .medium: String(localized: "Medium", bundle: .module)
+            case .large: String(localized: "Large", bundle: .module)
             }
         }
+        /// "small", "medium", "large": what searches compare against in every language.
+        var keyword: String { "\(self)" }
     }
 }
 
@@ -245,9 +259,10 @@ public struct SatelliteQuery: Sendable, Equatable {
             guard op == .equal, let type = info.objectType else { return false }
             return type.caseInsensitiveCompare(value) == .orderedSame
                 || (info.objectTypeName ?? "").lowercased().hasPrefix(value.lowercased())
+                || (info.englishObjectTypeName ?? "").lowercased().hasPrefix(value.lowercased())
                 || (value.lowercased().hasPrefix("rocket") && type == "R/B")
         case .size:
-            if let target = SatelliteInfo.SizeClass.allCases.first(where: { $0.name.lowercased().hasPrefix(value.lowercased()) }) {
+            if let target = SatelliteInfo.SizeClass.allCases.first(where: { [$0.keyword, $0.name.lowercased()].contains { $0.hasPrefix(value.lowercased()) } }) {
                 guard let size = info.sizeClass else { return false }
                 return ordered(Double(size.rawValue), op, Double(target.rawValue), within: 0.5)
             }

@@ -32,9 +32,9 @@ struct ObserveView: View {
         var id: Self { self }
         var title: String {
             switch self {
-            case .skyLeft: "Sky on the left"
-            case .listLeft: "List on the left"
-            case .threeColumns: "List, sky, mount"
+            case .skyLeft: String(localized: "Sky on the left")
+            case .listLeft: String(localized: "List on the left")
+            case .threeColumns: String(localized: "List, sky, mount")
             }
         }
     }
@@ -42,6 +42,14 @@ struct ObserveView: View {
     enum Panel: String, CaseIterable, Identifiable {
         case passes = "Passes", objects = "Objects", status = "Status", mount = "Mount"
         var id: Self { self }
+        var title: String {
+            switch self {
+            case .passes: String(localized: "Passes")
+            case .objects: String(localized: "Objects")
+            case .status: String(localized: "Status")
+            case .mount: String(localized: "Mount")
+            }
+        }
     }
 
     var body: some View {
@@ -194,7 +202,7 @@ struct ObserveView: View {
     private var switchablePanel: some View {
         VStack(spacing: 0) {
             Picker("Panel", selection: $panel) {
-                ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Panel.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -232,7 +240,7 @@ struct ObserveView: View {
         // Above the view, so it covers neither the sky's compass nor the map's own controls.
         HStack(spacing: 8) {
             Picker("View", selection: $view) {
-                ForEach(SkyView.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(SkyView.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -259,7 +267,7 @@ struct ObserveView: View {
                                    redMode: model.settings.redMode,
                                    recentreRequest: recentreRequest,
                                    onTapTrack: { id in clicked(shown.first { $0.id == id }) })
-                    .modifier(EarthDescription(title: "Globe", tracks: globeTracks(shown, focus: pass, at: date),
+                    .modifier(EarthDescription(title: String(localized: "Globe"), tracks: globeTracks(shown, focus: pass, at: date),
                                                choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else if view == .map {
                     FlatMapView(home: Geodetic(latitude: model.settings.latitude, longitude: model.settings.longitude),
@@ -267,7 +275,7 @@ struct ObserveView: View {
                                 sun: (try? SolarSystemBody.sun.earthFixedPosition(at: AstroTime(date))) ?? Vec3(1, 0, 0),
                                 recentreRequest: recentreRequest,
                               onTapTrack: { id in clicked(shown.first { $0.id == id }) })
-                    .modifier(EarthDescription(title: "World map", tracks: globeTracks(shown, focus: pass, at: date),
+                    .modifier(EarthDescription(title: String(localized: "World map"), tracks: globeTracks(shown, focus: pass, at: date),
                                                choose: { id in clicked(shown.first { $0.id == id }) }))
                 } else {
                     sky(date: date, pass: pass, others: shown.filter { $0.id != pass?.id })
@@ -280,7 +288,7 @@ struct ObserveView: View {
         }
         .confirmationDialog(clickedPass?.name ?? "", isPresented: Binding(get: { clickedPass != nil }, set: { if !$0 { clickedPass = nil } }),
                             titleVisibility: .visible, presenting: clickedPass) { clickChoices($0) }
-        .alert("Stop tracking \(model.mount.trackingName ?? "the current target")?",
+        .alert("Stop tracking \(model.mount.trackingName ?? String(localized: "the current target"))?",
                isPresented: Binding(get: { replacingTarget != nil }, set: { if !$0 { replacingTarget = nil } }),
                presenting: replacingTarget) { pass in
             Button("Stop and target \(pass.name)", role: .destructive) {
@@ -291,7 +299,7 @@ struct ObserveView: View {
             }
             Button("Keep tracking", role: .cancel) {}
         } message: { pass in
-            Text("The mount is following \(model.mount.trackingName ?? "another target"). Stopping it makes \(pass.name) the tracking target.")
+            Text("The mount is following \(model.mount.trackingName ?? String(localized: "another target")). Stopping it makes \(pass.name) the tracking target.")
         }
     }
 
@@ -552,7 +560,7 @@ struct SelectedObjectsList: View {
             @Bindable var model = model
             VStack(spacing: 0) {
             Picker("Sort", selection: $model.filter.objectSort) {
-                ForEach(FilterSettings.ObjectSort.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(FilterSettings.ObjectSort.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -718,8 +726,11 @@ struct ObjectStatus: View {
                 if let v = try? model.settings.observer.visibility(of: object.target, at: date) {
                     if v.isUp {
                         ElevationNow(altitude: v.altitude, trend: v.trend, max: v.maxAltitude)
+                    } else if let rise = v.rise, let max = v.maxAltitude {
+                        Text("rises in \(countdown(rise.timeIntervalSince(date))) · max \(Int(max.rounded()))°")
+                            .foregroundStyle(.secondary)
                     } else if let rise = v.rise {
-                        Text("rises in \(countdown(rise.timeIntervalSince(date)))" + (v.maxAltitude.map { " · max \(Int($0.rounded()))°" } ?? ""))
+                        Text("rises in \(countdown(rise.timeIntervalSince(date)))")
                             .foregroundStyle(.secondary)
                     } else {
                         Text("doesn't rise").foregroundStyle(.secondary)
@@ -744,8 +755,14 @@ struct ElevationNow: View {
             if let max { Text("· max \(Int(max.rounded()))°").foregroundStyle(.secondary) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(Int(altitude.rounded())) degrees, \(trend == .rising ? "rising" : "setting")"
-                            + (max.map { ", maximum \(Int($0.rounded())) degrees" } ?? ""))
+        .accessibilityLabel(spoken)
+    }
+
+    private var spoken: String {
+        let degrees = Int(altitude.rounded())
+        let now = trend == .rising ? String(localized: "\(degrees) degrees, rising") : String(localized: "\(degrees) degrees, setting")
+        guard let max else { return now }
+        return String(localized: "\(now), maximum \(Int(max.rounded())) degrees")
     }
 }
 
@@ -764,9 +781,9 @@ struct Brightness: View {
             } else if case .satellite(let s) = object {
                 let lit = (try? s.isSunlit(at: AstroTime(date))) == true
                 let info = model.info(object)
-                let size = info?.radarCrossSection.map { "RCS \(RadarSize.format($0))" }
+                let size = info?.radarCrossSection.map { String(localized: "RCS \(RadarSize.format($0))", comment: "Radar cross-section") }
                     ?? info.flatMap { SatelliteDimensions.text($0, units: model.units) }
-                Text([lit ? "sunlit" : "eclipsed", size].compactMap { $0 }.joined(separator: " · "))
+                Text([lit ? String(localized: "sunlit") : String(localized: "eclipsed"), size].compactMap { $0 }.joined(separator: " · "))
             }
         }
         .font(.caption.monospacedDigit())
@@ -811,6 +828,13 @@ struct TrackLegend: View {
 enum SkyView: String, CaseIterable, Identifiable {
     case sky = "Sky", globe = "Globe", map = "Map"
     var id: Self { self }
+    var title: String {
+        switch self {
+        case .sky: String(localized: "Sky")
+        case .globe: String(localized: "Globe")
+        case .map: String(localized: "Map")
+        }
+    }
 }
 
 /// What VoiceOver says for the globe and the map, which are drawn: where each satellite is over
@@ -827,21 +851,22 @@ private struct EarthDescription: ViewModifier {
             .accessibilityValue(value)
             .accessibilityActions {
                 ForEach(tracks) { track in
-                    Button("Choose \(track.name)") { choose(track.id) }
+                    Button(String(localized: "Choose \(track.name)")) { choose(track.id) }
                 }
             }
     }
 
     private var value: String {
         let over = tracks.compactMap { track in
-            track.now.map { "\(track.name) over \(Self.place($0))" }
+            track.now.map { String(localized: "\(track.name) over \(Self.place($0))", comment: "A satellite over a place on the Earth") }
         }
-        return over.isEmpty ? "No satellites shown" : over.joined(separator: ". ")
+        return over.isEmpty ? String(localized: "No satellites shown") : over.joined(separator: ". ")
     }
 
     private static func place(_ p: Geodetic) -> String {
-        let lat = "\(Int(abs(p.latitude).rounded())) degrees \(p.latitude >= 0 ? "north" : "south")"
-        let lon = "\(Int(abs(p.longitude).rounded())) degrees \(p.longitude >= 0 ? "east" : "west")"
-        return "\(lat), \(lon)"
+        let lat = Int(abs(p.latitude).rounded()), lon = Int(abs(p.longitude).rounded())
+        let latitude = p.latitude >= 0 ? String(localized: "\(lat) degrees north") : String(localized: "\(lat) degrees south")
+        let longitude = p.longitude >= 0 ? String(localized: "\(lon) degrees east") : String(localized: "\(lon) degrees west")
+        return String(localized: "\(latitude), \(longitude)", comment: "Latitude, longitude")
     }
 }
