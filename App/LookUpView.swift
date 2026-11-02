@@ -119,6 +119,7 @@ struct LookUpView: View {
         }
         .onChange(of: showsCamera) { _, on in on ? camera.start() : camera.stop() }
         .sheet(item: $statusRequest) { StatusSheet(request: $0) }
+        .sheet(item: $captured) { ShareSheet(items: $0.urls) }
         .onChange(of: scope) { _, _ in
             // Search the same tap again over the new set.
             if let sighting { search(Sighting(from: sighting.from, to: sighting.to, date: sighting.date)) }
@@ -269,6 +270,96 @@ struct LookUpView: View {
         }
     }
     @State private var calibrationMessage: String?
+    /// Files from Capture, waiting to be shared.
+    @State private var captured: CapturedFiles?
+    struct CapturedFiles: Identifiable { let id = UUID(); let urls: [URL] }
+
+    /// Saves what's on screen to check the drawing against the real sky: the camera picture with
+    /// the sky drawn over it, the drawing alone, and the numbers behind it, then offers to share them.
+    private func capture(_ sky: PhoneSkyProjection) {
+        let date = model.viewDate()
+        let size = CGSize(width: sky.width, height: sky.height)
+        let scale = UIScreen.main.scale
+        let overlay = LookUpOverlay(sky: sky, date: date, pass: model.highlightedPass(at: date), observer: model.settings.observer,
+                                    live: model.liveObjects(at: date), sighting: nil, diagnostics: true)
+            .frame(width: size.width, height: size.height)
+        let renderer = ImageRenderer(content: overlay)
+        renderer.scale = scale
+        guard let drawing = renderer.uiImage else { return }
+        let picture = cameraShown ? cameraImage(size: size, shift: sky.verticalShift) : nil
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        let composite = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            if let picture { picture.draw(in: CGRect(origin: .zero, size: size)) } else {
+                UIColor.black.setFill()
+                UIRectFill(CGRect(origin: .zero, size: size))
+            }
+            drawing.draw(in: CGRect(origin: .zero, size: size))
+        }
+        let stamp = date.formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false).dateTimeSeparator(.standard)).replacingOccurrences(of: ":", with: "")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "Look up \(stamp)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var urls: [URL] = []
+        func write(_ data: Data?, _ name: String) {
+            guard let data else { return }
+            let url = folder.appending(path: name)
+            if (try? data.write(to: url)) != nil { urls.append(url) }
+        }
+        write(composite.jpegData(compressionQuality: 0.9), "sky.jpg")
+        write(drawing.pngData(), "drawing.png")
+        write(captureInfo(sky, date: date), "info.json")
+        captured = CapturedFiles(urls: urls)
+    }
+
+    /// The camera's latest frame turned upright and cropped as the preview shows it: filling the
+    /// screen's width or height, with its middle `shift` below the screen's.
+    private func cameraImage(size: CGSize, shift: Double) -> UIImage? {
+        guard let buffer = camera.frames.frame else { return nil }
+        let orientation: CGImagePropertyOrientation = switch Self.orientation {
+        case .portrait: .right
+        case .portraitUpsideDown: .left
+        case .landscapeLeft: .down
+        case .landscapeRight: .up
+        }
+        let image = CIImage(cvPixelBuffer: buffer).oriented(orientation)
+        guard let cg = CIContext().createCGImage(image, from: image.extent) else { return nil }
+        let frame = CGSize(width: size.width, height: size.height + 2 * shift)
+        let fill = max(frame.width / image.extent.width, frame.height / image.extent.height)
+        let drawn = CGSize(width: image.extent.width * fill, height: image.extent.height * fill)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIImage(cgImage: cg).draw(in: CGRect(x: (frame.width - drawn.width) / 2, y: (frame.height - drawn.height) / 2,
+                                                 width: drawn.width, height: drawn.height))
+        }
+    }
+
+    /// The numbers behind the drawing, and where each bright star and planet was drawn.
+    private func captureInfo(_ sky: PhoneSkyProjection, date: Date) -> Data? {
+        let time = AstroTime(date)
+        let observer = model.settings.observer
+        func placed(_ name: String, _ h: Horizontal) -> [String: Any]? {
+            guard h.altitude > -2, let p = sky.point(h), sky.isOnScreen(h) else { return nil }
+            return ["name": name, "azimuth": h.azimuth, "altitude": h.altitude, "x": p.x, "y": p.y]
+        }
+        let stars = BrightStars.all.compactMap { placed($0.name, observer.horizontal(ofEarthFixed: $0.earthFixedPosition(at: time))) }
+        let bodies = SolarSystemBody.allCases.compactMap { placed($0.name, observer.horizontal(ofEarthFixed: $0.earthFixedPosition(at: time))) }
+        let info: [String: Any] = [
+            "date": date.ISO8601Format(.iso8601.time(includingFractionalSeconds: true)),
+            "device": UIDevice.current.model,
+            "latitude": model.settings.latitude, "longitude": model.settings.longitude,
+            "orientation": String(describing: Self.orientation),
+            "screen": [sky.width, sky.height], "verticalShift": sky.verticalShift,
+            "fieldOfView": fieldOfView, "cameraFieldOfView": camera.fieldOfView, "focal": sky.focal,
+            "cameraShown": cameraShown, "cameraFormat": camera.dimensions,
+            "headingOffset": headingOffset, "tiltOffset": tiltOffset,
+            "trueNorth": motion.usesTrueNorth, "compassAccuracy": motion.compassAccuracy,
+            "rotationRaw": motion.rotation ?? [], "rotationUsed": sky.rotation,
+            "pointing": ["azimuth": sky.centre.azimuth, "altitude": sky.centre.altitude],
+            "stars": stars, "bodies": bodies,
+        ]
+        return try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted, .sortedKeys])
+    }
 
     private var calibrationBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -346,6 +437,15 @@ struct LookUpView: View {
             Text("Pointing az \(n(centre.azimuth))° alt \(n(centre.altitude))°")
             Text("\(motion.usesTrueNorth ? String(localized: "True north") : String(localized: "Magnetic north")) · compass \(motion.compassAccuracy)")
             Text("Heading \(n(headingOffset))° · tilt \(n(tiltOffset, 2))° · grid every 10°")
+            Button {
+                capture(sky)
+            } label: {
+                Label("Capture", systemImage: "camera.viewfinder")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Theme.accent.opacity(0.85), in: Capsule())
+            }
+            .padding(.top, 4)
         }
         .font(.caption2.monospacedDigit())
         .padding(8)
@@ -751,6 +851,8 @@ final class SkyCamera {
     /// The format's pixels, for the diagnostics.
     private(set) var dimensions = "not started"
     @ObservationIgnored private var configured = false
+    /// The latest frame, for Capture in the diagnostics.
+    @ObservationIgnored let frames = FrameGrabber()
 
     func start() {
         Task {
@@ -763,6 +865,11 @@ final class SkyCamera {
                 // picture down in landscape.
                 session.sessionPreset = session.canSetSessionPreset(.photo) ? .photo : .high
                 session.addInput(input)
+                let output = AVCaptureVideoDataOutput()
+                output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                output.alwaysDiscardsLateVideoFrames = true
+                output.setSampleBufferDelegate(frames, queue: frames.queue)
+                if session.canAddOutput(output) { session.addOutput(output) }
                 session.commitConfiguration()
                 fieldOfView = Double(device.activeFormat.videoFieldOfView)
                 let d = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
@@ -783,6 +890,29 @@ final class SkyCamera {
         Task.detached { session.stopRunning() }
         isRunning = false
     }
+}
+
+/// The system share sheet, for Capture's files (AirDrop them to the Mac).
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [URL]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// Keeps the camera's latest frame, so Capture can save what was on screen.
+final class FrameGrabber: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    let queue = DispatchQueue(label: "Overpass.frames")
+    private let lock = NSLock()
+    private var latest: CVPixelBuffer?
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        lock.withLock { latest = buffer }
+    }
+
+    var frame: CVPixelBuffer? { lock.withLock { latest } }
 }
 
 /// The camera picture, filling the screen.
