@@ -576,12 +576,25 @@ struct SelectedObjectsList: View {
                         }
                         Button("Status…") { model.statusSheet = StatusSheetRequest(objectID: object.id) }
                         Button("Pass calculator…") { model.calculatorObjectID = object.id }
+                        Divider()
+                        Button("Remove from list") { model.toggle(object.id) }
+                            .disabled(isTracked(object))
+                    }
+                    // Deselects it: it can be selected again in the Objects tab.
+                    .swipeActions(edge: .trailing) {
+                        if !isTracked(object) {
+                            Button("Remove", systemImage: "minus.circle", role: .destructive) { model.toggle(object.id) }
+                        }
                     }
                 }
                 .listStyle(.plain)
             }
             }
         }
+    }
+
+    private func isTracked(_ object: SkyObject) -> Bool {
+        model.mount.isTracking && model.targetObjectID == object.id
     }
 
     private func sorted(_ objects: [SkyObject], _ date: Date) -> [SkyObject] {

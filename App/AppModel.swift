@@ -216,6 +216,8 @@ final class AppModel {
     var filter: FilterSettings { didSet { save(filter, "filter"); if filter != oldValue { schedulePrediction() } } }
     /// SkyObject ids ("sat:25544", "body:moon", "star:Vega"). Predictions and highlights follow these.
     var selected: Set<String> { didSet { save(Array(selected), "selectedObjects"); if selected != oldValue { schedulePrediction() } } }
+    /// Objects left out of the Objects lists and searches (debris you never want, say), until shown again.
+    var hidden: Set<String> { didSet { save(Array(hidden), "hiddenObjects") } }
 
     /// The time bar: how far the dome, the lists and tracking are moved from now (±2 days).
     /// Sync and alignment always use real time.
@@ -285,6 +287,7 @@ final class AppModel {
         self.settings = settings
         filter = Self.load("filter", default: FilterSettings())
         selected = Set(Self.load("selectedObjects", default: [String]()))
+        hidden = Set(Self.load("hiddenObjects", default: [String]()))
         do {
             catalog = try TLECatalog(directory: Self.storage.appending(path: "TLE"))
         } catch {
@@ -342,6 +345,15 @@ final class AppModel {
     func toggle(_ id: String) {
         if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
     }
+
+    /// Leaves it out of the Objects lists, and deselects it. Not the object being tracked.
+    func hide(_ id: String) {
+        guard !(mount.isTracking && targetObjectID == id) else { return }
+        hidden.insert(id)
+        selected.remove(id)
+    }
+
+    func unhide(_ id: String) { hidden.remove(id) }
 
     var highlightedObject: SkyObject? {
         highlightedObjectID.flatMap(object) ?? highlightedPass(at: viewDate()).flatMap { object("sat:\($0.noradID)") }

@@ -49,7 +49,7 @@ struct ObjectsView: View {
 
     /// A sidebar entry.
     enum Page: Hashable {
-        case selected, solarSystem, stars, deepSky, comets
+        case selected, solarSystem, stars, deepSky, comets, hidden
         case source(String)
 
         var rawValue: String {
@@ -59,6 +59,7 @@ struct ObjectsView: View {
             case .stars: "stars"
             case .deepSky: "deepsky"
             case .comets: "comets"
+            case .hidden: "hidden"
             case .source(let id): "source:" + id
             }
         }
@@ -69,6 +70,7 @@ struct ObjectsView: View {
             case "stars": self = .stars
             case "deepsky": self = .deepSky
             case "comets": self = .comets
+            case "hidden": self = .hidden
             case let s where s.hasPrefix("source:"): self = .source(String(s.dropFirst(7)))
             default: self = .selected
             }
@@ -198,6 +200,13 @@ struct ObjectsView: View {
                 }
                 .buttonStyle(.borderless)
             }
+            if !model.hidden.isEmpty || page == .hidden {
+                Section {
+                    pageRow(Page.hidden) {
+                        Label("Hidden", systemImage: "eye.slash").badge(model.hidden.count)
+                    }
+                }
+            }
         }
         .navigationTitle("Objects")
         .refreshable { await model.refreshDue() }
@@ -232,6 +241,7 @@ struct ObjectsView: View {
             case .stars: starsPage
             case .deepSky: deepSkyPage
             case .comets: cometsPage
+            case .hidden: hiddenPage
             case .source(let id):
                 if let group = model.groups.first(where: { $0.id == id && $0.source.enabled }) {
                     sourcePage(group)
@@ -344,6 +354,41 @@ struct ObjectsView: View {
                 }
             }
             detailToolbar(showsAge: false)
+        }
+    }
+
+    /// What's been hidden from the other pages, to show again.
+    private var hiddenPage: some View {
+        let objects = model.hidden.map { id in (id, model.object(id)) }
+            .sorted { ($0.1?.name ?? $0.0).localizedStandardCompare($1.1?.name ?? $1.0) == .orderedAscending }
+        return List {
+            if objects.isEmpty {
+                ContentUnavailableView("Nothing hidden", systemImage: "eye",
+                                       description: Text("Swipe left on an object, or right-click it on a Mac, to hide it from these lists."))
+            }
+            Section {
+                ForEach(objects, id: \.0) { id, object in
+                    HStack {
+                        Text(object?.name ?? id)
+                        Spacer()
+                        Button("Show") { model.unhide(id) }
+                            .buttonStyle(.borderless)
+                    }
+                    .swipeActions { Button("Show", systemImage: "eye") { model.unhide(id) }.tint(.accentColor) }
+                }
+            } footer: {
+                if !objects.isEmpty {
+                    Text("Hidden objects are left out of the lists, searches and Look Up. Show one to list it again.")
+                }
+            }
+        }
+        .navigationTitle("Hidden")
+        .toolbar {
+            if !objects.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Show all") { model.hidden = [] }
+                }
+            }
         }
     }
 
@@ -504,6 +549,7 @@ struct ObjectsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .modifier(HideActions(id: object.id))
     }
 
     private func selectRow(_ object: SkyObject, detail: String? = nil) -> some View {
@@ -525,6 +571,7 @@ struct ObjectsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .modifier(HideActions(id: object.id))
     }
 
     // MARK: Filtering
@@ -557,6 +604,7 @@ struct ObjectsView: View {
     }
 
     private func visible(_ object: SkyObject) -> Bool {
+        if model.hidden.contains(object.id) { return false }
         if selectedOnly && !model.isSelected(object.id) && !recentlyUnselected.contains(object.id) { return false }
         if !search.isEmpty {
             let query = SatelliteQuery(search)
@@ -782,5 +830,25 @@ struct AddSourceSheet: View {
                 }
             }
         }
+    }
+}
+
+/// Hide, by swiping left on iPhone and iPad or from the right-click menu on a Mac.
+private struct HideActions: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let id: String
+
+    func body(content: Content) -> some View {
+        let tracked = model.mount.isTracking && model.targetObjectID == id
+        content
+            .swipeActions(edge: .trailing) {
+                if !tracked {
+                    Button("Hide", systemImage: "eye.slash") { model.hide(id) }.tint(.gray)
+                }
+            }
+            .contextMenu {
+                Button("Hide", systemImage: "eye.slash") { model.hide(id) }.disabled(tracked)
+            }
+            .accessibilityAction(named: "Hide") { model.hide(id) }
     }
 }

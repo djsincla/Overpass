@@ -131,7 +131,7 @@ struct LookUpView: View {
         case .all: list = model.satellites
         }
         var seen = Set<String>()
-        return list.filter { seen.insert($0.noradID).inserted }
+        return list.filter { seen.insert($0.noradID).inserted && !model.hidden.contains("sat:\($0.noradID)") }
     }
 
     private func search(_ request: Sighting) {
