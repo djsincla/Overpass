@@ -478,11 +478,17 @@ struct PassesList: View {
                 .listRowBackground(RowHighlight(focused: !editMode.isEditing && model.highlightedPass(at: date)?.id == pass.id,
                                                 target: model.targetPassID == pass.id))
                 #endif
+                // Swipe right to add a track to the globe and map, left to take it off.
                 .swipeActions(edge: .leading) {
-                    Button(model.isShown(pass) ? "Hide track" : "Add track", systemImage: model.isShown(pass) ? "eye.slash" : "plus") {
-                        model.toggleTrack(pass)
+                    if !model.isShown(pass) {
+                        Button("Add track", systemImage: "plus") { model.showTrack(pass) }
+                            .tint(Theme.accent)
                     }
-                    .tint(Theme.accent)
+                }
+                .swipeActions(edge: .trailing) {
+                    if model.isShown(pass) {
+                        Button("Hide track", systemImage: "eye.slash") { model.hideTrack(pass) }
+                    }
                 }
                 .contextMenu {
                     Button(model.isShown(pass) ? "Hide track" : "Add track") { model.toggleTrack(pass) }
@@ -588,8 +594,18 @@ struct SelectedObjectsList: View {
                         Button("Remove from list") { model.toggle(object.id) }
                             .disabled(isTracked(object))
                     }
+                    // A satellite's track: swipe right to add it to the globe and map, left to take it off.
+                    .swipeActions(edge: .leading) {
+                        if let pass = model.trackPass(of: object.id), !model.isShown(pass) {
+                            Button("Add track", systemImage: "plus") { model.showTrack(pass) }
+                                .tint(Theme.accent)
+                        }
+                    }
                     // Deselects it: it can be selected again in the Objects tab.
                     .swipeActions(edge: .trailing) {
+                        if let pass = model.trackPass(of: object.id), model.isShown(pass) {
+                            Button("Hide track", systemImage: "eye.slash") { model.hideTrack(pass) }
+                        }
                         if !isTracked(object) {
                             Button("Remove", systemImage: "minus.circle", role: .destructive) { model.toggle(object.id) }
                         }
