@@ -24,6 +24,18 @@ struct LookUpView: View {
     /// The satellite Show put on the sky, and whether Show selected it, so ✕ can undo both.
     @State private var shown: (id: String, name: String, addedToSelection: Bool)?
 
+    /// Fine tuning: the field of view across the long side with the camera picture and without
+    /// it (0 for the camera's own), and corrections to the compass and the tilt.
+    @AppStorage("lookUp.fieldOfView.camera") private var cameraFieldOfView = 0.0
+    @AppStorage("lookUp.fieldOfView.eye") private var eyeFieldOfView = 0.0
+    @AppStorage("lookUp.headingOffset") private var headingOffset = 0.0
+    @AppStorage("lookUp.tiltOffset") private var tiltOffset = 0.0
+    @AppStorage("lookUp.diagnostics") private var showsDiagnostics = false
+    @State private var tuning = false
+    /// Calibrating with a star: nil when not, then the first tap once it's made.
+    @State private var calibration: Calibration?
+    struct Calibration { var first: (rotation: [[Double]], x: Double, y: Double)? }
+
     var body: some View {
         let date = model.viewDate()
         let pass = model.highlightedPass(at: date)
@@ -42,12 +54,14 @@ struct LookUpView: View {
                     }
                     if let sky = projection(proxy.size) {
                         LookUpOverlay(sky: sky, date: date, pass: pass, observer: model.settings.observer, live: live,
-                                      sighting: sighting)
+                                      sighting: sighting, diagnostics: showsDiagnostics)
                     }
                 }
                 // Tap something seen to name it; swipe along its path to tell close ones apart.
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onEnded { identify($0, size: proxy.size) })
+.gesture(DragGesture(minimumDistance: 0).onEnded { drag in
+                    if calibration != nil { calibrate(at: drag.location, size: proxy.size) } else { identify(drag, size: proxy.size) }
+                })
                 // VoiceOver can't tap a point in the sky: name what the middle of the screen points at.
                 .accessibilityElement()
                 .accessibilityLabel("Sky")
@@ -63,8 +77,12 @@ struct LookUpView: View {
             if let sky = projection(screen) {
                 VStack {
                     topBar
+                    if calibration != nil { calibrationBanner }
+                    if showsDiagnostics { diagnosticsPanel(sky).frame(maxWidth: .infinity, alignment: .leading) }
                     Spacer()
-                    if let sighting {
+                    if tuning {
+                        tuningPanel
+                    } else if let sighting {
                         SightingCard(sighting: sighting, date: date, scope: $scope,
                                      starlinkOn: model.groups.contains { $0.id == "celestrak-starlink" && $0.source.enabled },
                                      status: { statusRequest = StatusSheetRequest(objectID: "sat:\($0.noradID)") },
@@ -182,6 +200,15 @@ struct LookUpView: View {
             }
             Spacer()
             Button {
+                tuning.toggle()
+            } label: {
+                Image(systemName: "dial.low")
+                    .padding(10)
+                    .background(tuning ? Theme.accent.opacity(0.8) : .black.opacity(0.5), in: Circle())
+                    .foregroundStyle(.white)
+            }
+            .accessibilityLabel("Fine tune")
+            Button {
                 showsCamera.toggle()
             } label: {
                 Image(systemName: showsCamera ? "camera.fill" : "camera")
@@ -201,9 +228,129 @@ struct LookUpView: View {
     /// Where the sky lands on a screen this size, once the phone's attitude is known.
     private func projection(_ size: CGSize) -> PhoneSkyProjection? {
         guard let rotation = motion.rotation, size.width > 0, size.height > 0 else { return nil }
-        return PhoneSkyProjection(rotation: rotation,
-                                  focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height), fieldOfView: camera.fieldOfView),
+        return PhoneSkyProjection(rotation: adjusted(rotation),
+                                  focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height), fieldOfView: fieldOfView),
                                   width: size.width, height: size.height, orientation: Self.orientation, verticalShift: shift(size))
+    }
+
+    private func adjusted(_ rotation: [[Double]]) -> [[Double]] {
+        PhoneSkyProjection.adjusted(rotation, heading: headingOffset, tilt: tiltOffset, orientation: Self.orientation)
+    }
+
+    /// The field of view in use: as set with Fine tune, for the camera picture or for the eye, or the camera's own.
+    private var fieldOfView: Double {
+        let set = cameraShown ? cameraFieldOfView : eyeFieldOfView
+        return set > 0 ? set : camera.fieldOfView
+    }
+
+    private var fieldOfViewSetting: Binding<Double> {
+        Binding(get: { fieldOfView },
+                set: { if cameraShown { cameraFieldOfView = $0 } else { eyeFieldOfView = $0 } })
+    }
+
+    // MARK: Fine tune
+
+    /// A star tapped, the device turned, the same star tapped again: the field of view that joins them.
+    private func calibrate(at location: CGPoint, size: CGSize) {
+        guard let raw = motion.rotation else { return }
+        let tap = (rotation: adjusted(raw), x: Double(location.x), y: Double(location.y))
+        guard let first = calibration?.first else {
+            calibration = Calibration(first: tap)
+            return
+        }
+        if let found = PhoneSkyProjection.calibratedFieldOfView(first: first, second: tap, width: size.width, height: size.height,
+                                                                orientation: Self.orientation, verticalShift: shift(size)) {
+            fieldOfViewSetting.wrappedValue = (found * 10).rounded() / 10
+            calibration = nil
+            calibrationMessage = String(localized: "Field of view set to \(fieldOfView.formatted(.number.precision(.fractionLength(1))))°")
+        } else {
+            calibration = Calibration(first: nil)
+            calibrationMessage = String(localized: "Those taps didn't fit one star. Try again, turning the device further between them.")
+        }
+    }
+    @State private var calibrationMessage: String?
+
+    private var calibrationBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(calibration?.first == nil
+                 ? "Tap a bright star near the middle of the screen."
+                 : "Now turn the device so the same star is near an edge, and tap it again.")
+                .font(.callout.weight(.semibold))
+            if let calibrationMessage { Text(calibrationMessage).font(.caption) }
+            Button("Cancel") { calibration = nil; calibrationMessage = nil }
+                .font(.callout)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
+        .foregroundStyle(.white)
+    }
+
+    private var tuningPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Fine tune").font(.headline)
+                Spacer()
+                Button("Done") { tuning = false }
+            }
+            if let calibrationMessage, calibration == nil { Text(calibrationMessage).font(.caption) }
+            tuningSlider("Field of view", value: fieldOfViewSetting, range: 10...120, step: 0.1, unit: "°",
+                         note: (cameraShown ? cameraFieldOfView : eyeFieldOfView) > 0
+                            ? (cameraShown ? String(localized: "set, with the camera picture") : String(localized: "set, without the camera picture"))
+                            : String(localized: "the camera's own"))
+            Button {
+                calibrationMessage = nil
+                calibration = Calibration(first: nil)
+                tuning = false
+            } label: {
+                Label("Calibrate with a star", systemImage: "scope")
+            }
+            tuningSlider("Heading", value: $headingOffset, range: -30...30, step: 0.5, unit: "°", note: String(localized: "added to the compass"))
+            tuningSlider("Tilt", value: $tiltOffset, range: -15...15, step: 0.25, unit: "°", note: String(localized: "moves everything up or down"))
+            Toggle("Diagnostics", isOn: $showsDiagnostics)
+            Button("Reset", role: .destructive) {
+                if cameraShown { cameraFieldOfView = 0 } else { eyeFieldOfView = 0 }
+                headingOffset = 0
+                tiltOffset = 0
+                calibrationMessage = nil
+            }
+        }
+        .padding(14)
+        .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+        .foregroundStyle(.white)
+        .tint(Theme.accent)
+    }
+
+    private func tuningSlider(_ title: LocalizedStringKey, value: Binding<Double>, range: ClosedRange<Double>,
+                              step: Double, unit: String, note: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(value.wrappedValue.formatted(.number.precision(.fractionLength(step < 0.5 ? 2 : 1))))\(unit)").monospacedDigit()
+            }
+            .font(.callout)
+            Slider(value: value, in: range, step: step)
+            Text(note).font(.caption2).foregroundStyle(.white.opacity(0.7))
+        }
+    }
+
+    /// What decides where the sky is drawn, to check against the real sky.
+    private func diagnosticsPanel(_ sky: PhoneSkyProjection) -> some View {
+        let centre = sky.centre
+        func n(_ x: Double, _ digits: Int = 1) -> String { x.formatted(.number.precision(.fractionLength(digits))) }
+        return VStack(alignment: .leading, spacing: 1) {
+            Text("Field of view \(n(fieldOfView))° across \(n(max(sky.width, sky.height), 0)) pt; camera's own \(n(camera.fieldOfView))°")
+            Text("Focal \(n(sky.focal, 0)) pt · screen \(n(sky.width, 0)) × \(n(sky.height, 0)) · \(String(describing: Self.orientation))")
+            Text("Camera \(camera.dimensions) · \(cameraShown ? String(localized: "picture on") : String(localized: "picture off"))")
+            Text("Pointing az \(n(centre.azimuth))° alt \(n(centre.altitude))°")
+            Text("\(motion.usesTrueNorth ? String(localized: "True north") : String(localized: "Magnetic north")) · compass \(motion.compassAccuracy)")
+            Text("Heading \(n(headingOffset))° · tilt \(n(tiltOffset, 2))° · grid every 10°")
+        }
+        .font(.caption2.monospacedDigit())
+        .padding(8)
+        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .foregroundStyle(.white)
     }
 
     /// In landscape, how far down to slide the picture and the sky, so the horizon sits about a
@@ -236,9 +383,11 @@ private struct LookUpOverlay: View {
     let observer: Observer
     let live: [LiveObject]
     var sighting: Sighting?
+    var diagnostics = false
 
     var body: some View {
         Canvas { context, size in
+            if diagnostics { drawDiagnosticGrid(&context) }
             drawGrid(&context, size)
             drawStars(&context)
             drawSolarSystem(&context)
@@ -289,6 +438,26 @@ private struct LookUpOverlay: View {
             let label = major ? names[Int(az / 45)] : "\(Int(az))°"
             context.draw(Text(label).font(major ? .headline : .caption2).foregroundStyle(.white.opacity(major ? 0.95 : 0.6)),
                          at: CGPoint(x: p.x, y: p.y + (major ? 14 : 10)))
+        }
+    }
+
+    /// Altitude and azimuth every 10°, to compare the drawn scale with the stars.
+    private func drawDiagnosticGrid(_ context: inout GraphicsContext) {
+        let style = StrokeStyle(lineWidth: 0.5)
+        let colour = GraphicsContext.Shading.color(.cyan.opacity(0.45))
+        for altitude in stride(from: 10.0, through: 80, by: 10) {
+            context.stroke(polyline(stride(from: 0.0, through: 360, by: 1).map { Horizontal(azimuth: $0, altitude: altitude) }),
+                           with: colour, style: style)
+        }
+        for azimuth in stride(from: 0.0, to: 360, by: 10) {
+            context.stroke(polyline(stride(from: -10.0, through: 89, by: 1).map { Horizontal(azimuth: azimuth, altitude: $0) }),
+                           with: colour, style: style)
+            for altitude in stride(from: 10.0, through: 70, by: 20) {
+                if let p = sky.point(Horizontal(azimuth: azimuth, altitude: altitude)) {
+                    context.draw(Text("\(Int(azimuth))/\(Int(altitude))").font(.system(size: 8)).foregroundStyle(.cyan.opacity(0.8)),
+                                 at: CGPoint(x: p.x + 2, y: p.y - 6), anchor: .leading)
+                }
+            }
         }
     }
 
@@ -537,6 +706,8 @@ final class SkyMotion {
     private(set) var rotation: [[Double]]?
     private(set) var usesTrueNorth = true
     private(set) var unavailable = false
+    /// How well the magnetometer is calibrated, for the diagnostics.
+    private(set) var compassAccuracy = "unknown"
     @ObservationIgnored private let manager = CMMotionManager()
 
     func start() {
@@ -550,8 +721,16 @@ final class SkyMotion {
         usesTrueNorth = trueNorth
         manager.deviceMotionUpdateInterval = 1.0 / 30
         manager.startDeviceMotionUpdates(using: trueNorth ? .xTrueNorthZVertical : .xMagneticNorthZVertical, to: .main) { [weak self] data, _ in
-            guard let m = data?.attitude.rotationMatrix else { return }
+            guard let data else { return }
+            let m = data.attitude.rotationMatrix
             self?.rotation = [[m.m11, m.m12, m.m13], [m.m21, m.m22, m.m23], [m.m31, m.m32, m.m33]]
+            let accuracy = switch data.magneticField.accuracy {
+            case .high: "high"
+            case .medium: "medium"
+            case .low: "low"
+            default: "uncalibrated"
+            }
+            if self?.compassAccuracy != accuracy { self?.compassAccuracy = accuracy }
         }
     }
 
@@ -569,6 +748,8 @@ final class SkyCamera {
     private(set) var fieldOfView = 65.0
     /// The picture's long side over its short side.
     private(set) var aspect = 4.0 / 3
+    /// The format's pixels, for the diagnostics.
+    private(set) var dimensions = "not started"
     @ObservationIgnored private var configured = false
 
     func start() {
@@ -586,6 +767,7 @@ final class SkyCamera {
                 fieldOfView = Double(device.activeFormat.videoFieldOfView)
                 let d = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
                 if d.width > 0, d.height > 0 { aspect = Double(max(d.width, d.height)) / Double(min(d.width, d.height)) }
+                dimensions = "\(d.width) × \(d.height)"
                 configured = true
             }
             // AVCaptureSession isn't Sendable, but starting and stopping it off the main thread is

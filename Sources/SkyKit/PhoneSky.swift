@@ -94,6 +94,62 @@ public struct PhoneSkyProjection: Sendable {
                           altitude: asin(max(-1, min(1, sz / length))).degrees, range: 0)
     }
 
+    /// Core Motion's rotation with two corrections set by hand: `heading` degrees added to every
+    /// azimuth (for a compass that's out), and `tilt` degrees turning the picture about the
+    /// screen's horizontal, positive moving what's drawn up.
+    public static func adjusted(_ rotation: [[Double]], heading: Double, tilt: Double, orientation: Orientation) -> [[Double]] {
+        let h = heading.radians
+        // Sky vectors turned so an azimuth az is taken as az + heading.
+        let turn = [[cos(h), sin(h), 0.0], [-sin(h), cos(h), 0], [0, 0, 1]]
+        // The screen's right in device axes, the axis tilting turns about.
+        let a: (Double, Double, Double) = switch orientation {
+        case .portrait: (1, 0, 0)
+        case .portraitUpsideDown: (-1, 0, 0)
+        case .landscapeRight: (0, -1, 0)
+        case .landscapeLeft: (0, 1, 0)
+        }
+        let t = tilt.radians, c = cos(t), s = sin(t), k = 1 - c
+        let tip = [[c + a.0 * a.0 * k, a.0 * a.1 * k - a.2 * s, a.0 * a.2 * k + a.1 * s],
+                   [a.1 * a.0 * k + a.2 * s, c + a.1 * a.1 * k, a.1 * a.2 * k - a.0 * s],
+                   [a.2 * a.0 * k - a.1 * s, a.2 * a.1 * k + a.0 * s, c + a.2 * a.2 * k]]
+        func product(_ x: [[Double]], _ y: [[Double]]) -> [[Double]] {
+            (0..<3).map { i in (0..<3).map { j in (0..<3).reduce(0) { $0 + x[i][$1] * y[$1][j] } } }
+        }
+        return product(tip, product(rotation, turn))
+    }
+
+    /// The field of view (degrees across the long side) that puts one star under two taps made
+    /// with the device turned between them: wherever the star is, both taps must point the same
+    /// way in the sky. Nil when the taps are too close on screen, or the device barely turned, to tell.
+    public static func calibratedFieldOfView(first: (rotation: [[Double]], x: Double, y: Double),
+                                             second: (rotation: [[Double]], x: Double, y: Double),
+                                             width: Double, height: Double, orientation: Orientation,
+                                             verticalShift: Double = 0) -> Double? {
+        guard hypot(first.x - second.x, first.y - second.y) > min(width, height) / 4 else { return nil }
+        func separation(_ fieldOfView: Double) -> Double {
+            let focal = focal(longSide: max(width, height), fieldOfView: fieldOfView)
+            func ray(_ tap: (rotation: [[Double]], x: Double, y: Double)) -> Horizontal {
+                PhoneSkyProjection(rotation: tap.rotation, focal: focal, width: width, height: height,
+                                   orientation: orientation, verticalShift: verticalShift)
+                    .horizontal(atX: tap.x, y: tap.y)
+            }
+            let a = skyVector(ray(first)), b = skyVector(ray(second))
+            return acos(max(-1, min(1, a.0 * b.0 + a.1 * b.1 + a.2 * b.2)))
+        }
+        // Scan, then narrow down on the best by golden sections.
+        var best = stride(from: 10.0, through: 120, by: 0.5).min { separation($0) < separation($1) }!
+        var low = max(10, best - 0.5), high = min(120, best + 0.5)
+        let ratio = (5.0.squareRoot() - 1) / 2
+        for _ in 0..<40 {
+            let a = high - ratio * (high - low), b = low + ratio * (high - low)
+            if separation(a) < separation(b) { high = b } else { low = a }
+        }
+        best = (low + high) / 2
+        // A good fit leaves the two taps within a degree of each other; a miss means the taps weren't the same star.
+        guard separation(best) < 1.0.radians, best > 10.5, best < 119.5 else { return nil }
+        return best
+    }
+
     /// Where the camera's centre is on screen: where `centre` is drawn.
     public var opticalCentre: (x: Double, y: Double) { (width / 2, height / 2 + verticalShift) }
 
