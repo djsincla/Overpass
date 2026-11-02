@@ -8,6 +8,9 @@ struct AboutRows: View {
     static let credits = String(localized: "Orbital elements and the satellite catalogue (launch, orbit, radar cross-section) come from CelesTrak. Physical dimensions come from Jonathan McDowell's General Catalog of Artificial Space Objects (planet4589.org/space/gcat), under CC BY 4.0. Radio transmitters come from the SatNOGS DB (db.satnogs.org), under CC BY-SA 4.0. Deep sky objects come from OpenNGC by Mattia Verga, under CC BY-SA 4.0, star names from the IAU Working Group on Star Names, and comet orbits from the IAU Minor Planet Center.",
         comment: "Keep the names of people, organisations, catalogues, websites and licences as they are: CelesTrak, General Catalog of Artificial Space Objects, SatNOGS DB, OpenNGC, IAU, CC BY 4.0, CC BY-SA 4.0.")
 
+    static let disclaimer = String(localized: "iOptron is a trademark of iOptron Corporation. Overpass is an independent app. It works with iOptron mounts and is not affiliated with, endorsed by or supported by iOptron.",
+        comment: "Keep the names iOptron, iOptron Corporation and Overpass as they are.")
+
     var body: some View {
         LabeledContent("Version", value: SettingsView.version)
         LabeledContent("Made by", value: "\(Self.author), \(Self.callSign)")
@@ -43,7 +46,7 @@ struct AboutView: View {
                 Section {
                     AboutRows()
                 } footer: {
-                    Text(AboutRows.credits)
+                    Text("\(AboutRows.credits)\n\n\(AboutRows.disclaimer)")
                 }
             }
             .formStyle(.grouped)

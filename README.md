@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.5.0 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.5.1 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -99,6 +99,8 @@ swift test
 
 ## Version history
 
+**0.5.1**, 1 November 2026. Overpass speaks Spanish and German. The pass list catches up when the app is opened after a long gap, so passes are there after a day away. Objects can be hidden from the Objects lists, and taken off Observe with a swipe. The globe and map draw a track once you choose a pass, and on iPhone and iPad a swipe right adds a track and a swipe left hides it. Look up has a fine-tune panel: the field of view, set by tapping a star, heading and tilt corrections, a grid and sensor readout, Capture to save what the screen shows, and a night camera at the highest ISO. VoiceOver reads the globe, the map and the time bar. About and Settings say that Overpass is independent of iOptron.
+
 **0.5.0**, 1 November 2026. A Status panel on the Observe screen gives the tracking target in numbers: range and range rate, speed, height, the Maidenhead square below it, countdowns to rise, set and shadow entry, Doppler-corrected frequencies from the SatNOGS DB, exposure times for your camera, and whether the mount can keep up. The mount panel shows what the mount reports about itself on connecting, including its clock and firmware. Objects gains Messier, Caldwell, NGC and IC by the hand controller's numbers, every IAU-named star to magnitude 4, and comets from the Minor Planet Center, all tracked by the mount's own goto in Passive mode. Stop now turns off the mount's own tracking as well. Switching back from Special mode no longer changes Step to Passive, and Passive tracking stops before north and asks to go the long way round.
 
 **0.4.5**, 30 October 2026. The USB relay is gone. An iPhone connects to the mount over WiFi, and so does an iPad for now: Overpass has its own driver for the mount's USB cable on iPads with an M1 or later chip, which reaches TestFlight once Apple approves it.
@@ -127,4 +129,4 @@ swift test
 
 Overpass is released under the [Apache License 2.0](LICENSE). It uses [SatelliteKit](https://github.com/gavineadie/SatelliteKit) by Gavin Eadie under the MIT License; see [NOTICE](NOTICE).
 
-Nothing here is supported by iOptron, and a mount that slews into its own tripod is still your problem. Read the cable stop section of the settings before you trust it with your cabling.
+Overpass is an independent project. It works with iOptron mounts and is not affiliated with, endorsed by or supported by iOptron. iOptron is a trademark of iOptron Corporation. A mount that slews into its own tripod is still your problem. Read the cable stop section of the settings before you trust it with your cabling.
