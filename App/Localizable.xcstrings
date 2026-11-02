@@ -6217,6 +6217,54 @@
         }
       }
     },
+    "Hidden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeblendet"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultos"
+          }
+        }
+      }
+    },
+    "Hidden objects are left out of the lists, searches and Look Up. Show one to list it again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeblendete Objekte fehlen in den Listen, in der Suche und unter „Himmel“. Mit „Anzeigen“ wieder in die Listen aufnehmen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los objetos ocultos no aparecen en las listas, las búsquedas ni en Mirar arriba. Mostrar uno para que vuelva a aparecer."
+          }
+        }
+      }
+    },
+    "Hide": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar"
+          }
+        }
+      }
+    },
     "Hide %@": {
       "localizations": {
         "de": {
@@ -8817,6 +8865,22 @@
         }
       }
     },
+    "Nothing hidden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts ausgeblendet"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada oculto"
+          }
+        }
+      }
+    },
     "Nothing in the next %lld days with these settings. Try a lower peak or more days.": {
       "localizations": {
         "de": {
@@ -10315,6 +10379,22 @@
         }
       }
     },
+    "Remove from list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Liste entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar de la lista"
+          }
+        }
+      }
+    },
     "Remove from selection": {
       "localizations": {
         "de": {
@@ -11162,6 +11242,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostrar"
+          }
+        }
+      }
+    },
+    "Show all": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle einblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar todos"
           }
         }
       }
@@ -12604,6 +12700,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deslizar a lo largo de su trayectoria en lugar de tocar para distinguir los que están cerca."
+          }
+        }
+      }
+    },
+    "Swipe left on an object, or right-click it on a Mac, to hide it from these lists.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf einem Objekt nach links wischen oder es auf dem Mac mit der rechten Maustaste anklicken, um es aus diesen Listen auszublenden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deslizar a la izquierda sobre un objeto, o hacer clic derecho en un Mac, para ocultarlo de estas listas."
           }
         }
       }
