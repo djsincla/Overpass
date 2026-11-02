@@ -185,7 +185,7 @@ struct SettingsView: View {
                 } header: {
                     Text("About")
                 } footer: {
-                    Text(AboutRows.credits)
+                    Text("\(AboutRows.credits)\n\n\(AboutRows.disclaimer)")
                 }
                 #endif
             }

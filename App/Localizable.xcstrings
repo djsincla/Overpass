@@ -15509,6 +15509,23 @@
         }
       }
     },
+    "iOptron is a trademark of iOptron Corporation. Overpass is an independent app. It works with iOptron mounts and is not affiliated with, endorsed by or supported by iOptron.": {
+      "comment": "Keep the names iOptron, iOptron Corporation and Overpass as they are.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOptron ist eine Marke der iOptron Corporation. Overpass ist eine unabhängige App. Sie funktioniert mit iOptron-Montierungen, steht aber in keiner Verbindung zu iOptron und wird von iOptron weder empfohlen noch unterstützt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOptron es una marca comercial de iOptron Corporation. Overpass es una app independiente. Funciona con monturas iOptron, pero no está afiliada a iOptron ni cuenta con su respaldo o soporte."
+          }
+        }
+      }
+    },
     "in %@": {
       "localizations": {
         "de": {
