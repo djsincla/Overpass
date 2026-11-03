@@ -12,11 +12,11 @@ struct OverpassApp: App {
             ContentView()
                 .environment(model)
         }
+        #if os(macOS)
         .commands {
-            #if os(macOS)
             CommandGroup(replacing: .appInfo) { AboutCommand() }
-            #endif
         }
+        #endif
         #if os(macOS)
         SwiftUI.Settings {
             SettingsView()
