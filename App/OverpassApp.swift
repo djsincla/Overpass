@@ -11,6 +11,13 @@ struct OverpassApp: App {
         WindowGroup {
             ContentView()
                 .environment(model)
+                #if os(macOS)
+                // Above every size at which a tab swaps to its iPhone layout (Observe at 760 × 560,
+                // Conjunctions and Camera at 760 wide). Dragging the window across one tore down a
+                // list mid-resize, which crashed SwiftUI on macOS 27 (3 Nov 2026), and the Mac
+                // never needs the phone layouts.
+                .frame(minWidth: 800, minHeight: 600)
+                #endif
         }
         #if os(macOS)
         .commands {
