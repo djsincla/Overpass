@@ -126,7 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
-            guard let mount = Self.model?.mount, mount.state == .connected else { return .terminateNow }
+            // Also after lost contact: the Special-mode client is still open, and Special mode
+            // left on survives power cycles and stops WiFi and the hand controller working.
+            guard let mount = Self.model?.mount, mount.state == .connected || mount.holdsSpecialMode else { return .terminateNow }
             Task {
                 await mount.disconnect()
                 sender.reply(toApplicationShouldTerminate: true)
