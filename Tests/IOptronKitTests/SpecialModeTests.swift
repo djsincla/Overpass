@@ -64,6 +64,14 @@ import Testing
         #expect(MountIdentity(code: "8052").isSpecialMode)
     }
 
+    @Test func haz71() {
+        #expect(MountIdentity(code: "0073").model == .haz71)
+        #expect(!MountIdentity(code: "0073").isSpecialMode)
+        #expect(MountIdentity(code: "8073").model == .haz71)
+        #expect(MountIdentity(code: "8073").isSpecialMode)
+        #expect(MountIdentity(code: "8073").model.supportsCombinedCommands)
+    }
+
     @Test func otherModels() {
         #expect(MountIdentity(code: "5035").model == .azMountPro)
         #expect(MountIdentity(code: "9035").model == .azMountPro)

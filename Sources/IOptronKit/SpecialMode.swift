@@ -12,6 +12,7 @@ public enum MountModel: Equatable, Sendable {
     case azMountPro
     case haz31
     case haz46
+    case haz71
     case hae29
     case hae43
     case unknown(String)
@@ -43,6 +44,8 @@ public struct MountIdentity: Equatable, Sendable {
         case "035" where first == "5" || first == "9": model = .azMountPro
         case "035": model = .haz31
         case "052": model = .haz46
+        // Checked on the mount 3 Nov 2026: 0073 in Normal mode, 8073 in Special mode.
+        case "073": model = .haz71
         case "033", "034": model = .hae29
         case "050", "051": model = .hae43
         default: model = .unknown(code)

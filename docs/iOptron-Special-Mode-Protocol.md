@@ -14,10 +14,11 @@ Transcribed from https://www.ioptron.com/v/ASCOM/iOptronSpecialRS232Language.pdf
 | AZ Mount Pro | 5035 | 9035 |
 | HAZ31 | 0035 | 8035 |
 | HAZ46 | 0052 | 8052 |
+| HAZ71 (not in iOptron's table; measured 3 Nov 2026) | 0073 | 8073 |
 | HAE29 (AA mode, limited support) | 0033 / 0034 | 8033 / 8034 |
 | HAE43 (AA mode, limited support) | 0050 / 0051 | 8050 / 8051 |
 
-Not listed: HAZ71, HAE16, HAE69, any EQ-mode use. Test these before relying on them.
+Not listed: HAE16, HAE69, any EQ-mode use. Test these before relying on them. The HAZ71 behaves as the HAZ46 in everything measured: the same firmware dates, the same Special-mode axes (P0 = az − 180°, P1 = zenith distance), and the same placeholder position for about 3 s after leaving Special mode. Its `:MountInfo#` straight after `:ZZZ#` once read `0021`; read it again after the switch settles.
 
 ## Serial
 - Baud rate for all models: **115200**
