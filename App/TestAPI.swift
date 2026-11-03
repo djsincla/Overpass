@@ -41,9 +41,10 @@ final class TestAPI {
     private init(model: AppModel) throws {
         self.model = model
         let parameters = NWParameters.tcp
+        // Bound to 127.0.0.1 itself, not every address with local-only filtering on top.
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: Self.port)
         parameters.acceptLocalOnly = true
-        parameters.requiredInterfaceType = .loopback
-        listener = try NWListener(using: parameters, on: Self.port)
+        listener = try NWListener(using: parameters)
         try FileManager.default.createDirectory(at: Self.tokenFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(token.utf8).write(to: Self.tokenFile, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.tokenFile.path)
