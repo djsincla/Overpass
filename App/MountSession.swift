@@ -274,8 +274,11 @@ final class MountSession {
 
     /// Also lets go of the tracking target, so nothing is left armed for the next connection;
     /// except when reconnecting, which keeps what was chosen beforehand.
+    /// Doesn't unwind: an unwind started here ran on while Special mode was being left, and
+    /// nothing waited for it. The mount stays where it is, and the next connection finds it
+    /// past north and offers the unwind then.
     func disconnect(releasingTarget: Bool = true) async {
-        await stopAll()
+        await stopAll(unwinding: false)
         if releasingTarget { app?.clearTarget() }
         pollTask?.cancel()
         pollTask = nil
@@ -511,8 +514,34 @@ final class MountSession {
 
     // MARK: Manual moves
 
+    /// The arrow held down now, if any, and the jog commands in the order they were asked for.
+    private var heldJog: JogDirection?
+    private var jogTask: Task<Void, Never>?
+
+    /// Press and release of a jog arrow. Each waits for the one before, so a release's stop
+    /// always reaches the mount after its press's start: separate tasks let a quick tap over
+    /// WiFi send the stop while the press was still setting the rate, and the mount then
+    /// started and kept going. A press whose arrow was let go meanwhile sends nothing.
     func jog(_ direction: JogDirection, pressed: Bool) async {
-        if pressed { await cancelTracking() }
+        if pressed {
+            heldJog = direction
+        } else if heldJog == direction {
+            heldJog = nil
+        }
+        let previous = jogTask
+        let task = Task {
+            await previous?.value
+            await self.sendJog(direction, pressed: pressed)
+        }
+        jogTask = task
+        await task.value
+    }
+
+    private func sendJog(_ direction: JogDirection, pressed: Bool) async {
+        if pressed {
+            guard heldJog == direction else { return }
+            await cancelTracking()
+        }
         do {
             if let normal {
                 let d: NormalCommand.Direction = switch direction {
@@ -523,6 +552,7 @@ final class MountSession {
                 }
                 if pressed {
                     try await normal.setMoveRate(moveRate)
+                    guard heldJog == direction else { return }
                     try await normal.startMove(d)
                 } else {
                     try await normal.stopMove(d)
@@ -541,6 +571,7 @@ final class MountSession {
                     status = String(localized: "Can't turn further that way: cable stop")
                     return
                 }
+                guard heldJog == direction else { return }
                 try await special.setSpeeds(primary: speed.0, secondary: speed.1)
             }
         } catch {

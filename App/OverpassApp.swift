@@ -107,7 +107,9 @@ struct ContentView: View {
                 // A few seconds' grace from iOS to get the stop out.
                 let grace = UIApplication.shared.beginBackgroundTask()
                 Task {
-                    await model.mount.stopAll()
+                    // No unwind: it would start a move that only a loop in the app stops, and
+                    // iOS suspends the app moments later.
+                    await model.mount.stopAll(unwinding: false)
                     UIApplication.shared.endBackgroundTask(grace)
                 }
             }
