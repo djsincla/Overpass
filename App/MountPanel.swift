@@ -694,27 +694,39 @@ struct JogButton: View {
     let direction: JogDirection
     let symbol: String
     let label: String
-    @State private var pressed = false
+    /// True while a finger is on the arrow. SwiftUI puts it back to false however the touch
+    /// ends, including when a scroll view takes it over, which skips onEnded: the stop then
+    /// went missing and the mount kept moving.
+    @GestureState private var touching = false
+    /// Whether this arrow has sent a press that still needs its release.
+    @State private var moving = false
 
     var body: some View {
         VStack(spacing: 1) {
             Image(systemName: symbol).font(.system(size: 13, weight: .bold))
             Text(label).font(.system(size: 9, weight: .semibold))
         }
-        .modifier(PadFace(pressed: pressed, width: 46, height: 42, cornerRadius: 10))
-        .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { _ in
-                guard !pressed else { return }
-                pressed = true
-                Task { await model.mount.jog(direction, pressed: true) }
-            }
-            .onEnded { _ in
-                pressed = false
-                Task { await model.mount.jog(direction, pressed: false) }
-            })
+        .modifier(PadFace(pressed: touching, width: 46, height: 42, cornerRadius: 10))
+        .gesture(DragGesture(minimumDistance: 0).updating($touching) { _, touching, _ in touching = true })
+        .onChange(of: touching) { _, touching in
+            if touching { press() } else { release() }
+        }
+        .onDisappear { release() }
         .accessibilityLabel("Move \(label)")
         .accessibilityHint("Hold to move, release to stop")
         .accessibilityAddTraits(.isButton)
+    }
+
+    private func press() {
+        guard !moving else { return }
+        moving = true
+        Task { await model.mount.jog(direction, pressed: true) }
+    }
+
+    private func release() {
+        guard moving else { return }
+        moving = false
+        Task { await model.mount.jog(direction, pressed: false) }
     }
 }
 
