@@ -1,5 +1,10 @@
 {
   "bundleID": "com.dwaynesinclair.overpass",
   "generate": "xcodegen -q",
-  "group": "Field testers"
+  "group": "Field testers",
+  "screenshots": {
+    "scheme": "OverpassUITests",
+    "test": "OverpassUITests/ScreenshotTests",
+    "devices": ["iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"]
+  }
 }
