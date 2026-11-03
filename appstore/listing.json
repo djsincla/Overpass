@@ -69,7 +69,7 @@
     "userGeneratedContent": false
   },
   "availability": {
-    "availableInNewTerritories": false,
+    "availableInNewTerritories": true,
     "only": [
       "AIA",
       "ARG",
