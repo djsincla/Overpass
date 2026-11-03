@@ -11,3 +11,4 @@ build/
 
 # The TestFlight tool builds on its own.
 appstore/screenshots/
+appstore/header.png
