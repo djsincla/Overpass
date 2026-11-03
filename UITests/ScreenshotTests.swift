@@ -108,7 +108,10 @@ final class ScreenshotTests: XCTestCase {
     }
 
     private func snap(_ name: String) {
-        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        // An iPhone Duo has two screens, and the main one is the outside screen, dark while it's
+        // unfolded. The app's window is on whichever screen is in use.
+        let picture = XCUIScreen.screens.count > 1 ? app.windows.firstMatch.screenshot() : XCUIScreen.main.screenshot()
+        let shot = XCTAttachment(screenshot: picture)
         shot.name = name
         shot.lifetime = .keepAlways
         add(shot)

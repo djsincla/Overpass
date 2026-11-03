@@ -110,7 +110,7 @@ struct ObserveView: View {
                     .help("Every pass of an object over the next two weeks")
                     .disabled(model.selectedObjects.isEmpty)
                 }
-                if isWide {
+                if offersLayouts {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Picker("Layout", selection: $layout) {
@@ -162,9 +162,20 @@ struct ObserveView: View {
         #endif
     }
 
+    /// The Layout menu, on the iPad and the Mac. An unfolded iPhone Duo is wide enough, but there
+    /// iOS 27 puts the toolbar in the tab bar down the side, where the menu doesn't open, so the
+    /// Duo keeps the sky on the left.
+    private var offersLayouts: Bool {
+        #if os(iOS)
+        isWide && UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        true
+        #endif
+    }
+
     @ViewBuilder
     private var wideLayout: some View {
-        switch layout {
+        switch offersLayouts ? layout : .skyLeft {
         case .skyLeft:
             ResizableSplit(axis: .horizontal, fraction: $domeFraction, range: 0.25...0.75) {
                 dome.padding()
@@ -477,6 +488,7 @@ struct PassesList: View {
                 #if os(iOS)
                 .listRowBackground(RowHighlight(focused: !editMode.isEditing && model.highlightedPass(at: date)?.id == pass.id,
                                                 target: model.targetPassID == pass.id))
+                .listRowInsets(RowHighlight.insets)
                 #endif
                 // Swipe right to add a track to the globe and map, left to take it off.
                 .swipeActions(edge: .leading) {
@@ -581,6 +593,7 @@ struct SelectedObjectsList: View {
                     .buttonStyle(.plain)
                     .listRowBackground(RowHighlight(focused: model.highlightedObject?.id == object.id,
                                                     target: model.targetObjectID == object.id))
+                    .listRowInsets(RowHighlight.insets)
                     .contextMenu {
                         if model.targetObjectID == object.id {
                             Button("Untrack") { Task { await model.untrack() } }
@@ -698,6 +711,10 @@ struct ObjectBadge: View {
 struct RowHighlight: View {
     let focused: Bool
     let target: Bool
+
+    /// The row's own margins, set rather than left to iOS: iOS 27 all but drops them on a
+    /// plain list, which ran the text over the edge of the box.
+    static let insets = EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 14)
 
     var body: some View {
         let color: Color? = focused ? Theme.focus : target ? Theme.target : nil
