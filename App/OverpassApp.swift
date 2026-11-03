@@ -89,6 +89,9 @@ struct ContentView: View {
         .task {
             #if os(macOS)
             AppDelegate.model = model
+            #if DEBUG
+            TestAPI.startIfAsked(model)
+            #endif
             #endif
             await model.start()
         }
@@ -107,9 +110,7 @@ struct ContentView: View {
                 // A few seconds' grace from iOS to get the stop out.
                 let grace = UIApplication.shared.beginBackgroundTask()
                 Task {
-                    // No unwind: it would start a move that only a loop in the app stops, and
-                    // iOS suspends the app moments later.
-                    await model.mount.stopAll(unwinding: false)
+                    await model.mount.stopForBackground()
                     UIApplication.shared.endBackgroundTask(grace)
                 }
             }

@@ -658,6 +658,12 @@ final class MountSession {
         await stopAll(unwinding: unwinding, request: nil)
     }
 
+    /// On the way to the background (iOS): stop, without unwinding past north. An unwind is a
+    /// move that only a loop in the app stops, and iOS suspends the app moments later.
+    func stopForBackground() async {
+        await stopAll(unwinding: false)
+    }
+
     /// `request` is the start this is part of, which mustn't cancel itself; nil for a Stop.
     /// Stop also turns off the mount's own sidereal, lunar or solar tracking, so after Passive
     /// the mount is left still.
