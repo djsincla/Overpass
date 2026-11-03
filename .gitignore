@@ -10,3 +10,4 @@ overpass-trace*.csv
 build/
 
 # The TestFlight tool builds on its own.
+appstore/screenshots/
