@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overpass Privacy</title>
+<meta name="description" content="What Overpass does with your location, camera and files, and what it sends over the network.">
+<link rel="icon" type="image/png" href="images/icon.png">
+<style>
+  :root {
+    --sky-top: #05070f;
+    --sky-bottom: #0d1430;
+    --panel-edge: rgba(255, 255, 255, 0.09);
+    --text: #e6e9f2;
+    --muted: #9aa3ba;
+    --accent: #5cc8ff;
+    --amber: #ffc847;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--sky-top); }
+  body {
+    margin: 0;
+    color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(ellipse at 50% -10%, #1a2550 0%, transparent 60%),
+                linear-gradient(var(--sky-top), var(--sky-bottom) 70%, var(--sky-top));
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  html, body { overflow-x: hidden; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 56px 0 8px; }
+  header a.home { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; }
+  header img { width: 40px; height: 40px; }
+  h1 { font-size: 2.4rem; letter-spacing: -0.02em; margin: 28px 0 4px; }
+  .meta { color: var(--muted); font-size: 0.95rem; }
+  .meta b { color: var(--amber); font-weight: 600; }
+  h2 { font-size: 1.25rem; margin: 40px 0 10px; }
+  p, li { color: #cfd5e4; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  footer { border-top: 1px solid var(--panel-edge); margin-top: 64px; padding: 28px 0 48px; color: var(--muted); font-size: 0.88rem; text-align: center; }
+  @media (max-width: 600px) {
+    header { padding-top: 36px; }
+    h1 { font-size: 2rem; }
+    body { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a class="home" href="./"><img src="images/icon.png" alt="">Overpass</a>
+  <h1>Privacy</h1>
+  <div class="meta"><b>Effective 2 November 2026</b> &nbsp;·&nbsp; Overpass for macOS, iPhone and iPad</div>
+</header>
+
+<p>Overpass collects nothing about you. There are no accounts, no analytics, no advertising and no tracking, and I have no server for it to send anything to. Everything it knows about you stays on your Mac, iPhone or iPad, and the requests it makes over the network are for public orbital data.</p>
+
+<h2>Your location</h2>
+<p>Overpass uses your location to work out which satellites pass over you and where to point the mount. It comes from Location Services while the app is open, from a position you type in, or from the mount's own GPS. It is kept in the app's settings on the device and is never sent anywhere by Overpass. Turning off Location Services for Overpass is fine; type your position in Settings instead.</p>
+
+<h2>The camera</h2>
+<p>The camera is used for Look up, camera guiding and camera tracking. Frames are processed on the device as they arrive and then dropped. The one exception is Capture in Look up's diagnostics, which saves a single picture, the drawing over it and the numbers behind them, and hands them to the share sheet. Where they go from there is up to you.</p>
+
+<h2>The mount and the local network</h2>
+<p>Overpass talks to your mount over its USB cable or its WiFi, on your local network. Nothing on that connection leaves your network. The mount log Overpass keeps stays on the device until you export it.</p>
+
+<h2>What Overpass fetches</h2>
+<p>To predict passes and describe what it finds, Overpass downloads public data from these services. Each request asks for a catalogue, a group of satellites or one satellite by its catalogue number. None of them includes your location, your name or anything else about you.</p>
+<ul>
+  <li><a href="https://celestrak.org">CelesTrak</a>: orbital elements and the satellite catalogue.</li>
+  <li><a href="https://planet4589.org/space/gcat/">GCAT</a>, Jonathan McDowell's General Catalog of Artificial Space Objects: satellite sizes.</li>
+  <li><a href="https://db.satnogs.org">SatNOGS DB</a>: radio transmitters for a satellite.</li>
+  <li><a href="https://minorplanetcenter.net">IAU Minor Planet Center</a>: comet orbits.</li>
+  <li>Any TLE source URL you add yourself.</li>
+</ul>
+<p>As with any request on the internet, these servers see your IP address and a standard user agent naming the app and the operating system. Their own privacy policies cover what they keep.</p>
+
+<h2>Maps</h2>
+<p>The Conjunctions tab draws its map with Apple's MapKit and finds places with Apple's map search. To draw the map and answer a search, Apple's servers receive the area being shown and what you typed. That goes to Apple, under <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>. The globe and world map on the Observe tab are bundled with the app and use no network at all.</p>
+
+<h2>Files</h2>
+<p>TLE files you open, exported logs and captures are read and written only where you choose. Overpass has no iCloud storage of its own.</p>
+
+<h2>TestFlight</h2>
+<p>If you test Overpass through TestFlight, Apple gives me the feedback and screenshots you choose to send, crash reports, and your email address if you were invited by email, under <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>. I use them to fix Overpass and for nothing else.</p>
+
+<h2>Children</h2>
+<p>Overpass collects no personal information from anyone, children included.</p>
+
+<h2>Changes</h2>
+<p>If any of this changes, this page will say so before the version that changes it is released, with a new effective date.</p>
+
+<h2>Contact</h2>
+<p>Questions about any of this go to Dwayne Sinclair, AB6A, at <a href="mailto:AB6A@arrl.net">AB6A@arrl.net</a>.</p>
+
+<footer>
+  <a href="./">Overpass</a> &nbsp;·&nbsp; Copyright 2026 Dwayne Sinclair<br>
+  Overpass is independent and not affiliated with, endorsed by or supported by iOptron. iOptron is a trademark of iOptron Corporation.
+</footer>
+
+</div>
+</body>
+</html>
