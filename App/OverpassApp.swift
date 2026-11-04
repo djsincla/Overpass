@@ -96,6 +96,7 @@ struct ContentView: View {
         .task {
             #if os(macOS)
             AppDelegate.model = model
+            sizeWindowForScreenshots()
             #if DEBUG
             TestAPI.startIfAsked(model)
             #endif
@@ -127,6 +128,21 @@ struct ContentView: View {
 }
 
 #if os(macOS)
+/// For the App Store screenshots, launched with `-screenshotWindow YES` by the UI test: the window
+/// at 1440 × 900 points, which is the Mac App Store's 2880 × 1800 on a Retina screen.
+@MainActor func sizeWindowForScreenshots() {
+    guard UserDefaults.standard.bool(forKey: "screenshotWindow") else { return }
+    Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(500))
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }),
+              let screen = window.screen ?? NSScreen.main else { return }
+        let size = NSSize(width: 1440, height: 900)
+        let area = screen.visibleFrame
+        window.setFrame(NSRect(x: area.midX - size.width / 2, y: area.midY - size.height / 2, width: size.width, height: size.height),
+                        display: true)
+    }
+}
+
 /// Disconnects on quit: stops the mount, which in Special mode keeps turning at the last speeds
 /// it was given, and puts it back in Normal mode.
 final class AppDelegate: NSObject, NSApplicationDelegate {

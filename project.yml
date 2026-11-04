@@ -111,7 +111,7 @@ targets:
   # `xcodebuild test -scheme OverpassUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   OverpassUITests:
     type: bundle.ui-testing
-    platform: iOS
+    supportedDestinations: [iOS, macOS]
     sources: [UITests]
     dependencies:
       - target: Overpass
