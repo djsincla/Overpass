@@ -218,7 +218,8 @@ final class ConjunctionsModel {
     /// recalculates each watched event whose elements changed. `force` refreshes and
     /// recalculates regardless (the "Refresh TLE now" button).
     func updateWatched(force: Bool) async {
-        guard let app else { return }
+        // One at a time: the 30-minute timer and the Refresh button could otherwise both run.
+        guard let app, !isUpdating else { return }
         let now = Date.now
         watched.removeAll { $0.event.closest < now - 3600 }
         let upcoming = watched.filter { $0.event.closest > now }
@@ -238,27 +239,33 @@ final class ConjunctionsModel {
             }
         }
 
-        for (i, w) in watched.enumerated() where w.event.closest > now {
+        // By id, not position: the list can change while a recalculation is awaited (a star
+        // tapped to watch or unwatch), and a stale position wrote to the wrong entry or past the end.
+        for w in watched where w.event.closest > now {
             guard let sat = app.satellites.first(where: { $0.noradID == w.event.noradID }),
                   force || sat.epoch > w.event.elementEpoch else { continue }
             var finder = finder(around: w.event.centre)
             finder.radius = w.radius
+            var update = w
             if let fresh = await finder.recalculate(w.event, with: sat) {
-                watched[i].previous = w.event
-                watched[i].drift = ConjunctionDrift(from: w.event, to: fresh)
-                watched[i].event = fresh
-                watched[i].missesArea = false
+                update.previous = w.event
+                update.drift = ConjunctionDrift(from: w.event, to: fresh)
+                update.event = fresh
+                update.missesArea = false
             } else {
                 // Recalculate without the radius limit, to show where it went.
                 finder.radius = max(w.radius * 4, 200)
                 if let wider = await finder.recalculate(w.event, with: sat) {
-                    watched[i].previous = w.event
-                    watched[i].drift = ConjunctionDrift(from: w.event, to: wider)
-                    watched[i].event = wider
+                    update.previous = w.event
+                    update.drift = ConjunctionDrift(from: w.event, to: wider)
+                    update.event = wider
                 }
-                watched[i].missesArea = true
+                update.missesArea = true
             }
-            watched[i].updated = now
+            update.updated = now
+            // Unwatched meanwhile: leave it gone.
+            guard let i = watched.firstIndex(where: { $0.id == w.id }) else { continue }
+            watched[i] = update
         }
     }
 }

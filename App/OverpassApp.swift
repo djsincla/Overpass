@@ -11,12 +11,19 @@ struct OverpassApp: App {
         WindowGroup {
             ContentView()
                 .environment(model)
+                #if os(macOS)
+                // Above every size at which a tab swaps to its iPhone layout (Observe at 760 × 560,
+                // Conjunctions and Camera at 760 wide). Dragging the window across one tore down a
+                // list mid-resize, which crashed SwiftUI on macOS 27 (3 Nov 2026), and the Mac
+                // never needs the phone layouts.
+                .frame(minWidth: 800, minHeight: 600)
+                #endif
         }
+        #if os(macOS)
         .commands {
-            #if os(macOS)
             CommandGroup(replacing: .appInfo) { AboutCommand() }
-            #endif
         }
+        #endif
         #if os(macOS)
         SwiftUI.Settings {
             SettingsView()
@@ -89,6 +96,9 @@ struct ContentView: View {
         .task {
             #if os(macOS)
             AppDelegate.model = model
+            #if DEBUG
+            TestAPI.startIfAsked(model)
+            #endif
             #endif
             await model.start()
         }
@@ -107,7 +117,7 @@ struct ContentView: View {
                 // A few seconds' grace from iOS to get the stop out.
                 let grace = UIApplication.shared.beginBackgroundTask()
                 Task {
-                    await model.mount.stopAll()
+                    await model.mount.stopForBackground()
                     UIApplication.shared.endBackgroundTask(grace)
                 }
             }
@@ -124,7 +134,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
-            guard let mount = Self.model?.mount, mount.state == .connected else { return .terminateNow }
+            // Also after lost contact: the Special-mode client is still open, and Special mode
+            // left on survives power cycles and stops WiFi and the hand controller working.
+            guard let mount = Self.model?.mount, mount.state == .connected || mount.holdsSpecialMode else { return .terminateNow }
             Task {
                 await mount.disconnect()
                 sender.reply(toApplicationShouldTerminate: true)

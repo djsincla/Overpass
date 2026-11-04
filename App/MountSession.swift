@@ -100,6 +100,9 @@ final class MountSession {
 
     private var normal: NormalModeClient?
     private var special: MountClient?
+    /// A Special-mode connection is still open, even if contact was lost: quitting should still
+    /// try to put the mount back in Normal mode.
+    var holdsSpecialMode: Bool { special != nil }
     private var tcp: TCPTransport?
     private var unwrapper: AxisUnwrapper?
     /// The USB line, for Normal-mode commands on the way out
@@ -254,10 +257,18 @@ final class MountSession {
                 identity = try await enterSpecialMode(client, transport)
                 let raw = try await client.positions()
                 let s = settings
-                if let wound = UserDefaults.standard.object(forKey: Self.windKey) as? Double {
+                let saved = UserDefaults.standard.object(forKey: Self.windKey) as? Double
+                if let wound = saved, Self.stillWound(raw: raw.primary, saved: wound) {
                     unwrapper = AxisUnwrapper(raw: raw.primary, near: wound)
                     log(String(format: "Connected past north from last time: primary %.2f", unwrapper?.unwrapped ?? wound))
                 } else {
+                    if let wound = saved {
+                        // Moved since, by Normal mode or the hand controller, which know nothing of
+                        // the turn Special mode saved. Unwrapping onto it would put the mount a
+                        // turn out, and an unwind would head into the other cable stop.
+                        UserDefaults.standard.removeObject(forKey: Self.windKey)
+                        log(String(format: "Saved past-north position %.2f doesn't match the axis (%.2f): the mount moved since; ignoring it", wound, raw.primary))
+                    }
                     unwrapper = AxisUnwrapper(raw: raw.primary, model: s.alignment ?? AlignmentModel(), limits: s.limits)
                 }
                 nativeSlewWentWrongWay = false
@@ -274,8 +285,11 @@ final class MountSession {
 
     /// Also lets go of the tracking target, so nothing is left armed for the next connection;
     /// except when reconnecting, which keeps what was chosen beforehand.
+    /// Doesn't unwind: an unwind started here ran on while Special mode was being left, and
+    /// nothing waited for it. The mount stays where it is, and the next connection finds it
+    /// past north and offers the unwind then.
     func disconnect(releasingTarget: Bool = true) async {
-        await stopAll()
+        await stopAll(unwinding: false)
         if releasingTarget { app?.clearTarget() }
         pollTask?.cancel()
         pollTask = nil
@@ -511,8 +525,34 @@ final class MountSession {
 
     // MARK: Manual moves
 
+    /// The arrow held down now, if any, and the jog commands in the order they were asked for.
+    private var heldJog: JogDirection?
+    private var jogTask: Task<Void, Never>?
+
+    /// Press and release of a jog arrow. Each waits for the one before, so a release's stop
+    /// always reaches the mount after its press's start: separate tasks let a quick tap over
+    /// WiFi send the stop while the press was still setting the rate, and the mount then
+    /// started and kept going. A press whose arrow was let go meanwhile sends nothing.
     func jog(_ direction: JogDirection, pressed: Bool) async {
-        if pressed { await cancelTracking() }
+        if pressed {
+            heldJog = direction
+        } else if heldJog == direction {
+            heldJog = nil
+        }
+        let previous = jogTask
+        let task = Task {
+            await previous?.value
+            await self.sendJog(direction, pressed: pressed)
+        }
+        jogTask = task
+        await task.value
+    }
+
+    private func sendJog(_ direction: JogDirection, pressed: Bool) async {
+        if pressed {
+            guard heldJog == direction else { return }
+            await cancelTracking()
+        }
         do {
             if let normal {
                 let d: NormalCommand.Direction = switch direction {
@@ -523,6 +563,7 @@ final class MountSession {
                 }
                 if pressed {
                     try await normal.setMoveRate(moveRate)
+                    guard heldJog == direction else { return }
                     try await normal.startMove(d)
                 } else {
                     try await normal.stopMove(d)
@@ -541,6 +582,7 @@ final class MountSession {
                     status = String(localized: "Can't turn further that way: cable stop")
                     return
                 }
+                guard heldJog == direction else { return }
                 try await special.setSpeeds(primary: speed.0, secondary: speed.1)
             }
         } catch {
@@ -614,6 +656,12 @@ final class MountSession {
 
     func stopAll(unwinding: Bool = true) async {
         await stopAll(unwinding: unwinding, request: nil)
+    }
+
+    /// On the way to the background (iOS): stop, without unwinding past north. An unwind is a
+    /// move that only a loop in the app stops, and iOS suspends the app moments later.
+    func stopForBackground() async {
+        await stopAll(unwinding: false)
     }
 
     /// `request` is the start this is part of, which mustn't cancel itself; nil for a Stop.
@@ -800,7 +848,7 @@ final class MountSession {
         controller.maximumCorrection = max(s.maximumAzimuthRate, s.maximumAltitudeRate)
         let deadline = Date.now + 300
         while !Task.isCancelled {
-            guard let current = try await readPosition() else { return }
+            guard let current = try await readPosition() else { throw MountSessionError.noPosition }
             let goal = plan.start
             if abs(goal.primary - current.primary) < 0.02 && abs(goal.secondary - current.secondary) < 0.02 {
                 try await special.stop()
@@ -820,9 +868,12 @@ final class MountSession {
         guard let how = object.passiveTracking else { throw MountSessionError.notPassive }
         let s = settings
         let observer = s.observer
+        // Real time throughout, not the time bar's: the mount tracks by its own clock, which
+        // configure() set to now. Checking north at the time bar's time let a shifted bar miss a
+        // crossing the mount was really about to make.
         // Get there by the allowed way round first; the RA/Dec goto that starts tracking is then tiny.
         status = String(localized: "Slewing at full speed…")
-        try await goto(normal, to: try observer.look(at: object.target, AstroTime(skyNow)))
+        try await goto(normal, to: try observer.look(at: object.target, AstroTime(Date.now)))
 
         if how == .holdPosition {
             status = String(localized: "Holding position (geostationary)")
@@ -840,7 +891,7 @@ final class MountSession {
         func recentreInterval() -> TimeInterval? {
             switch object {
             case .body(.moon): 300
-            case .comet(let c): c.recentreInterval(AstroTime(skyNow))
+            case .comet(let c): c.recentreInterval(AstroTime(Date.now))
             default: nil
             }
         }
@@ -848,7 +899,7 @@ final class MountSession {
         var lastState: Int?
         while !Task.isCancelled {
             if recentreInterval().map({ Date.now.timeIntervalSince(recentred) > $0 }) ?? (recentred == .distantPast) {
-                let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(skyNow))
+                let (ra, dec) = try observer.topocentricRADec(of: object.target, at: AstroTime(Date.now))
                 do {
                     try await normal.slew(rightAscension: ra, declination: dec, rate: rate)
                     log(String(format: "Passive %@: RA/Dec goto (RA %.4f° Dec %.4f°) accepted, %@ rate", object.name, ra, dec, rateName))
@@ -860,8 +911,8 @@ final class MountSession {
             }
             // The mount's own tracking would carry on through north, which its goto never turns
             // through: stop short and go the long way round, as Step does.
-            let here = try observer.look(at: object.target, AstroTime(skyNow))
-            let soon = try observer.look(at: object.target, AstroTime(skyNow + 60))
+            let here = try observer.look(at: object.target, AstroTime(Date.now))
+            let soon = try observer.look(at: object.target, AstroTime(Date.now + 60))
             if Self.turnsLongWay(from: here, to: soon, stop: s.cableStopAzimuth) {
                 try? await normal.setTracking(false)
                 log("Passive \(object.name): reaching the cable stop, the mount's tracking stopped")
@@ -871,7 +922,7 @@ final class MountSession {
                 }
                 var ahead = soon
                 for _ in 0..<3 {
-                    ahead = try observer.look(at: object.target, AstroTime(skyNow + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) + 60))
+                    ahead = try observer.look(at: object.target, AstroTime(Date.now + Self.slewTime(from: here, to: ahead, stop: s.cableStopAzimuth) + 60))
                 }
                 log("Going the long way round to " + describe(ahead) + " from " + describe(here))
                 status = String(localized: "Going the long way round (the mount won't turn through the cable stop)…")
@@ -1246,6 +1297,12 @@ final class MountSession {
         }
     }
 
+    /// Whether the saved past-north position still describes the mount: its axis reads within
+    /// 20° of it, a turn aside. Anything further means something else moved the mount since.
+    static func stillWound(raw: Double, saved: Double) -> Bool {
+        abs(wrap180(raw - saved)) <= 20
+    }
+
     /// Keeps the wound turn across disconnects: the axis reading alone can't tell it.
     private func rememberWind(_ current: AxisPosition) {
         let wound = pastNorth != nil
@@ -1384,7 +1441,7 @@ final class MountSession {
             // rate looks ahead, to when the speed command takes effect. Aiming the position
             // ahead as well held the scope ~50 ms in front of the satellite (tens of arc-seconds).
             let latency = 0.05
-            guard let current = try await readPosition() else { return }
+            guard let current = try await readPosition() else { throw MountSessionError.noPosition }
             let t = (skyPositionDate ?? .now) + (app?.timeShift ?? 0) + timeOffset
 
             var desired: AxisPosition
@@ -1509,7 +1566,7 @@ final class MountSession {
             let loopStart = Date.now
             let s = settings
             let period = s.trackingPeriod
-            guard let current = try await readPosition() else { return }
+            guard let current = try await readPosition() else { throw MountSessionError.noPosition }
             let read = skyPositionDate ?? .now
 
             guard let estimate = source.estimate(at: read) else {
@@ -2232,6 +2289,9 @@ final class MountSession {
 enum MountSessionError: Error {
     case inSpecialMode, noSerialPort, needsWiFi, needsNormalMode, needsUSB, notAligned, notPassive
     case untrackablePass, routeCrossesCableStop, pastCableStop, belowHorizon, couldNotReachStart
+    /// The position read gave nothing, as after the connection closed. Thrown, not returned, so
+    /// the tracking's error handling stops the mount: a plain return left Special mode turning.
+    case noPosition
 
     /// For the screen.
     var message: String {
@@ -2248,6 +2308,7 @@ enum MountSessionError: Error {
         case .pastCableStop: String(localized: "Stopped at the cable stop.")
         case .belowHorizon: String(localized: "It's below your horizon.")
         case .couldNotReachStart: String(localized: "Stopped: the mount didn't reach the start point within 5 minutes.")
+        case .noPosition: String(localized: "Stopped: the mount gave no position.")
         }
     }
 
@@ -2266,6 +2327,7 @@ enum MountSessionError: Error {
         case .pastCableStop: "Stopped at the cable stop."
         case .belowHorizon: "It's below your horizon."
         case .couldNotReachStart: "Stopped: the mount didn't reach the start point within 5 minutes."
+        case .noPosition: "Stopped: the mount gave no position."
         }
     }
 }

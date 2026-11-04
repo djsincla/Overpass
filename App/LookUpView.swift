@@ -228,13 +228,17 @@ struct LookUpView: View {
     /// Which way the interface is turned, for which way is up on the screen.
     private var cameraShown: Bool { showsCamera && camera.isRunning }
 
+    /// The camera picture's shape while it's shown, which the drawing has to match.
+    private var pictureAspect: Double? { cameraShown ? camera.aspect : nil }
+
     private func shift(_ size: CGSize) -> Double { Self.horizonShift(size, cameraAspect: cameraShown ? camera.aspect : nil) }
 
     /// Where the sky lands on a screen this size, once the phone's attitude is known.
     private func projection(_ size: CGSize) -> PhoneSkyProjection? {
         guard let rotation = motion.rotation, size.width > 0, size.height > 0 else { return nil }
         return PhoneSkyProjection(rotation: adjusted(rotation),
-                                  focal: PhoneSkyProjection.focal(longSide: max(size.width, size.height), fieldOfView: fieldOfView),
+                                  focal: PhoneSkyProjection.focal(width: size.width, height: size.height, fieldOfView: fieldOfView,
+                                                                 pictureAspect: pictureAspect),
                                   width: size.width, height: size.height, orientation: Self.orientation, verticalShift: shift(size))
     }
 
@@ -264,7 +268,8 @@ struct LookUpView: View {
             return
         }
         if let found = PhoneSkyProjection.calibratedFieldOfView(first: first, second: tap, width: size.width, height: size.height,
-                                                                orientation: Self.orientation, verticalShift: shift(size)) {
+                                                                orientation: Self.orientation, verticalShift: shift(size),
+                                                                pictureAspect: pictureAspect) {
             fieldOfViewSetting.wrappedValue = (found * 10).rounded() / 10
             calibration = nil
             calibrationMessage = String(localized: "Field of view set to \(fieldOfView.formatted(.number.precision(.fractionLength(1))))°")

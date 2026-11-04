@@ -1,5 +1,21 @@
 {
   "bundleID": "com.dwaynesinclair.overpass",
   "generate": "xcodegen -q",
-  "group": "Field testers"
+  "group": "Field testers",
+  "screenshots": {
+    "scheme": "OverpassUITests",
+    "test": "OverpassUITests/ScreenshotTests",
+    "devices": [
+      "iPhone 17 Pro Max",
+      "iPad Pro 13-inch (M5)"
+    ],
+    "header": {
+      "pictures": [
+        "appstore/screenshots/iPhone-17-Pro-Max/1 Sky.png",
+        "appstore/screenshots/iPad-Pro-13-inch-(M5)/6 Conjunctions.png",
+        "appstore/header/mac-globe.png",
+        "appstore/screenshots/iPhone-Duo/3 Map.png"
+      ]
+    }
+  }
 }

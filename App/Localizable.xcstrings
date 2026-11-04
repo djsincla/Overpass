@@ -12624,6 +12624,22 @@
         }
       }
     },
+    "Stopped: the mount gave no position.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppt: Die Montierung meldete keine Position."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detenido: la montura no dio ninguna posición."
+          }
+        }
+      }
+    },
     "Stopped: the mount turned but the object stayed as far from the aim point. It may be fixed in the picture (the camera's text, a mark on the lens), or the calibration may be off.": {
       "localizations": {
         "de": {

@@ -8,13 +8,24 @@ struct ConjunctionsView: View {
     @State private var selectedID: String?
     @AppStorage("conjunctions.listFraction") private var listFraction = 0.38
 
+    /// Room for the list and the map side by side.
+    static func isWide(_ size: CGSize) -> Bool {
+        // The Mac always: swapping layouts while the window was being resized tore down a list
+        // mid-resize, which crashed SwiftUI on macOS 27 (3 Nov 2026).
+        #if os(macOS)
+        true
+        #else
+        size.width > 760 && size.height >= 560
+        #endif
+    }
+
     var body: some View {
         let c = model.conjunctions
         NavigationStack {
             GeometryReader { proxy in
                 // List and map side by side where there's room both ways. A phone on its side keeps
                 // the phone layout: tap an event for the map full screen.
-                if proxy.size.width > 760 && proxy.size.height >= 560 {
+                if Self.isWide(proxy.size) {
                     ResizableSplit(axis: .horizontal, fraction: $listFraction, range: 0.25...0.6) {
                         EventList(selectedID: $selectedID)
                     } second: {

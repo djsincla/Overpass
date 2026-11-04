@@ -408,6 +408,7 @@ extension MountModel {
         switch self {
         case .haz31: "HAZ31"
         case .haz46: "HAZ46"
+        case .haz71: "HAZ71"
         case .hae29: "HAE29"
         case .hae43: "HAE43"
         case .azMountPro: "AZ Mount Pro"

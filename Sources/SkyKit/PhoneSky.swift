@@ -43,6 +43,15 @@ public struct PhoneSkyProjection: Sendable {
         longSide / 2 / tan(degrees.radians / 2)
     }
 
+    /// The focal length on a `width` × `height` screen showing a camera picture of `pictureAspect`
+    /// (long side over short) filling it. On a screen squarer than the picture, such as an
+    /// unfolded iPhone Duo, the picture overhangs the long side, and the field of view spans
+    /// that overhang. With no picture, it spans the long side.
+    public static func focal(width: Double, height: Double, fieldOfView degrees: Double, pictureAspect: Double? = nil) -> Double {
+        let long = max(width, height), short = min(width, height)
+        return focal(longSide: max(long, short * (pictureAspect ?? 0)), fieldOfView: degrees)
+    }
+
     /// The sky direction as a unit vector in the sky frame.
     static func skyVector(_ h: Horizontal) -> (Double, Double, Double) {
         let alt = h.altitude.radians, az = h.azimuth.radians
@@ -124,10 +133,10 @@ public struct PhoneSkyProjection: Sendable {
     public static func calibratedFieldOfView(first: (rotation: [[Double]], x: Double, y: Double),
                                              second: (rotation: [[Double]], x: Double, y: Double),
                                              width: Double, height: Double, orientation: Orientation,
-                                             verticalShift: Double = 0) -> Double? {
+                                             verticalShift: Double = 0, pictureAspect: Double? = nil) -> Double? {
         guard hypot(first.x - second.x, first.y - second.y) > min(width, height) / 4 else { return nil }
         func separation(_ fieldOfView: Double) -> Double {
-            let focal = focal(longSide: max(width, height), fieldOfView: fieldOfView)
+            let focal = focal(width: width, height: height, fieldOfView: fieldOfView, pictureAspect: pictureAspect)
             func ray(_ tap: (rotation: [[Double]], x: Double, y: Double)) -> Horizontal {
                 PhoneSkyProjection(rotation: tap.rotation, focal: focal, width: width, height: height,
                                    orientation: orientation, verticalShift: verticalShift)
