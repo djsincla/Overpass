@@ -17,5 +17,6 @@
         "appstore/screenshots/iPhone-Duo/3 Map.png"
       ]
     }
-  }
+  },
+  "macAppStore": true
 }
