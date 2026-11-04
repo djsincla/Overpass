@@ -4,8 +4,9 @@ import Network
 
 /// Debug builds only, and only when asked (`-testAPI YES` at launch): a small HTTP interface on
 /// the Mac's loopback, so scripted tests can drive a real mount through the same MountSession
-/// calls the buttons make. Every request needs the token in `test-api-token` beside the mount
-/// log, sent as `X-Overpass-Token`. Not in Release builds, so never in TestFlight or the App Store.
+/// calls the buttons make. Every request needs the token, sent as `X-Overpass-Token`: the one
+/// given at launch with `-testAPIToken` (16 characters or more), else the one written to
+/// `test-api-token` beside the mount log. Not in Release builds, so never in TestFlight or the App Store.
 ///
 ///     GET  /state                       connection, axes, sky position, status, past north
 ///     GET  /log?lines=40                the end of the mount log
@@ -25,7 +26,9 @@ final class TestAPI {
 
     private let model: AppModel
     private let listener: NWListener
-    private let token = UUID().uuidString
+    /// `-testAPIToken` at launch, else a fresh one. Sandboxed, the app's container is closed to
+    /// other programs, so a script can't read the token file; it passes its own at launch.
+    private let token = UserDefaults.standard.string(forKey: "testAPIToken").flatMap { $0.count >= 16 ? $0 : nil } ?? UUID().uuidString
     /// Presses made through the API that haven't been released, by direction.
     private var held: [JogDirection: Task<Void, Never>] = [:]
 

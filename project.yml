@@ -80,6 +80,8 @@ targets:
       configs:
         Debug:
           "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": App/Overpass-iOS.entitlements
+          # The Mac's entitlements plus network.server, for the Debug-only test API.
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/Overpass-Debug.entitlements
 
   # Runs the mount's Prolific USB adapter on an iPad (M1 or later), which has no serial ports.
   OverpassSerial:
