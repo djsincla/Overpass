@@ -214,7 +214,7 @@ final class MountSession {
                 // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
                 await readReport(client)
                 gpsState = site?.gps
-                try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                try await configureSite(client)
                 await stopMountTrackingIfSet(client)
                 await syncIfLeftSpecialMode(client)
                 normal = client
@@ -238,14 +238,14 @@ final class MountSession {
                     let position = await waitForNormalPosition(client)
                     // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
                     await readReport(client)
-                    try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    try await configureSite(client)
                     await stopMountTrackingIfSet(client)
                     await syncAfterSwitch(client, position: position)
                     id = try await client.identify()
                 } else {
                     // Before Overpass's own location and time go in: the mount's, from its GPS or hand controller.
                     await readReport(client)
-                    try await client.configure(latitude: s.latitude, longitude: s.longitude)
+                    try await configureSite(client)
                     await stopMountTrackingIfSet(client)
                     await syncIfLeftSpecialMode(client)
                 }
@@ -436,6 +436,21 @@ final class MountSession {
     /// and when it was read, to compare its clock with this device's.
     private(set) var report: MountReport?
     private(set) var reportDate: Date?
+
+    /// Sends Overpass's location and the time. With no location of its own yet, as on a fresh
+    /// install, it sends back the mount's own site from its hand controller or GPS, so only the
+    /// time changes: sending Overpass's unset 0°, 0° overwrote the mount's site.
+    private func configureSite(_ client: NormalModeClient) async throws {
+        let s = settings
+        if s.hasLocation {
+            try await client.configure(latitude: s.latitude, longitude: s.longitude)
+        } else if let site {
+            try await client.configure(latitude: site.latitude, longitude: site.longitude)
+            log(String(format: "No location in Overpass yet: kept the mount's own, %.4f° %.4f°", site.latitude, site.longitude))
+        } else {
+            log("No location in Overpass yet, and none from the mount: its site and time left as they were")
+        }
+    }
 
     private func readReport(_ client: NormalModeClient) async {
         let asked = Date.now
@@ -2122,7 +2137,7 @@ final class MountSession {
                 let position = await waitForNormalPosition(normal)
                 // Before Overpass's own location goes in: the mount's, from its GPS or hand controller.
                 site = try? await normal.site()
-                try await normal.configure(latitude: settings.latitude, longitude: settings.longitude)
+                try await configureSite(normal)
                 await syncAfterSwitch(normal, position: position)
                 self.special = nil
                 unwrapper = nil

@@ -2,7 +2,8 @@
 
 Run a Debug build of the Mac app with the API on, the mount on its USB cable, then:
 
-    open path/to/Debug/Overpass.app --args -testAPI YES
+    export OVERPASS_TEST_TOKEN=$(uuidgen)
+    open path/to/Debug/Overpass.app --args -testAPI YES -testAPIToken "$OVERPASS_TEST_TOKEN"
     python3 scripts/mount-tests.py normal special      # or wifi
 
 Small moves only, left (azimuth down) and down, so start with the mount pointing well away from
@@ -10,7 +11,10 @@ north and from the horizon. After each move it checks the mount is still; if not
 at once and fails. A position question on connecting is answered "go by the mount"."""
 import json, sys, time, urllib.request, pathlib
 
-TOKEN = (pathlib.Path.home() / "Library/Application Support/com.djsincla.overpass/test-api-token").read_text().strip()
+# The token: OVERPASS_TEST_TOKEN, as given to the app with -testAPIToken (needed once the app is
+# sandboxed: its container is closed to other programs), else the file the app wrote.
+import os
+TOKEN = os.environ.get("OVERPASS_TEST_TOKEN") or (pathlib.Path.home() / "Library/Application Support/com.djsincla.overpass/test-api-token").read_text().strip()
 BASE = "http://127.0.0.1:48123"
 
 def call(method, path):

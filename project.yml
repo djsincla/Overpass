@@ -60,11 +60,12 @@ targets:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphone*]": AppIconRed
-        PRODUCT_BUNDLE_IDENTIFIER: com.djsincla.overpass
-        # iPhone and iPad use the App ID registered for TestFlight. The Mac keeps its own, so its
-        # sandbox (settings, alignment, TLEs) stays where it is.
-        "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]": com.dwaynesinclair.overpass
-        "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphonesimulator*]": com.dwaynesinclair.overpass
+        # One App Store app for iPhone, iPad and Mac. Up to 0.5.1 the Mac was com.djsincla.overpass,
+        # and its settings stay with that identifier.
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwaynesinclair.overpass
+        # The Mac is sandboxed, as the Mac App Store requires, with the mount's serial port, USB
+        # cameras, the camera, location, the network and files you pick.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/Overpass.entitlements
         PRODUCT_NAME: Overpass
         # Notarisation needs the hardened runtime for Developer ID builds.
         ENABLE_HARDENED_RUNTIME: YES
@@ -79,6 +80,8 @@ targets:
       configs:
         Debug:
           "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": App/Overpass-iOS.entitlements
+          # The Mac's entitlements plus network.server, for the Debug-only test API.
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/Overpass-Debug.entitlements
 
   # Runs the mount's Prolific USB adapter on an iPad (M1 or later), which has no serial ports.
   OverpassSerial:
