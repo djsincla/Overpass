@@ -2,7 +2,7 @@
 
 <h1 align="center">Overpass</h1>
 
-<p align="center">Version 0.5.2 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
+<p align="center">Version 0.5.3 &nbsp;·&nbsp; macOS 14 and iOS 17 &nbsp;·&nbsp; iOptron HAZ and HAE mounts</p>
 
 <p align="center"><a href="https://djsincla.github.io/Overpass/">djsincla.github.io/Overpass</a> &nbsp;·&nbsp; <a href="https://github.com/djsincla/Overpass/releases/latest">Download for Mac</a></p>
 
@@ -98,6 +98,8 @@ swift test
 160 tests covering the mount protocols, ephemerides, SGP4 against the reference, pass prediction, the mount planner and cable stop, alignment, the conjunction geometry, camera tracking, and the satellite catalogue and search.
 
 ## Version history
+
+**0.5.3**, 3 November 2026. The Mac joins the iPhone and iPad app on the App Store: one listing, one purchase, and the Mac is sandboxed again, as the Mac App Store requires. It takes the iPhone app's identifier, so the Mac starts fresh, as a new install does, and asks for your location. Connecting before a location is set no longer sends the mount 0°, 0°; it keeps the site the mount already has from its hand controller or GPS.
 
 **0.5.2**, 3 November 2026. The mount stops when it should. A quick tap on a jog arrow over WiFi could reach the mount as a stop and then a start, and it carried on until its own limits. Holding an arrow while the panel scrolled lost the release the same way. Both now stop. Going to the background, disconnecting or quitting past north stops the mount without starting an unwind that nothing was watching, and the next connection offers the unwind. Passive tracking checks for north by the real time, not the time bar's. Tracking loops that lose the mount's position stop it instead of ending quietly. The past-north position from last time is only trusted if the mount hasn't been moved since, and quitting the Mac app after losing contact still takes the mount out of Special mode. Unwatching a transit while Conjunctions is updating no longer crashes. On the iPhone Duo, Look up fits the near-square screen, Observe uses the iPad layout when unfolded, and the pass list's text stays inside its highlight. The HAZ71 shows by name.
 
