@@ -71,7 +71,8 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        # Strings for the catalog (App/Localizable.xcstrings): English, Spanish, German.
+        # Strings for the catalogs (App/Localizable.xcstrings): US and UK English, Spanish, German,
+        # Dutch, Swedish, Danish, Norwegian and Finnish. scripts/l10n.py adds and checks them.
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # The embed script writes into the app bundle; declaring its outputs would leave empty

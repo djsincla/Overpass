@@ -12,3 +12,8 @@ build/
 # The TestFlight tool builds on its own.
 appstore/screenshots/
 appstore/header.png
+
+# Claude Code keeps its working copies here; the agents folder is committed.
+.claude/worktrees/
+.claude/settings.local.json
+__pycache__/
