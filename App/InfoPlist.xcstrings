@@ -5,6 +5,12 @@
       "comment": "The app's name under its icon. Usually left as Overpass.",
       "extractionState": "manual",
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -18,6 +24,30 @@
           }
         },
         "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass"
+          }
+        },
+        "sv": {
           "stringUnit": {
             "state": "translated",
             "value": "Overpass"
@@ -29,6 +59,12 @@
       "comment": "Shown when Overpass first asks to use a camera.",
       "extractionState": "manual",
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass bruger et kamera på dit teleskop til at holde målet i midten under sporingen."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -36,6 +72,12 @@
           }
         },
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass uses a camera on your telescope to keep the target centered while tracking."
+          }
+        },
+        "en-GB": {
           "stringUnit": {
             "state": "translated",
             "value": "Overpass uses a camera on your telescope to keep the target centred while tracking."
@@ -46,6 +88,30 @@
             "state": "translated",
             "value": "Overpass usa una cámara en el telescopio para mantener el objetivo centrado durante el seguimiento."
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass käyttää kaukoputken kameraa pitääkseen kohteen keskellä seurannan aikana."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass bruker et kamera på teleskopet for å holde målet sentrert under følging."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass gebruikt een camera op je telescoop om het doel tijdens het volgen gecentreerd te houden."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass använder en kamera på teleskopet för att hålla målet centrerat under följningen."
+          }
         }
       }
     },
@@ -53,6 +119,12 @@
       "comment": "Shown when Overpass first asks to use the local network.",
       "extractionState": "manual",
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass forbinder til din montering via dens Wi-Fi-netværk."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -70,6 +142,30 @@
             "state": "translated",
             "value": "Overpass se conecta a la montura a través de su red WiFi."
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass muodostaa yhteyden jalustaan sen WiFi-verkon kautta."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass kobler til monteringen over dens Wi-Fi-nettverk."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass maakt verbinding met je montering via het wifinetwerk van de montering."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass ansluter till monteringen via dess Wi-Fi-nätverk."
+          }
         }
       }
     },
@@ -77,6 +173,12 @@
       "comment": "Shown when Overpass first asks for the location.",
       "extractionState": "manual",
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass bruger din lokalitet til at beregne, hvor satellitter, Solen, Månen og planeterne står på din himmel."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -93,6 +195,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Overpass usa su ubicación para calcular dónde aparecen en su cielo los satélites, el Sol, la Luna y los planetas."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass käyttää sijaintiasi laskeakseen, missä satelliitit, Aurinko, Kuu ja planeetat näkyvät taivaallasi."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass bruker posisjonen din til å beregne hvor satellitter, solen, månen og planetene står på himmelen din."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass gebruikt je locatie om te berekenen waar satellieten, de zon, de maan en de planeten aan jouw hemel staan."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overpass använder din plats för att räkna ut var satelliter, solen, månen och planeterna syns på din himmel."
           }
         }
       }
