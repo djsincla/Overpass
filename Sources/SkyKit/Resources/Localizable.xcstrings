@@ -3,6 +3,12 @@
   "strings": {
     "Asterism": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asterisme"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -20,11 +26,41 @@
             "state": "translated",
             "value": "Asterismo"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asterismi"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asterisme"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asterisme"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asterism"
+          }
         }
       }
     },
     "Cluster and nebula": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjernehob med tåge"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -42,11 +78,41 @@
             "state": "translated",
             "value": "Cúmulo y nebulosa"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tähtijoukko ja sumu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjernehop med tåke"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sterrenhoop met nevel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjärnhop med nebulosa"
+          }
         }
       }
     },
     "Dark nebula": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mørk tåge"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -64,11 +130,41 @@
             "state": "translated",
             "value": "Nebulosa oscura"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pimeä sumu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mørk tåke"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Donkere nevel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mörk nebulosa"
+          }
         }
       }
     },
     "Debris": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vragdele"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -86,11 +182,41 @@
             "state": "translated",
             "value": "Desecho"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Romu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rester"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puin"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrot"
+          }
         }
       }
     },
     "Double star": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dobbeltstjerne"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -108,11 +234,41 @@
             "state": "translated",
             "value": "Estrella doble"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaksoistähti"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dobbeltstjerne"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dubbelster"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dubbelstjärna"
+          }
         }
       }
     },
     "Galaxy": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Galakse"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -130,11 +286,41 @@
             "state": "translated",
             "value": "Galaxia"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Galaksi"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Galakse"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sterrenstelsel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Galax"
+          }
         }
       }
     },
     "Globular cluster": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuglehob"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -152,11 +338,41 @@
             "state": "translated",
             "value": "Cúmulo globular"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pallomainen tähtijoukko"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kulehop"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bolvormige sterrenhoop"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klotformig stjärnhop"
+          }
         }
       }
     },
     "Jupiter": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jupiter"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -174,11 +390,41 @@
             "state": "translated",
             "value": "Júpiter"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jupiter"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jupiter"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jupiter"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jupiter"
+          }
         }
       }
     },
     "Large": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stor"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -196,11 +442,41 @@
             "state": "translated",
             "value": "Grande"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suuri"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stor"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groot"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stor"
+          }
         }
       }
     },
     "Mars": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mars"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -218,11 +494,41 @@
             "state": "translated",
             "value": "Marte"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mars"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mars"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mars"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mars"
+          }
         }
       }
     },
     "Medium": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mellem"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -240,11 +546,41 @@
             "state": "translated",
             "value": "Mediano"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keskikoko"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Middels"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Middel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medel"
+          }
         }
       }
     },
     "Mercury": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkur"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -262,11 +598,41 @@
             "state": "translated",
             "value": "Mercurio"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkurius"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkur"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mercurius"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkurius"
+          }
         }
       }
     },
     "Moon": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Månen"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -284,11 +650,41 @@
             "state": "translated",
             "value": "Luna"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Månen"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maan"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Månen"
+          }
         }
       }
     },
     "Nebula": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tåge"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -306,11 +702,41 @@
             "state": "translated",
             "value": "Nebulosa"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sumu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tåke"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nevel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nebulosa"
+          }
         }
       }
     },
     "Neptune": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neptun"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -328,11 +754,41 @@
             "state": "translated",
             "value": "Neptuno"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neptunus"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neptun"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neptunus"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neptunus"
+          }
         }
       }
     },
     "Open cluster": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åben stjernehob"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -350,11 +806,41 @@
             "state": "translated",
             "value": "Cúmulo abierto"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoin tähtijoukko"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åpen stjernehop"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open sterrenhoop"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppen stjärnhop"
+          }
         }
       }
     },
     "Payload": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nyttelast"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -372,11 +858,41 @@
             "state": "translated",
             "value": "Carga útil"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hyötykuorma"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nyttelast"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lading"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nyttolast"
+          }
         }
       }
     },
     "Planetary nebula": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planetarisk tåge"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -394,11 +910,41 @@
             "state": "translated",
             "value": "Nebulosa planetaria"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planetaarinen sumu"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planetarisk tåke"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planetaire nevel"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planetarisk nebulosa"
+          }
         }
       }
     },
     "Rocket body": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raketlegeme"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -416,11 +962,41 @@
             "state": "translated",
             "value": "Cuerpo de cohete"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rakettivaihe"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rakettrinn"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rakettrap"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raketsteg"
+          }
         }
       }
     },
     "Saturn": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturn"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -438,11 +1014,41 @@
             "state": "translated",
             "value": "Saturno"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturnus"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturn"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturnus"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturnus"
+          }
         }
       }
     },
     "Small": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lille"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -460,11 +1066,41 @@
             "state": "translated",
             "value": "Pequeño"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pieni"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liten"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klein"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liten"
+          }
         }
       }
     },
     "Star": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjerne"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -482,11 +1118,41 @@
             "state": "translated",
             "value": "Estrella"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tähti"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjerne"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ster"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stjärna"
+          }
         }
       }
     },
     "Sun": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solen"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -504,11 +1170,41 @@
             "state": "translated",
             "value": "Sol"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aurinko"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solen"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zon"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solen"
+          }
         }
       }
     },
     "Supernova remnant": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supernovarest"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -526,11 +1222,41 @@
             "state": "translated",
             "value": "Remanente de supernova"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supernovajäänne"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supernovarest"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supernovarest"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supernovarest"
+          }
         }
       }
     },
     "Unknown type": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ukendt type"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -548,11 +1274,41 @@
             "state": "translated",
             "value": "Tipo desconocido"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tuntematon tyyppi"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ukjent type"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onbekend type"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okänd typ"
+          }
         }
       }
     },
     "Uranus": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uranus"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -570,11 +1326,41 @@
             "state": "translated",
             "value": "Urano"
           }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uranus"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uranus"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uranus"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uranus"
+          }
         }
       }
     },
     "Venus": {
       "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venus"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -588,6 +1374,30 @@
           }
         },
         "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venus"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venus"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venus"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venus"
+          }
+        },
+        "sv": {
           "stringUnit": {
             "state": "translated",
             "value": "Venus"

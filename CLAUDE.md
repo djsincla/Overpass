@@ -2,6 +2,14 @@
 
 An iOS, iPadOS and macOS satellite tracker that drives iOptron mounts. Work on a branch and open a pull request; the user merges.
 
+## Translations
+
+Overpass is in US and UK English, Spanish, German, Dutch, Swedish, Danish, Norwegian (Bokmål) and Finnish. Never Russian, and not Simplified Chinese. The strings are in `App/Localizable.xcstrings`, `App/InfoPlist.xcstrings` and `Sources/SkyKit/Resources/Localizable.xcstrings`; the App Store text is in `appstore/listing.json`.
+
+- The English in the code is British. `scripts/l10n.py english` gives every string with a British spelling an American `en` and a British `en-GB`. Run it after adding strings, and add a word pair to its `AMERICAN` table when a new British spelling turns up.
+- New strings in other languages: `scripts/l10n.py missing` shows what each language lacks. `scripts/l10n.py export DIR`, then the `translator` agent once per language, then `scripts/l10n.py merge DIR LANG…`, which runs the check first.
+- A translation needs a native speaker's read before it ships; the translator lists the strings it was unsure of.
+
 ## Releases with atk
 
 `atk` is the App Store Connect and TestFlight tool in `~/.local/bin/atk`. Its source is in github.com/djsincla/apple-toolkit, and `make install` there updates it. The project's settings are in `.atk.json`. Bundle ID: `com.dwaynesinclair.overpass` (iPhone, iPad and Mac are one App Store app, "Overpass AB6A"). Tester group: `Field testers`.

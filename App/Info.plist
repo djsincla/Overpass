@@ -15,8 +15,14 @@
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
+		<string>en-GB</string>
 		<string>es</string>
 		<string>de</string>
+		<string>nl</string>
+		<string>sv</string>
+		<string>da</string>
+		<string>nb</string>
+		<string>fi</string>
 	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
