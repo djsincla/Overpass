@@ -17,3 +17,6 @@ appstore/header.png
 .claude/worktrees/
 .claude/settings.local.json
 __pycache__/
+
+# Made by `atk screenshots caption` from appstore/screenshots and appstore/captions.json
+appstore/screenshots-captioned/
