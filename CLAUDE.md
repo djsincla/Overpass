@@ -4,7 +4,7 @@ An iOS, iPadOS and macOS satellite tracker that drives iOptron mounts. Work on a
 
 ## Translations
 
-Overpass is in US and UK English, Spanish, German, Dutch, Swedish, Danish, Norwegian (Bokmål) and Finnish. Never Russian, and not Simplified Chinese. The strings are in `App/Localizable.xcstrings`, `App/InfoPlist.xcstrings` and `Sources/SkyKit/Resources/Localizable.xcstrings`; the App Store text is in `appstore/listing.json`.
+Overpass is in US and UK English, Spanish, German, Dutch, Swedish, Danish, Norwegian (Bokmål) and Finnish. Never Russian, and not Simplified Chinese. The strings are in `App/Localizable.xcstrings`, `App/InfoPlist.xcstrings` and `Sources/SkyKit/Resources/Localizable.xcstrings`; the App Store text is in `appstore/listing.json`, and the screenshot captions in `appstore/captions.json`.
 
 - The English in the code is British. `scripts/l10n.py english` gives every string with a British spelling an American `en` and a British `en-GB`. Run it after adding strings, and add a word pair to its `AMERICAN` table when a new British spelling turns up.
 - New strings in other languages: `scripts/l10n.py missing` shows what each language lacks. `scripts/l10n.py export DIR`, then the `translator` agent once per language, then `scripts/l10n.py merge DIR LANG…`, which runs the check first.
@@ -40,8 +40,9 @@ Overpass is in US and UK English, Spanish, German, Dutch, Swedish, Danish, Norwe
 | --- | --- |
 | Send the listing text and version number | `atk listing pull` to `appstore/listing.json`, edit, `atk listing push` |
 | Take the screenshots | `atk screenshots capture` (simulators, and "Mac" for the Mac App Store) |
+| Put a caption above each screenshot, in each language | `atk screenshots caption` (from `appstore/captions.json`; writes files only) |
 | Make the product page header and search picture | `atk screenshots header` (from `screenshots.header` in `.atk.json`) |
-| Upload the screenshots and header | `atk screenshots push` (replaces the pictures on the version) |
+| Upload the screenshots and header | `atk screenshots push` (replaces the pictures on the version; the captioned ones, since `screenshots.captions` is set) |
 | Put a build on the App Store version | `atk attach` (`ship` does it itself) |
 | Send an uploaded build to testers | `atk release N` (both platforms' build N; `--platform` for one). This submits to Beta App Review |
 
@@ -119,6 +120,18 @@ Don't keep asking the user about these:
   - list and outline rows are Buttons whose labels carry the row's text
   - keep `addUIInterruptionMonitor` to iOS, where XCTest's check for it can time out
 - **Foldables, such as iPhone Duo:** save the window, not the screen, at exactly one of the display type's sizes (2007 × 2853 unfolded). atk accepts it either way up.
+
+### Captioned screenshots
+
+`.atk.json` has `"captions": {}` under `screenshots`, so the store gets captioned pictures: each screenshot shrunk onto a dark background under a line or two of bold text, at the screenshot's own size. The order is always `capture`, then `caption`, then `push`.
+
+- **The text** is in `appstore/captions.json`: language, then the picture's file name without `.png`, then the caption. One caption covers that picture on every device: `{"en-US": {"1 Sky": "Every pass over your sky"}}`.
+- **Writing captions:** one claim per picture, about what the screen shows and why it matters, under about 50 characters. Follow VOICE.md: plain words, no exclamation marks, no emoji, nothing the screen doesn't back up.
+- **Languages:** every store language in `listing.json` has a block, with the same picture names; en-GB repeats en-US unless a British spelling turns up. Use the app's own terms from the string catalogs (Montierung, Jalusta, Ylilennot). Captions are store text, so they need a native speaker's read like the listing. A caption too long for two lines stops `caption` with the picture named; shorten it.
+- **Run `caption` again** after a new `capture` or any change to `captions.json`. It rebuilds `appstore/screenshots-captioned/` from scratch. That folder is in `.gitignore` (about 300 MB); don't edit or commit it.
+- **Check before pushing:** open one picture per device type (iPhone, iPad, Duo, Mac) and look at it. Warnings list pictures with no caption, which are left out of that language, and captions with no picture.
+- The screens under the captions are the English app in every language; `capture` takes only English so far.
+- `--folder appstore/screenshots` on `push` uploads the plain screenshots instead.
 
 ### A new project
 

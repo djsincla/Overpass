@@ -1,0 +1,74 @@
+{
+  "en-US": {
+    "1 Sky": "Every pass over your sky, and your mount follows it",
+    "2 Globe": "Satellites around the globe, day and night",
+    "3 Map": "Ground tracks and footprints on the map",
+    "4 Status": "Range, Doppler and countdowns as it passes",
+    "5 Objects": "Stars, deep sky objects and comets too",
+    "6 Conjunctions": "Space station transits of the Moon and Sun"
+  },
+  "en-GB": {
+    "1 Sky": "Every pass over your sky, and your mount follows it",
+    "2 Globe": "Satellites around the globe, day and night",
+    "3 Map": "Ground tracks and footprints on the map",
+    "4 Status": "Range, Doppler and countdowns as it passes",
+    "5 Objects": "Stars, deep sky objects and comets too",
+    "6 Conjunctions": "Space station transits of the Moon and Sun"
+  },
+  "es-ES": {
+    "1 Sky": "Cada paso sobre su cielo, y su montura lo sigue",
+    "2 Globe": "Satélites alrededor del globo, de día y de noche",
+    "3 Map": "Trazas sobre el suelo y huellas en el mapa",
+    "4 Status": "Distancia, Doppler y cuentas atrás durante el paso",
+    "5 Objects": "También estrellas, objetos de cielo profundo y cometas",
+    "6 Conjunctions": "Tránsitos de la estación espacial por la Luna y el Sol"
+  },
+  "de-DE": {
+    "1 Sky": "Jeder Überflug an deinem Himmel, und deine Montierung folgt",
+    "2 Globe": "Satelliten rund um den Globus, bei Tag und Nacht",
+    "3 Map": "Bodenspuren und Sichtbereiche auf der Karte",
+    "4 Status": "Entfernung, Doppler und Countdowns während des Überflugs",
+    "5 Objects": "Auch Sterne, Deep-Sky-Objekte und Kometen",
+    "6 Conjunctions": "Transite der Raumstation vor Mond und Sonne"
+  },
+  "nl-NL": {
+    "1 Sky": "Elke passage aan je hemel, en je montering volgt hem",
+    "2 Globe": "Satellieten rond de aardbol, dag en nacht",
+    "3 Map": "Grondsporen en dekkingsgebieden op de kaart",
+    "4 Status": "Afstand, Doppler en aftellen tijdens de passage",
+    "5 Objects": "Ook sterren, deep-sky-objecten en kometen",
+    "6 Conjunctions": "Transits van het ruimtestation voor de maan en de zon"
+  },
+  "sv": {
+    "1 Sky": "Varje passage över din himmel, och din montering följer den",
+    "2 Globe": "Satelliter runt jordklotet, dag och natt",
+    "3 Map": "Markspår och täckningsområden på kartan",
+    "4 Status": "Avstånd, doppler och nedräkning under passagen",
+    "5 Objects": "Även stjärnor, djuprymdsobjekt och kometer",
+    "6 Conjunctions": "Rymdstationens transiter framför månen och solen"
+  },
+  "da": {
+    "1 Sky": "Hver passage over din himmel, og din montering følger med",
+    "2 Globe": "Satellitter rundt om jordkloden, dag og nat",
+    "3 Map": "Jordspor og dækningsområder på kortet",
+    "4 Status": "Afstand, doppler og nedtælling under passagen",
+    "5 Objects": "Også stjerner, deep sky-objekter og kometer",
+    "6 Conjunctions": "Rumstationens transitter foran månen og solen"
+  },
+  "no": {
+    "1 Sky": "Hver passering over himmelen din, og monteringen følger den",
+    "2 Globe": "Satellitter rundt jordkloden, dag og natt",
+    "3 Map": "Bakkespor og dekningsområder på kartet",
+    "4 Status": "Avstand, doppler og nedtelling under passeringen",
+    "5 Objects": "Også stjerner, dyphimmelobjekter og kometer",
+    "6 Conjunctions": "Romstasjonens transitter foran månen og solen"
+  },
+  "fi": {
+    "1 Sky": "Jokainen ylilento taivaallasi, ja jalusta seuraa sitä",
+    "2 Globe": "Satelliitit maapallon ympäri, päivällä ja yöllä",
+    "3 Map": "Maajäljet ja peittoalueet kartalla",
+    "4 Status": "Etäisyys, Doppler ja lähtölaskennat ylilennon aikana",
+    "5 Objects": "Myös tähdet, syvän taivaan kohteet ja komeetat",
+    "6 Conjunctions": "Avaruusaseman ylikulut Kuun ja Auringon edestä"
+  }
+}

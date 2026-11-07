@@ -17,7 +17,8 @@
         "appstore/header/mac-globe.png",
         "appstore/screenshots/iPhone-Duo/3 Map.png"
       ]
-    }
+    },
+    "captions": {}
   },
   "macAppStore": true
 }
