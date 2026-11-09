@@ -38,7 +38,7 @@ Overpass is in US and UK English, Spanish, German, Dutch, Swedish, Danish, Norwe
 
 | To | Run |
 | --- | --- |
-| Send the listing text and version number | `atk listing pull` to `appstore/listing.json`, edit, `atk listing push` |
+| Send the listing text and version number | `atk listing pull` to `appstore/listing.json`, edit, `atk listing push`. If `push` stops, or `check` says fields were edited on the website, run `atk listing pull --merge` first (see below) |
 | Take the screenshots | `atk screenshots capture` (simulators, and "Mac" for the Mac App Store) |
 | Put a caption above each screenshot, in each language | `atk screenshots caption` (from `appstore/captions.json`; writes files only) |
 | Make the product page header and search picture | `atk screenshots header` (from `screenshots.header` in `.atk.json`) |
@@ -96,6 +96,8 @@ An iOS build and a macOS build of one release share a build number, so `atk` sho
 | --- | --- |
 | "Xcode's Apple ID sign-in has lapsed or is missing", or "Failed to Use Accounts" | Only the user can fix it: Xcode, Settings, Accounts, sign in. Then run `ship` again with the `--no-…` flags for steps already done |
 | A network error or timeout during `submit`, `push` or `release` | Run `atk check` or `atk` to see whether it went through, then run the same command again. They pick up where things stand rather than doing it twice |
+| `listing push` stops with fields "changed on App Store Connect since the last push or pull", or `check` says some were edited on the website | Someone edited the listing there, and pushing would undo it. Run `atk listing pull --merge`, review the diff of `appstore/listing.json`, commit it, then `atk listing push`. Anything it lists as changed on the website but not placed (availability, platforms, accessibility) goes in the file by hand. Use `push --force` only when the user wants the file's text to win |
+| `submit` refused with "check associated errors" | The reasons are now printed under the error, one per line. Fix what they name, then `atk check` and `atk submit`. A submission left open is reused |
 | `check` shows no open submission, but the user pressed Submit in the website | Trust `check`: a press there has gone unregistered before. Run `atk submit` once the user agrees |
 | The build hasn't appeared, or is still processing | `ship` and `release` wait for it, up to `--timeout` minutes; `attach` doesn't, so run it once `atk` shows the build processed |
 | atk won't build after an Xcode update | In apple-toolkit, `rm -rf .build` and `make install`. If it's the Xcode licence, the user runs `! sudo xcodebuild -license accept` |
